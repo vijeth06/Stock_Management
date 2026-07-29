@@ -1,0 +1,52 @@
+{
+  "name": "asset-management-network",
+  "version": "1.0.0",
+  "client": {
+    "organization": "Org1",
+    "connectionPolicy": {
+      "timeout": {
+        "peer": {
+          "endorser": "300"
+        },
+        "orderer": "300"
+      }
+    }
+  },
+  "channels": {
+    "assets": {
+      "orderers": ["orderer.example.com"],
+      "peers": {
+        "peer0.org1.example.com": {}
+      }
+    }
+  },
+  "orderers": {
+    "orderer.example.com": {
+      "url": "grpcs://localhost:7050",
+      "tlsCACerts": {
+        "path": "/etc/fabric-ca/crypto-config/orderer.example.com/tls/ca.crt"
+      },
+      "grpcOptions": {
+        "ssl-target-name-override": "orderer.example.com"
+      }
+    }
+  },
+  "peers": {
+    "peer0.org1.example.com": {
+      "url": "grpcs://localhost:7051",
+      "tlsCACerts": {
+        "path": "/etc/fabric-ca/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt"
+      },
+      "grpcOptions": {
+        "ssl-target-name-override": "peer0.org1.example.com"
+      }
+    }
+  },
+  "organizations": {
+    "Org1": {
+      "mspid": "Org1MSP",
+      "certificatePath": "/etc/fabric-ca/crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/signcerts/cert.pem",
+      "privateKeyPath": "/etc/fabric-ca/crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/keystore/priv_key.pem"
+    }
+  }
+}

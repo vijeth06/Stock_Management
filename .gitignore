@@ -1,0 +1,32 @@
+# ── Node.js ───────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# ── Secrets & runtime-generated files ────────────────────────
+# Never commit private keys, deployment secrets, or local chain artifacts
+gateway/.env
+.env
+blockchain/.env
+blockchain/artifacts/
+blockchain/cache/
+gateway/node_modules/
+blockchain/node_modules/
+shared/generated/
+
+# Runtime data
+gateway/uploads/
+data/
+mongo-data/
+
+# ── OS ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Editors ───────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo

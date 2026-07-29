@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChainTrack - Departmental Asset Management</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <rect width="28" height="28" rx="7" fill="#1e40af"/>
+            <path d="M7 14h4l2-5 4 10 2-5h4" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <strong>ChainTrack</strong>
+          <span>Asset Management</span>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <p class="nav-group-label">Main</p>
+        <button type="button" class="nav-item active" data-page="dashboard">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"/>
+          </svg>
+          Dashboard
+        </button>
+        <button type="button" class="nav-item" data-page="assets">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd"/>
+          </svg>
+          Assets
+        </button>
+        <button type="button" class="nav-item" data-page="maintenance">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.533 1.533 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/>
+          </svg>
+          Maintenance
+        </button>
+        <button type="button" class="nav-item" data-page="condemnation">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/>
+          </svg>
+          Condemnation
+        </button>
+        <button type="button" class="nav-item" data-page="transfers">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M8 5a1 1 0 100 2h5.586l-1.293 1.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L13.586 5H8zM12 15a1 1 0 100-2H6.414l1.293-1.293a1 1 0 10-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L6.414 15H12z" clip-rule="evenodd"/>
+          </svg>
+          Transfers
+        </button>
+        <button type="button" class="nav-item" data-page="financial">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/>
+          </svg>
+          Financials
+        </button>
+        <button type="button" class="nav-item" data-page="bills">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M5 3a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7l-5-4H5zM9 7h6v2H9V7z" />
+          </svg>
+          Bills
+        </button>
+        <button type="button" class="nav-item" data-page="verification">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm3.7 6.3l-4 4a1 1 0 01-1.4 0l-2-2a1 1 0 011.4-1.4L9 10.6l3.3-3.3a1 1 0 011.4 1.4z" />
+          </svg>
+          Verification
+        </button>
+        <button type="button" class="nav-item" data-page="departments">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M13 6a3 3 0 10-6 0 3 3 0 006 0zM13 9a3 3 0 10-6 0 3 3 0 006 0zM13 12a3 3 0 10-6 0 3 3 0 006 0zM13 15a3 3 0 10-6 0 3 3 0 006 0z"/>
+          </svg>
+          Departments
+        </button>
+        <button type="button" class="nav-item" data-page="reports">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm8 4a2 2 0 00-2-2V4H6a2 2 0 00-2 2v6a2 2 0 002 2h4v-2a2 2 0 012-2z" clip-rule="evenodd"/>
+          </svg>
+          Reports
+        </button>
+        <button type="button" class="nav-item" data-page="login">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 9a3 3 0 000-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
+          </svg>
+          Login
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="system-chip">
+          <span class="chip-dot" id="sidebarChainDot"></span>
+          <span id="sidebarChainLabel">Hyperledger Fabric</span>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="top-header">
+        <div class="header-left">
+          <button type="button" class="menu-toggle" id="menuToggle" aria-label="Toggle menu">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/>
+            </svg>
+          </button>
+          <div class="breadcrumb">
+            <span>ChainTrack</span>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path fill-rule="evenodd" d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"/>
+            </svg>
+            <span id="breadcrumbCurrent">Dashboard</span>
+          </div>
+        </div>
+        <div class="header-right">
+          <div id="statusBadge" class="status-pill neutral">Checking connection…</div>
+          <div class="user-chip" id="headerUserChip">
+            <div class="user-avatar" id="userAvatar">?</div>
+            <div class="user-info">
+              <strong id="headerUserName">Guest</strong>
+              <span id="sessionBadge">Not signed in</span>
+            </div>
+            <button type="button" id="signOutBtn" class="btn btn-secondary hidden" style="padding:2px 8px; font-size:11px; margin-left:8px;">Sign Out</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="page-content">
+
+        <!-- DASHBOARD -->
+        <section class="page active" id="page-dashboard">
+          <div class="page-header">
+            <div>
+              <h1>Departmental Asset Dashboard</h1>
+              <p class="page-subtitle">Overview of departmental assets and blockchain status</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary" id="dashboardRefreshBtn">Refresh</button>
+            </div>
+          </div>
+
+          <div class="kpi-dashboard">
+            <h3 class="section-title">Platform Overview</h3>
+            <div id="dashboardSummary" class="kpi-cards"></div>
+          </div>
+
+          <div class="dashboard-charts">
+            <div class="card-wrapper">
+              <div class="chart-section">
+                <h3 class="chart-title">Assets by Status</h3>
+                <div id="assetStatusChart" class="pie-chart-container"></div>
+              </div>
+            </div>
+            <div class="card-wrapper">
+              <div class="chart-section">
+                <h3 class="chart-title">Assets by Department</h3>
+                <div id="departmentChart" class="bar-chart"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="content-grid-2">
+            <div class="panel">
+              <div class="panel-header row">
+                <h2>Recent Assets</h2>
+                <button type="button" class="btn-link" data-goto="assets">View all</button>
+              </div>
+              <div id="recentAssetsPanel" class="table-wrap"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-header row">
+                <h2>Active Alerts</h2>
+                <button type="button" class="btn-link" id="alertsRefreshBtn">Refresh</button>
+              </div>
+              <div id="recentAlertsPanel" class="table-wrap"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- BILLS / PROFORMA -->
+        <section class="page" id="page-bills">
+          <div class="page-header">
+            <div>
+              <h1>Bills / Proforma</h1>
+              <p class="page-subtitle">Upload, list and verify proforma/bill documents</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-primary" id="refreshBillsBtn">Refresh</button>
+            </div>
+          </div>
+
+          <div class="content-grid-2">
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Upload Bill</h2>
+              </div>
+              <form id="billUploadForm" class="form-grid" enctype="multipart/form-data">
+                <div class="form-field">
+                  <label>Bill ID</label>
+                  <input name="billId" required placeholder="BILL-001">
+                </div>
+                <div class="form-field">
+                  <label>Asset ID</label>
+                  <input name="assetId" placeholder="ASSET-001">
+                </div>
+                <div class="form-field">
+                  <label>Vendor</label>
+                  <input name="vendor" placeholder="Vendor name">
+                </div>
+                <div class="form-field">
+                  <label>Invoice Number</label>
+                  <input name="invoiceNumber" placeholder="INV-12345">
+                </div>
+                <div class="form-field">
+                  <label>Bill Document</label>
+                  <input name="billDocument" id="billDocumentInput" type="file" accept="application/pdf,image/*">
+                </div>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-primary">Upload</button>
+                </div>
+              </form>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Uploaded Bills</h2>
+              </div>
+              <div id="billsList" class="table-wrap"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VERIFICATION & PROFORMA COMPLIANCE -->
+        <section class="page" id="page-verification">
+          <div class="page-header">
+            <div>
+              <h1>Audit & Proforma Verification Hub</h1>
+              <p class="page-subtitle">Official Proforma-I, II, III, IV registers & blockchain bill integrity verification</p>
+            </div>
+            <div class="page-actions" id="proformaActions">
+              <button type="button" class="btn btn-secondary" id="refreshVerifBtn">Refresh</button>
+              <button type="button" class="btn btn-primary" id="openProforma1ModalBtn">New Proforma-I (Equipment)</button>
+              <button type="button" class="btn btn-primary" id="openProforma2ModalBtn">New Proforma-II (Equipment Condemnation)</button>
+              <button type="button" class="btn btn-primary" id="openProforma3ModalBtn">New Proforma-III (Consumables)</button>
+              <button type="button" class="btn btn-primary" id="openProforma4ModalBtn">New Proforma-IV (Consumable Condemnation)</button>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:8px; margin-bottom:16px; border-bottom:2px solid var(--gray-200); padding-bottom:8px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-secondary verif-tab-btn active" data-verif-tab="bills">Bill Hash Verification</button>
+            <button type="button" class="btn btn-secondary verif-tab-btn" data-verif-tab="p1">Proforma-I Equipment</button>
+            <button type="button" class="btn btn-secondary verif-tab-btn" data-verif-tab="p2">Proforma-II Equipment Condemnation</button>
+            <button type="button" class="btn btn-secondary verif-tab-btn" data-verif-tab="p3">Proforma-III Consumables</button>
+            <button type="button" class="btn btn-secondary verif-tab-btn" data-verif-tab="p4">Proforma-IV Consumable Condemnation</button>
+          </div>
+
+          <!-- TAB 1: BILL INTEGRITY -->
+          <div id="verif-tab-bills" class="verif-tab-content">
+            <div class="content-grid-2">
+              <div class="panel">
+                <div class="panel-header">
+                  <h2>Verify Bill Integrity</h2>
+                </div>
+                <form id="billVerifyForm" class="form-grid">
+                  <div class="form-field">
+                    <label>Bill ID</label>
+                    <input name="billId" required placeholder="BILL-001">
+                  </div>
+                  <div class="form-field">
+                    <label>Document (optional)</label>
+                    <input id="verifyDocumentInput" type="file" accept="application/pdf,image/*">
+                  </div>
+                  <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Verify</button>
+                  </div>
+                </form>
+                <div id="verifyResult" class="panel-body"></div>
+              </div>
+              <div class="panel">
+                <div class="panel-header">
+                  <h2>Verification History</h2>
+                </div>
+                <div id="verificationHistory" class="table-wrap"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 2: PROFORMA-I EQUIPMENT VERIFICATION -->
+          <div id="verif-tab-p1" class="verif-tab-content hidden">
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Proforma-I: Annual Equipment Verification Register</h2>
+                <p>Physical verification, book stock, purchases, and physical variance calculation</p>
+              </div>
+              <div id="proforma1List" class="table-wrap"></div>
+            </div>
+          </div>
+
+          <!-- TAB 3: PROFORMA-II EQUIPMENT CONDEMNATION -->
+          <div id="verif-tab-p2" class="verif-tab-content hidden">
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Proforma-II: Equipment Condemnation Register</h2>
+                <p>Write-off requests, inspection remarks, and official approval state</p>
+              </div>
+              <div id="proforma2List" class="table-wrap"></div>
+            </div>
+          </div>
+
+          <!-- TAB 4: PROFORMA-III CONSUMABLE VERIFICATION -->
+          <div id="verif-tab-p3" class="verif-tab-content hidden">
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Proforma-III: Annual Consumable Stock Verification</h2>
+                <p>Stock balances: Previous + Purchased - Consumed = Remaining Book Stock vs Actual Physical</p>
+              </div>
+              <div id="proforma3List" class="table-wrap"></div>
+            </div>
+          </div>
+
+          <!-- TAB 5: PROFORMA-IV CONSUMABLE CONDEMNATION -->
+          <div id="verif-tab-p4" class="verif-tab-content hidden">
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Proforma-IV: Consumable Condemnation Register</h2>
+                <p>Expired or damaged consumable item write-offs and verification history</p>
+              </div>
+              <div id="proforma4List" class="table-wrap"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ASSETS -->
+        <section class="page" id="page-assets">
+          <div class="page-header">
+            <div>
+              <h1>Asset Registry</h1>
+              <p class="page-subtitle">Register, search, and manage departmental assets</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary" id="refreshAssetsBtn">Refresh</button>
+              <button type="button" class="btn btn-primary" id="addAssetBtn">Add Asset</button>
+            </div>
+          </div>
+
+          <div class="content-grid-2">
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Search Assets</h2>
+                <p>Filter assets by ID, department, or status</p>
+              </div>
+              <form id="searchForm" class="form-grid">
+                <div class="form-field">
+                  <label for="search-assetId">Asset ID</label>
+                  <input id="search-assetId" name="assetId" placeholder="ASSET-001">
+                </div>
+                <div class="form-field">
+                  <label for="search-department">Department</label>
+                  <input id="search-department" name="department" placeholder="IT">
+                </div>
+                <div class="form-field">
+                  <label for="search-status">Status</label>
+                  <input id="search-status" name="status" placeholder="Active">
+                </div>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-primary">Search</button>
+                </div>
+              </form>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Registered Assets</h2>
+                <p>Assets registered on the blockchain</p>
+              </div>
+              <div id="assetDisplay" class="table-wrap">
+                <div class="empty-state">No assets registered yet.</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- MAINTENANCE HUB -->
+        <section class="page" id="page-maintenance">
+          <div class="page-header">
+            <div>
+              <h1>Maintenance Hub</h1>
+              <p class="page-subtitle">Schedule asset servicing, track repair costs, and technician assignments</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-primary" id="openMaintModalBtn">Log Maintenance</button>
+              <button type="button" class="btn btn-secondary" id="refreshMaintBtn">Refresh</button>
+            </div>
+          </div>
+
+          <div class="content-grid-2">
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Active Repairs & Maintenance</h2>
+                <p>Ongoing and scheduled asset maintenance tasks</p>
+              </div>
+              <div id="maintenanceList" class="table-wrap"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Maintenance Cost Analytics</h2>
+                <p>Accumulated maintenance expenditure by department</p>
+              </div>
+              <div id="maintenanceAnalyticsPanel" class="panel-body"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- CONDEMNATION & DISPOSAL -->
+        <section class="page" id="page-condemnation">
+          <div class="page-header">
+            <div>
+              <h1>Condemnation & Disposal Workflow</h1>
+              <p class="page-subtitle">Manage asset write-off requests, inspection reports, and approvals</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-primary" id="openCondemnationModalBtn">Request Condemnation</button>
+              <button type="button" class="btn btn-secondary" id="refreshCondemnationBtn">Refresh</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Condemnation Requests & Records</h2>
+              <p>Review submitted asset condemnation requests and official approvals</p>
+            </div>
+            <div id="condemnationList" class="table-wrap"></div>
+          </div>
+        </section>
+
+        <!-- ASSET TRANSFERS -->
+        <section class="page" id="page-transfers">
+          <div class="page-header">
+            <div>
+              <h1>Inter-Department Asset Transfers</h1>
+              <p class="page-subtitle">Reallocate assets between departments with full chain-of-custody tracking</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-primary" id="openTransferModalBtn">New Asset Transfer</button>
+              <button type="button" class="btn btn-secondary" id="refreshTransfersBtn">Refresh</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Transfer History & Chain of Custody</h2>
+              <p>Audit trail of asset movement across organization departments</p>
+            </div>
+            <div id="transfersList" class="table-wrap"></div>
+          </div>
+        </section>
+
+        <!-- FINANCIAL VALUATION & DEPRECIATION -->
+        <section class="page" id="page-financial">
+          <div class="page-header">
+            <div>
+              <h1>Financial Valuation & Depreciation</h1>
+              <p class="page-subtitle">Straight-line asset depreciation models and portfolio valuation</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary" id="exportFinancialCsvBtn">Export Valuation CSV</button>
+              <button type="button" class="btn btn-primary" id="refreshFinancialBtn">Refresh</button>
+            </div>
+          </div>
+
+          <div class="kpi-dashboard">
+            <div class="kpi-cards" id="financialKpis"></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Asset Financial Ledger</h2>
+              <p>Purchase valuation, calculated annual depreciation, and remaining book value</p>
+            </div>
+            <div id="financialTable" class="table-wrap"></div>
+          </div>
+        </section>
+
+        <!-- DEPARTMENTS -->
+        <section class="page" id="page-departments">
+          <div class="page-header">
+            <div>
+              <h1>Departments</h1>
+              <p class="page-subtitle">Manage and review department-level visibility</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-primary" id="openAddDeptModalBtn">Add Department</button>
+              <button type="button" class="btn btn-secondary" id="refreshDepartmentsBtn">Refresh</button>
+            </div>
+          </div>
+
+          <div class="content-grid-2">
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Departments</h2>
+              </div>
+              <div id="departmentsList" class="table-wrap"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Department Summary</h2>
+              </div>
+              <div id="departmentSummaryPanel" class="table-wrap"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- REPORTS -->
+        <section class="page" id="page-reports">
+          <div class="page-header">
+            <div>
+              <h1>Audit Reports</h1>
+              <p class="page-subtitle">View generated reports and export summaries</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-primary" id="refreshReportsBtn">Refresh</button>
+              <button type="button" class="btn btn-secondary" id="generateReportBtn">Generate</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Available Reports</h2>
+            </div>
+            <div id="reportsList" class="table-wrap"></div>
+          </div>
+
+          <div class="panel" style="margin-top:20px;">
+            <div class="panel-header">
+              <h2>System Audit Logs & Ledger Trail</h2>
+              <p>Immutable event log of asset state changes, verification events, and governance actions</p>
+            </div>
+            <div id="auditLogsList" class="table-wrap"></div>
+          </div>
+        </section>
+
+        <!-- LOGIN -->
+        <section class="page" id="page-login">
+          <div class="page-header">
+            <div>
+              <h1>Sign In</h1>
+              <p class="page-subtitle">Access the Departmental Asset Management system</p>
+            </div>
+          </div>
+
+          <div class="content-grid-2">
+            <div class="panel">
+              <div class="panel-header">
+                <h2>User Sign In</h2>
+                <p>Enter your credentials to access the system</p>
+              </div>
+              <form id="loginForm" class="form-grid">
+                <div class="form-field">
+                  <label>Email Address</label>
+                  <input name="email" type="email" placeholder="user@company.com" required>
+                </div>
+                <div class="form-field">
+                  <label>Password</label>
+                  <input name="password" type="password" placeholder="Enter your password" required>
+                </div>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+                </div>
+              </form>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Demo Credentials</h2>
+                <p>Use these credentials to test the system:</p>
+              </div>
+              <div class="demo-credentials">
+                <div class="credential-row">
+                  <strong>Email:</strong> admin@assetmgmt.local
+                </div>
+                <div class="credential-row">
+                  <strong>Password:</strong> Admin@12345!
+                </div>
+                <div class="credential-row">
+                  <strong>Role:</strong> Administrator
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+  </div>
+
+  <!-- MODAL OVERLAYS -->
+
+  <!-- Add Asset Modal -->
+  <div id="addAssetModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Register New Departmental Asset</h3>
+        <button type="button" class="modal-close" data-modal-close>&times;</button>
+      </div>
+      <form id="addAssetForm" class="modal-body form-grid">
+        <div class="form-field">
+          <label>Asset ID</label>
+          <input name="assetId" required placeholder="e.g. ASSET-105">
+        </div>
+        <div class="form-field">
+          <label>Asset Name</label>
+          <input name="name" required placeholder="e.g. Dell Precision Workstation">
+        </div>
+        <div class="form-field">
+          <label>Category</label>
+          <select name="category" required>
+            <option value="Hardware">Hardware & Servers</option>
+            <option value="Computing">Computing & Laptops</option>
+            <option value="Networking">Networking Infrastructure</option>
+            <option value="Office Equipment">Office & Printers</option>
+            <option value="Laboratory">Laboratory & Scientific</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Department</label>
+          <select name="department" required>
+            <option value="IT">Information Technology (IT)</option>
+            <option value="FIN">Finance & Accounts (FIN)</option>
+            <option value="OPS">Operations & Logistics (OPS)</option>
+            <option value="HR">Human Resources (HR)</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Location / Room</label>
+          <input name="location" required placeholder="e.g. Room 402, Block B">
+        </div>
+        <div class="form-field">
+          <label>Serial Number</label>
+          <input name="serialNumber" required placeholder="e.g. SN-99812-X">
+        </div>
+        <div class="form-field">
+          <label>Purchase Date</label>
+          <input name="purchaseDate" type="date" required>
+        </div>
+        <div class="form-field">
+          <label>Purchase Value ($)</label>
+          <input name="purchaseValue" type="number" step="0.01" required placeholder="2500">
+        </div>
+        <div class="form-field">
+          <label>Expected Lifespan (Years)</label>
+          <input name="lifespanYears" type="number" value="5" min="1" max="25">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Register on Blockchain</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Log Maintenance Modal -->
+  <div id="scheduleMaintModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Log Asset Maintenance Task</h3>
+        <button type="button" class="modal-close" data-modal-close>&times;</button>
+      </div>
+      <form id="scheduleMaintForm" class="modal-body form-grid">
+        <div class="form-field">
+          <label>Asset ID</label>
+          <input name="assetId" required placeholder="e.g. ASSET-102">
+        </div>
+        <div class="form-field">
+          <label>Technician / Service Provider</label>
+          <input name="technician" required placeholder="e.g. Alex Smith (Hardware Lead)">
+        </div>
+        <div class="form-field">
+          <label>Service Date</label>
+          <input name="maintenanceDate" type="date" required>
+        </div>
+        <div class="form-field">
+          <label>Service Cost ($)</label>
+          <input name="cost" type="number" step="0.01" value="150">
+        </div>
+        <div class="form-field full-width">
+          <label>Maintenance Description</label>
+          <textarea name="description" rows="3" required placeholder="Describe repair or maintenance activity..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Log Service Task</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Request Condemnation Modal -->
+  <div id="requestCondemnationModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Request Asset Condemnation & Write-off</h3>
+        <button type="button" class="modal-close" data-modal-close>&times;</button>
+      </div>
+      <form id="requestCondemnationForm" class="modal-body form-grid">
+        <div class="form-field">
+          <label>Asset ID</label>
+          <input name="assetId" required placeholder="e.g. ASSET-104">
+        </div>
+        <div class="form-field">
+          <label>Requested By</label>
+          <input name="requestedBy" required placeholder="e.g. Department Manager">
+        </div>
+        <div class="form-field">
+          <label>Proposed Disposal Method</label>
+          <select name="disposalMethod">
+            <option value="E-Waste Recycling">E-Waste Recycling</option>
+            <option value="Auction / Sale">Auction / Sale</option>
+            <option value="Scrap & Destruction">Scrap & Destruction</option>
+            <option value="Trade-In Return">Trade-In Return</option>
+          </select>
+        </div>
+        <div class="form-field full-width">
+          <label>Reason for Condemnation</label>
+          <input name="reason" required placeholder="e.g. Beyond economical repair, mainboard failed">
+        </div>
+        <div class="form-field full-width">
+          <label>Technical Inspection Findings</label>
+          <textarea name="inspectionDetails" rows="3" placeholder="Provide detailed technical inspection notes..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Submit Condemnation Request</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Transfer Asset Modal -->
+  <div id="transferAssetModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Initiate Inter-Department Asset Transfer</h3>
+        <button type="button" class="modal-close" data-modal-close>&times;</button>
+      </div>
+      <form id="transferAssetForm" class="modal-body form-grid">
+        <div class="form-field">
+          <label>Asset ID</label>
+          <input name="assetId" required placeholder="e.g. ASSET-103">
+        </div>
+        <div class="form-field">
+          <label>Destination Department</label>
+          <select name="toDepartment" required>
+            <option value="IT">Information Technology (IT)</option>
+            <option value="FIN">Finance & Accounts (FIN)</option>
+            <option value="OPS">Operations & Logistics (OPS)</option>
+            <option value="HR">Human Resources (HR)</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>New Location / Room</label>
+          <input name="newLocation" placeholder="e.g. Data Center Room B">
+        </div>
+        <div class="form-field">
+          <label>Transfer Requested By</label>
+          <input name="requestedBy" required placeholder="e.g. Operations Supervisor">
+        </div>
+        <div class="form-field full-width">
+          <label>Reason for Transfer</label>
+          <input name="reason" required placeholder="e.g. Centralized infrastructure consolidation">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Process Transfer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Asset QR Code Badge & Blockchain Passport Modal -->
+  <div id="qrModal" class="modal-backdrop hidden">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <h3>Asset Passport & Printable QR Badge</h3>
+        <button type="button" class="modal-close" data-modal-close>&times;</button>
+      </div>
+      <div class="modal-body qr-modal-content">
+        <div class="qr-badge-preview" id="qrBadgeCard">
+          <div class="badge-header">
+            <span class="badge-org">CHAINTRACK ASSET MANAGEMENT</span>
+            <span class="badge-id-pill" id="badgeAssetId">ASSET-101</span>
+          </div>
+          <div class="badge-body">
+            <div id="qrCodeContainer" class="qr-svg-holder"></div>
+            <div class="badge-details">
+              <h4 id="badgeAssetName">Dell PowerEdge Server Rack</h4>
+              <p><strong>Category:</strong> <span id="badgeCategory">Hardware</span></p>
+              <p><strong>Department:</strong> <span id="badgeDept">IT</span></p>
+              <p><strong>Location:</strong> <span id="badgeLocation">Server Room A</span></p>
+              <p><strong>Serial No:</strong> <span id="badgeSerial">SN-99812</span></p>
+            </div>
+          </div>
+          <div class="badge-footer">
+            <div class="hash-label">Blockchain Verification Hash:</div>
+            <div class="badge-hash" id="badgeHash">0x7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069</div>
+          </div>
+        </div>
+
+        <div class="qr-actions">
+          <button type="button" class="btn btn-primary" onclick="window.print()">Print Asset Badge Label</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Department Modal -->
+  <div id="addDeptModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Create New Department</h3>
+        <button type="button" class="modal-close" data-modal-close>&times;</button>
+      </div>
+      <form id="addDeptForm" class="modal-body form-grid">
+        <div class="form-field">
+          <label>Department Code</label>
+          <input name="code" required placeholder="e.g. MKT">
+        </div>
+        <div class="form-field">
+          <label>Department Name</label>
+          <input name="name" required placeholder="e.g. Marketing & Communications">
+        </div>
+        <div class="form-field">
+          <label>Department Manager</label>
+          <input name="manager" placeholder="e.g. Elena Rostova">
+        </div>
+        <div class="form-field full-width">
+          <label>Description</label>
+          <textarea name="description" rows="2" placeholder="Brief department scope..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Department</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Department Modal -->
+  <div id="editDeptModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Edit Department</h3>
+        <button type="button" class="modal-close" data-modal-close>&times;</button>
+      </div>
+      <form id="editDeptForm" class="modal-body form-grid">
+        <input type="hidden" name="deptId" id="editDeptId">
+        <div class="form-field">
+          <label>Department Code</label>
+          <input name="code" id="editDeptCode" required readonly style="background:var(--gray-100);">
+        </div>
+        <div class="form-field">
+          <label>Department Name</label>
+          <input name="name" id="editDeptName" required>
+        </div>
+        <div class="form-field">
+          <label>Department Manager</label>
+          <input name="manager" id="editDeptManager">
+        </div>
+        <div class="form-field full-width">
+          <label>Description</label>
+          <textarea name="description" id="editDeptDescription" rows="2"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Asset Modal -->
+  <div id="editAssetModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Edit Asset Record</h3>
+        <button type="button" class="modal-close" data-modal-close>&times;</button>
+      </div>
+      <form id="editAssetForm" class="modal-body form-grid">
+        <div class="form-field">
+          <label>Asset ID</label>
+          <input name="assetId" id="editAssetIdInput" required readonly style="background:var(--gray-100);">
+        </div>
+        <div class="form-field">
+          <label>Asset Name</label>
+          <input name="name" id="editAssetNameInput" required>
+        </div>
+        <div class="form-field">
+          <label>Department</label>
+          <select name="department" id="editAssetDeptInput" required></select>
+        </div>
+        <div class="form-field">
+          <label>Category</label>
+          <select name="category" id="editAssetCategoryInput" required>
+            <option value="Hardware">Hardware & Servers</option>
+            <option value="Computing">Computing & Laptops</option>
+            <option value="Networking">Networking Infrastructure</option>
+            <option value="Office Equipment">Office & Printers</option>
+            <option value="Laboratory">Laboratory & Scientific</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Location / Room</label>
+          <input name="location" id="editAssetLocationInput">
+        </div>
+        <div class="form-field">
+          <label>Status</label>
+          <select name="status" id="editAssetStatusInput">
+            <option value="Active">Active</option>
+            <option value="Maintenance">Maintenance</option>
+            <option value="Condemned">Condemned</option>
+            <option value="Disposed">Disposed</option>
+          </select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Update Asset</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Asset History & Lifecycle Passport Modal -->
+  <div id="assetHistoryModal" class="modal-backdrop hidden">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <h3>Asset Audit Lifecycle & History</h3>
+        <button type="button" class="modal-close" data-modal-close>&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="historyAssetHeader" style="padding:12px; background:var(--gray-50); border-radius:6px; margin-bottom:16px;"></div>
+        <h4>Audit Event Timeline</h4>
+        <div id="historyTimeline" class="timeline-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reject Condemnation Modal -->
+  <div id="rejectCondemnationModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Reject Condemnation Request</h3>
+        <button type="button" class="modal-close" data-modal-close>&times;</button>
+      </div>
+      <form id="rejectCondemnationForm" class="modal-body form-grid">
+        <input type="hidden" name="recordId" id="rejectRecordIdInput">
+        <div class="form-field full-width">
+          <label>Reason for Rejection</label>
+          <textarea name="rejectionReason" rows="3" required placeholder="Explain why write-off was declined..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary" style="background:var(--red-600);">Reject Request</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Update Maintenance Modal -->
+  <div id="updateMaintModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Update Maintenance Job Status</h3>
+        <button type="button" class="modal-close" data-modal-close>&times;</button>
+      </div>
+      <form id="updateMaintForm" class="modal-body form-grid">
+        <input type="hidden" name="recordId" id="updateMaintRecordIdInput">
+        <div class="form-field">
+          <label>Status</label>
+          <select name="status" id="updateMaintStatusInput" required>
+            <option value="In Progress">In Progress</option>
+            <option value="Completed">Completed</option>
+            <option value="On Hold">On Hold</option>
+            <option value="Cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Update Status</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Proforma-I Modal -->
+  <div id="addProforma1Modal" class="modal-backdrop hidden">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <h3>Create Proforma-I: Equipment Verification Record</h3>
+        <button type="button" class="modal-close" data-modal-close>&times;</button>
+      </div>
+      <form id="addProforma1Form" class="modal-body form-grid">
+        <div class="form-field">
+          <label>Department</label>
+          <input name="department" required placeholder="e.g. IT">
+        </div>
+        <div class="form-field">
+          <label>Laboratory / Workshop</label>
+          <input name="laboratory" required placeholder="e.g. Systems Lab 1">
+        </div>
+        <div class="form-field">
+          <label>Stock Book Number</label>
+          <input name="stockBookNumber" required placeholder="e.g. SB-2026-01">
+        </div>
+        <div class="form-field">
+          <label>Staff In-Charge</label>
+          <input name="staffInCharge" required placeholder="e.g. Dr. Aris Thorne">
+        </div>
+        <div class="form-field">
+          <label>Verification Date</label>
+          <input name="verificationDate" type="date" required>
+        </div>
+        <div class="form-field">
+          <label>Equipment Description</label>
+          <input name="description" required placeholder="e.g. Precision Workstation Tower">
+        </div>
+        <div class="form-field">
+          <label>Serial / Register No</label>
+          <input name="serialNumber" required placeholder="e.g. SN-88912">
+        </div>
+        <div class="form-field">
+          <label>Book Stock (Previous Year)</label>
+          <input name="bookStockPreviousYear" type="number" value="5" min="0" required>
+        </div>
+        <div class="form-field">
+          <label>Purchases During Year</label>
+          <input name="purchasedDuringYear" type="number" value="1" min="0" required>
+        </div>
+        <div class="form-field">
+          <label>Actual Physical Stock</label>
+          <input name="actualPhysicalStock" type="number" value="6" min="0" required>
+        </div>
+        <div class="form-field">
+          <label>Working Condition</label>
+          <select name="workingCondition" required>
+            <option value="Working">Working</option>
+            <option value="Good Condition">Good Condition</option>
+            <option value="Under Maintenance">Under Maintenance</option>
+            <option value="Not Working">Not Working</option>
+            <option value="Repair Required">Repair Required</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Purchase Value ($)</label>
+          <input name="purchaseValue" type="number" step="0.01" value="2500" required>
+        </div>
+        <div class="form-field full-width">
+          <label>Remarks</label>
+          <input name="remarks" placeholder="Physical inspection notes...">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Proforma-I Record</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Proforma-II Modal -->
+  <div id="addProforma2Modal" class="modal-backdrop hidden">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <h3>Create Proforma-II: Equipment Condemnation Request</h3>
+        <button type="button" class="modal-close" data-modal-close>&times;</button>
+      </div>
+      <form id="addProforma2Form" class="modal-body form-grid">
+        <div class="form-field">
+          <label>Department</label>
+          <input name="department" required placeholder="e.g. Operations">
+        </div>
+        <div class="form-field">
+          <label>Laboratory / Workshop</label>
+          <input name="laboratory" required placeholder="e.g. Machinery Shop">
+        </div>
+        <div class="form-field">
+          <label>Stock Book Number</label>
+          <input name="stockBookNumber" required placeholder="e.g. SB-2024-09">
+        </div>
+        <div class="form-field">
+          <label>Staff In-Charge</label>
+          <input name="staffInCharge" required placeholder="e.g. Marcus Vance">
+        </div>
+        <div class="form-field">
+          <label>Verification Date</label>
+          <input name="verificationDate" type="date" required>
+        </div>
+        <div class="form-field">
+          <label>Equipment Description</label>
+          <input name="description" required placeholder="e.g. Fuser Engine Assembly">
+        </div>
+        <div class="form-field">
+          <label>Quantity</label>
+          <input name="quantity" type="number" value="1" min="1" required>
+        </div>
+        <div class="form-field">
+          <label>Purchase Date</label>
+          <input name="purchaseDate" type="date" required>
+        </div>
+        <div class="form-field">
+          <label>Purchase Value ($)</label>
+          <input name="purchaseValue" type="number" step="0.01" value="3500" required>
+        </div>
+        <div class="form-field">
+          <label>Current Book Value ($)</label>
+          <input name="bookValue" type="number" step="0.01" value="200" required>
+        </div>
+        <div class="form-field full-width">
+          <label>Reason for Condemnation</label>
+          <textarea name="reasonForCondemnation" rows="2" required placeholder="Explain irrecoverable damage or obsolete state..."></textarea>
+        </div>
+        <div class="form-field full-width">
+          <label>Inspection Remarks</label>
+          <input name="remarks" placeholder="Technical evaluation notes...">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Submit Proforma-II Request</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Proforma-III Modal -->
+  <div id="addProforma3Modal" class="modal-backdrop hidden">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <h3>Create Proforma-III: Consumable Stock Verification</h3>
+        <button type="button" class="modal-close" data-modal-close>&times;</button>
+      </div>
+      <form id="addProforma3Form" class="modal-body form-grid">
+        <div class="form-field">
+          <label>Department</label>
+          <input name="department" required placeholder="e.g. IT">
+        </div>
+        <div class="form-field">
+          <label>Laboratory / Workshop</label>
+          <input name="laboratory" required placeholder="e.g. Networking Lab">
+        </div>
+        <div class="form-field">
+          <label>Stock Book Number</label>
+          <input name="stockBookNumber" required placeholder="e.g. SB-CONS-01">
+        </div>
+        <div class="form-field">
+          <label>Staff In-Charge</label>
+          <input name="staffInCharge" required placeholder="e.g. Lead Eng David">
+        </div>
+        <div class="form-field">
+          <label>Verification Date</label>
+          <input name="verificationDate" type="date" required>
+        </div>
+        <div class="form-field">
+          <label>Consumable Description</label>
+          <input name="description" required placeholder="e.g. Cat6 Ethernet Spool 300m">
+        </div>
+        <div class="form-field">
+          <label>Previous Stock</label>
+          <input name="previousStock" type="number" value="20" min="0" required>
+        </div>
+        <div class="form-field">
+          <label>Purchased Quantity</label>
+          <input name="purchasedQuantity" type="number" value="10" min="0" required>
+        </div>
+        <div class="form-field">
+          <label>Consumed Quantity</label>
+          <input name="consumedQuantity" type="number" value="15" min="0" required>
+        </div>
+        <div class="form-field">
+          <label>Actual Physical Stock</label>
+          <input name="actualPhysicalStock" type="number" value="15" min="0" required>
+        </div>
+        <div class="form-field">
+          <label>Purchase Value ($)</label>
+          <input name="purchaseValue" type="number" step="0.01" value="750" required>
+        </div>
+        <div class="form-field full-width">
+          <label>Remarks</label>
+          <input name="remarks" placeholder="Stock balance notes...">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Proforma-III Record</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Proforma-IV Modal -->
+  <div id="addProforma4Modal" class="modal-backdrop hidden">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <h3>Create Proforma-IV: Consumable Condemnation Request</h3>
+        <button type="button" class="modal-close" data-modal-close>&times;</button>
+      </div>
+      <form id="addProforma4Form" class="modal-body form-grid">
+        <div class="form-field">
+          <label>Department</label>
+          <input name="department" required placeholder="e.g. Electronics">
+        </div>
+        <div class="form-field">
+          <label>Laboratory / Workshop</label>
+          <input name="laboratory" required placeholder="e.g. Circuit Lab">
+        </div>
+        <div class="form-field">
+          <label>Stock Book Number</label>
+          <input name="stockBookNumber" required placeholder="e.g. SB-CONS-04">
+        </div>
+        <div class="form-field">
+          <label>Staff In-Charge</label>
+          <input name="staffInCharge" required placeholder="e.g. Dr. Elena Vance">
+        </div>
+        <div class="form-field">
+          <label>Verification Date</label>
+          <input name="verificationDate" type="date" required>
+        </div>
+        <div class="form-field">
+          <label>Item Description</label>
+          <input name="description" required placeholder="e.g. Chemical Etching Agent">
+        </div>
+        <div class="form-field">
+          <label>Quantity</label>
+          <input name="quantity" type="number" value="10" min="1" required>
+        </div>
+        <div class="form-field">
+          <label>Book Stock</label>
+          <input name="bookStock" type="number" value="10" min="0" required>
+        </div>
+        <div class="form-field">
+          <label>Actual Physical Stock</label>
+          <input name="actualStock" type="number" value="10" min="0" required>
+        </div>
+        <div class="form-field">
+          <label>Purchase Date</label>
+          <input name="purchaseDate" type="date" required>
+        </div>
+        <div class="form-field">
+          <label>Book Value ($)</label>
+          <input name="bookValue" type="number" step="0.01" value="400" required>
+        </div>
+        <div class="form-field full-width">
+          <label>Reason for Condemnation</label>
+          <textarea name="condemnationReason" rows="2" required placeholder="Explain chemical expiration or damage..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Submit Proforma-IV Request</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toastContainer" class="toast-container"></div>
+  <script src="app.js"></script>
+</body>
+</html>

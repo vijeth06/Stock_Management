@@ -1,0 +1,144 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: am-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    healthcheck:
+      test: ["CMD", "mongosh", "--username", "admin", "--password", "password", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  couchdb:
+    image: couchdb:3.2
+    container_name: am-couchdb
+    restart: unless-stopped
+    ports:
+      - "5984:5984"
+    volumes:
+      - couchdb_data:/opt/couchdb/data
+    environment:
+      COUCHDB_USER: admin
+      COUCHDB_PASSWORD: password
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5984"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  orderer.example.com:
+    image: hyperledger/fabric-orderer:2.5
+    container_name: am-orderer
+    environment:
+      - ORDERER_GENERAL_LOGLEVEL=INFO
+      - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
+      - ORDERER_GENERAL_GENESISMETHOD=file
+      - ORDERER_GENERAL_GENESISFILE=/etc/hyperledger/fabric/genesis.block
+      - ORDERER_GENERAL_LOCALMSPID=OrdererMSP
+      - ORDERER_GENERAL_LOCALMSPDIR=/etc/hyperledger/fabric/msp
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric
+    command: orderer
+    volumes:
+      - ./network/channel-artifacts:/etc/hyperledger/fabric
+      - ./network/crypto-config:/etc/hyperledger/fabric
+    ports:
+      - "7050:7050"
+    networks:
+      - fabric-network
+    depends_on:
+      - mongodb
+
+  peer0.org1.example.com:
+    image: hyperledger/fabric-peer:2.5
+    container_name: am-peer0
+    environment:
+      - CORE_VM_ENDPOINT=unix:///var/run/docker.sock
+      - FABULA_LOGGING_SPEC=INFO
+      - CORE_PEER_ID=peer0.org1.example.com
+      - CORE_PEER_ADDRESS=peer0.org1.example.com:7051
+      - CORE_PEER_LOCALMSPID=Org1MSP
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
+      - CORE_PEER_TLS_ENABLED=false
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric/peer
+    command: peer node start
+    volumes:
+      - ./network/crypto-config:/etc/hyperledger/fabric
+      - /etc/utmp:/etc/utmp
+    ports:
+      - "7051:7051"
+    networks:
+      - fabric-network
+    depends_on:
+      - orderer.example.com
+
+  ca_org1:
+    image: hyperledger/fabric-ca:1.5
+    container_name: am-ca
+    environment:
+      - FABRIC_CA_HOME=/etc/hyperledger/fabric-ca
+      - FABRIC_CA_SERVER_CA_NAME=ca-org1
+      - FABRIC_CA_SERVER_PORT=7054
+    ports:
+      - "7054:7054"
+    volumes:
+      - ./network/crypto-config:/etc/hyperledger/fabric-ca
+    networks:
+      - fabric-network
+    depends_on:
+      - orderer.example.com
+
+  gateway:
+    image: node:20
+    container_name: am-gateway
+    restart: unless-stopped
+    working_dir: /app/gateway
+    volumes:
+      - ./gateway:/app/gateway
+      - ./backend:/app/backend
+      - ./network:/app/network
+      - ./client:/app/client
+      - ./node_modules:/app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      MONGO_URI: mongodb://admin:password@mongodb:27017/assetmanagement?authSource=admin
+      JWT_SECRET: change-me-in-production
+      FABRIC_NETWORK_PATH: /app/network
+      NODE_PATH: /app/node_modules:/app/gateway/node_modules
+    depends_on:
+      - mongodb
+      - couchdb
+      - peer0.org1.example.com
+      - orderer.example.com
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: sh -c "npm install && npm start"
+
+  fabric-tools:
+    image: hyperledger/fabric-tools:2.5
+    container_name: am-fabric-tools
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric
+    volumes:
+      - ./scripts:/scripts
+      - ./network:/etc/hyperledger/fabric
+    entrypoint: /bin/bash
+
+volumes:
+  mongodb_data:
+  couchdb_data:
+
+networks:
+  fabric-network:

@@ -1,0 +1,27 @@
+{
+  "name": "departmental-asset-management-fabric",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "gateway": "cd gateway && npm start",
+    "test": "node tests/api.test.js",
+    "test:backend": "node tests/api.test.js",
+    "test:api": "node tests/api.test.js",
+    "test:e2e": "node tests/api.test.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "fabric-ca-client": "^2.2.20",
+    "fabric-network": "^2.2.20",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.24.1",
+    "multer": "^2.2.0",
+    "pdfkit": "^0.19.1",
+    "node-fetch": "^2.7.0"
+  }
+}

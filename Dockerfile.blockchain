@@ -1,0 +1,25 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY blockchain/package*.json ./
+RUN npm ci --only=production
+
+FROM node:20-alpine AS runtime
+
+WORKDIR /app
+
+COPY --from=builder /app/node_modules ./node_modules
+COPY blockchain/ ./
+
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nextjs -u 1001 && \
+    chown -R nextjs:nodejs /app
+
+USER nextjs
+
+EXPOSE 8545 8546
+
+ENV NODE_ENV=production
+
+CMD ["npx", "hardhat", "node", "--hostname", "0.0.0.0"]

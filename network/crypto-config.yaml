@@ -1,0 +1,16 @@
+---
+OrdererOrgs:
+  - Name: Orderer
+    Domain: example.com
+    EnableTLS: true
+    Specs:
+      - Hostname: orderer
+
+PeerOrgs:
+  - Name: Org1
+    Domain: org1.example.com
+    EnableTLS: false
+    Template:
+      Count: 1
+    Users:
+      Count: 1

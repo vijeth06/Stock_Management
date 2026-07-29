@@ -1,0 +1,47 @@
+const jwt = require("jsonwebtoken");
+const { hasRequiredRole } = require("../services/authService");
+
+const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-development";
+
+function authenticate(req, res, next) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) {
+    return res.status(401).json({ ok: false, error: "Authorization token is required" });
+  }
+
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    return next();
+  } catch (error) {
+    return res.status(401).json({ ok: false, error: "Invalid or expired token" });
+  }
+}
+
+function authorize(allowedRoles) {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ ok: false, error: "Authentication required" });
+    }
+
+    if (!hasRequiredRole(req.user.role, allowedRoles)) {
+      return res.status(403).json({ ok: false, error: "Forbidden" });
+    }
+
+    return next();
+  };
+}
+
+function checkDepartmentAccess(user, targetDepartment) {
+  if (!user) return false;
+  if (user.role === "Administrator" || user.role === "AuditOfficer") {
+    return true;
+  }
+  if (user.role === "DepartmentUser") {
+    if (!user.department) return true;
+    return user.department.toUpperCase() === (targetDepartment || "").toUpperCase();
+  }
+  return true;
+}
+
+module.exports = { authenticate, authorize, checkDepartmentAccess };
