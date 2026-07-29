@@ -84,4 +84,9 @@ router.get("/audit-logs", authorize(["Administrator", "AuditOfficer"]), async (r
   }
 });
 
+const authController = require("../controllers/authController");
+router.get("/users/pending", authorize(["Administrator"]), authController.getPendingUsers);
+router.post("/users/:id/approve", authorize(["Administrator"]), authController.approveUser);
+router.post("/users/:id/reject", authorize(["Administrator"]), authController.rejectUser);
+
 module.exports = router;

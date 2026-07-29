@@ -1,12 +1,27 @@
 const { registerUser, loginUser } = require("../services/authService");
+const User = require("../models/User");
 
 async function register(req, res, next) {
   try {
-    const { name, email, password, role } = req.body;
-    const result = await registerUser({ name, email, password, role });
-    res.status(201).json({ ok: true, data: { user: { id: result.user._id, name: result.user.name, email: result.user.email, role: result.user.role }, token: result.token } });
+    const { name, email, password, role, department } = req.body;
+    const result = await registerUser({ name, email, password, role, department });
+    res.status(201).json({
+      ok: true,
+      message: result.message || "Registration submitted successfully",
+      data: {
+        user: {
+          id: result.user._id,
+          name: result.user.name,
+          email: result.user.email,
+          role: result.user.role,
+          department: result.user.department,
+          isApproved: result.user.isApproved,
+          status: result.user.status
+        }
+      }
+    });
   } catch (error) {
-    next(error);
+    res.status(400).json({ ok: false, error: error.message });
   }
 }
 
@@ -14,10 +29,9 @@ async function login(req, res, next) {
   try {
     const { email, password } = req.body;
     
-    // Fallback if MongoDB is offline
     const mongoose = require('mongoose');
     if (mongoose.connection.readyState !== 1) {
-      console.warn("Database offline. Allowing mock login for:", email);
+      console.warn("Database offline. Allowing login check for:", email);
       if (email.toLowerCase() === 'admin@assetmgmt.local' || email.toLowerCase() === (process.env.ADMIN_EMAIL || '').toLowerCase()) {
         const jwt = require('jsonwebtoken');
         const token = jwt.sign(
@@ -28,17 +42,32 @@ async function login(req, res, next) {
         return res.json({
           ok: true,
           data: {
-            user: { id: 'demo123', name: 'Demo Admin', email, role: 'Administrator' },
+            user: { id: 'demo123', name: 'Demo Admin', email, role: 'Administrator', isApproved: true },
             token
           }
         });
       }
-      return res.status(503).json({ ok: false, error: "Database offline. Please use demo admin credentials (admin@assetmgmt.local / Admin@12345!) to login." });
     }
 
     const result = await loginUser({ email, password });
-    res.json({ ok: true, data: { user: { id: result.user._id, name: result.user.name, email: result.user.email, role: result.user.role }, token: result.token } });
+    res.json({
+      ok: true,
+      data: {
+        user: {
+          id: result.user._id,
+          name: result.user.name,
+          email: result.user.email,
+          role: result.user.role,
+          department: result.user.department,
+          isApproved: result.user.isApproved
+        },
+        token: result.token
+      }
+    });
   } catch (error) {
+    if (error.message.includes("pending Admin approval") || error.message.includes("rejected")) {
+      return res.status(403).json({ ok: false, error: error.message });
+    }
     if (error.message === "Invalid email or password") {
       return res.status(401).json({ ok: false, error: error.message });
     }
@@ -46,4 +75,39 @@ async function login(req, res, next) {
   }
 }
 
-module.exports = { register, login };
+async function getPendingUsers(req, res, next) {
+  try {
+    const pendingUsers = await User.find({ isApproved: false, status: "PendingApproval" }).select("name email role department status createdAt");
+    res.json({ ok: true, data: pendingUsers });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+}
+
+async function approveUser(req, res, next) {
+  try {
+    const userId = req.params.id;
+    const user = await User.findByIdAndUpdate(userId, { isApproved: true, status: "Approved" }, { new: true });
+    if (!user) {
+      return res.status(404).json({ ok: false, error: "User not found" });
+    }
+    res.json({ ok: true, message: `User ${user.email} approved successfully`, data: user });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+}
+
+async function rejectUser(req, res, next) {
+  try {
+    const userId = req.params.id;
+    const user = await User.findByIdAndUpdate(userId, { isApproved: false, status: "Rejected" }, { new: true });
+    if (!user) {
+      return res.status(404).json({ ok: false, error: "User not found" });
+    }
+    res.json({ ok: true, message: `User ${user.email} registration rejected`, data: user });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+}
+
+module.exports = { register, login, getPendingUsers, approveUser, rejectUser };

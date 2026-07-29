@@ -178,6 +178,17 @@
               <div id="recentAlertsPanel" class="table-wrap"></div>
             </div>
           </div>
+
+          <!-- PENDING USER APPROVALS PANEL (ADMIN ONLY) -->
+          <div class="panel hidden" id="adminPendingUsersPanel" style="margin-top:20px; border:2px solid #f59e0b;">
+            <div class="panel-header" style="background:#fffbe6;">
+              <div>
+                <h2 style="color:#92400e;">Pending User Registration Approvals</h2>
+                <p style="color:#b45309; font-size:12.5px;">Department user sign-up requests awaiting Admin authorization</p>
+              </div>
+            </div>
+            <div id="pendingUsersList" class="table-wrap"></div>
+          </div>
         </section>
 
         <!-- BILLS / PROFORMA -->
@@ -542,25 +553,31 @@
           </div>
         </section>
 
-        <!-- LOGIN -->
+        <!-- LOGIN / SIGN UP -->
         <section class="page" id="page-login">
           <div class="page-header">
             <div>
-              <h1>Sign In</h1>
-              <p class="page-subtitle">Access the Departmental Asset Management system</p>
+              <h1 id="authHeaderTitle">Portal Access</h1>
+              <p class="page-subtitle">Sign in or register a new departmental user account</p>
             </div>
           </div>
 
+          <div style="display:flex; gap:12px; margin-bottom:20px; border-bottom:2px solid var(--gray-200); padding-bottom:10px;">
+            <button type="button" class="btn btn-secondary auth-tab-btn active" id="showSignInTab">Sign In</button>
+            <button type="button" class="btn btn-secondary auth-tab-btn" id="showSignUpTab">Department User Sign Up</button>
+          </div>
+
           <div class="content-grid-2">
-            <div class="panel">
+            <!-- SIGN IN CARD -->
+            <div class="panel" id="signInCard">
               <div class="panel-header">
                 <h2>User Sign In</h2>
-                <p>Enter your credentials to access the system</p>
+                <p>Enter your authorized credentials</p>
               </div>
               <form id="loginForm" class="form-grid">
                 <div class="form-field">
                   <label>Email Address</label>
-                  <input name="email" type="email" placeholder="user@company.com" required>
+                  <input name="email" type="email" placeholder="user@college.edu" required>
                 </div>
                 <div class="form-field">
                   <label>Password</label>
@@ -572,10 +589,56 @@
               </form>
             </div>
 
+            <!-- SIGN UP CARD -->
+            <div class="panel hidden" id="signUpCard">
+              <div class="panel-header">
+                <h2>Department User Sign Up</h2>
+                <p>Register a new account (requires Admin approval)</p>
+              </div>
+              <form id="signupForm" class="form-grid">
+                <div class="form-field">
+                  <label>Full Name</label>
+                  <input name="name" placeholder="Prof. John Doe" required>
+                </div>
+                <div class="form-field">
+                  <label>Email Address</label>
+                  <input name="email" type="email" placeholder="john.doe@college.edu" required>
+                </div>
+                <div class="form-field">
+                  <label>Password</label>
+                  <input name="password" type="password" placeholder="Create password" required minlength="6">
+                </div>
+                <div class="form-field">
+                  <label>Assigned Department</label>
+                  <select name="department" required>
+                    <option value="IT">Information Technology (IT)</option>
+                    <option value="CSE">Computer Science & Engineering (CSE)</option>
+                    <option value="ECE">Electronics & Communication (ECE)</option>
+                    <option value="ME">Mechanical Engineering (ME)</option>
+                    <option value="CIVIL">Civil Engineering (CIVIL)</option>
+                    <option value="FIN">Finance & Accounts (FIN)</option>
+                    <option value="OPS">Operations & Logistics (OPS)</option>
+                    <option value="HR">Human Resources (HR)</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label>Role Requested</label>
+                  <input value="Department User" readonly style="background:var(--gray-100);">
+                  <input type="hidden" name="role" value="DepartmentUser">
+                </div>
+                <div style="grid-column: 1 / -1; background:var(--blue-50); border-left:4px solid var(--blue-600); padding:10px 14px; border-radius:4px; font-size:12px; color:var(--blue-900);">
+                  ℹ️ <strong>Note:</strong> Your registration request will be sent to the Administrator. Once accepted by the Admin, you will be able to log in and view your department's details.
+                </div>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-primary btn-full">Submit Account Registration</button>
+                </div>
+              </form>
+            </div>
+
             <div class="panel">
               <div class="panel-header">
                 <h2>Demo Credentials</h2>
-                <p>Use these credentials to test the system:</p>
+                <p>Use these credentials to test Admin authorization:</p>
               </div>
               <div class="demo-credentials">
                 <div class="credential-row">

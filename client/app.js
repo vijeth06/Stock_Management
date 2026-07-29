@@ -248,10 +248,85 @@ async function loadDashboard() {
   setLoading('Loading dashboard overview...');
   const res = await requestJson('/api/dashboard');
   if (res.ok) {
-    renderDashboardSummary(res.data);
+    let dashboardData = res.data;
+    if (currentUser && currentUser.role === 'DepartmentUser' && currentUser.department) {
+      const dept = currentUser.department;
+      const deptAssets = (dashboardData.recentAssets || []).filter(a => a.department === dept);
+      dashboardData = {
+        ...dashboardData,
+        recentAssets: deptAssets
+      };
+    }
+    renderDashboardSummary(dashboardData);
   }
+  await loadPendingUsers();
   showResult(res);
 }
+
+async function loadPendingUsers() {
+  const panel = document.getElementById('adminPendingUsersPanel');
+  const container = document.getElementById('pendingUsersList');
+  if (!panel || !container) return;
+
+  if (currentUser && (currentUser.role === 'Administrator' || currentUser.role === 'Admin')) {
+    panel.classList.remove('hidden');
+    const res = await requestJson('/api/users/pending');
+    if (res.ok && Array.isArray(res.data)) {
+      renderPendingUsers(res.data);
+    }
+  } else {
+    panel.classList.add('hidden');
+  }
+}
+
+function renderPendingUsers(users) {
+  const container = document.getElementById('pendingUsersList');
+  if (!container) return;
+  if (!users || users.length === 0) {
+    container.innerHTML = '<div class="empty-state" style="padding:16px;">No pending user registration requests. All requests processed.</div>';
+    return;
+  }
+
+  container.innerHTML = users.map(u => `
+    <div class="detail-row" style="padding:14px 12px; align-items:center; background:#fffbe6; border-bottom:1px solid #fef3c7;">
+      <div style="flex:1;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <strong style="color:var(--gray-900); font-size:14px;">${escapeHtml(u.name)}</strong>
+          <span class="status-pill neutral" style="font-size:11px;">Dept: ${escapeHtml(u.department || 'IT')}</span>
+        </div>
+        <div class="muted" style="margin-top:2px;">
+          Email: <strong>${escapeHtml(u.email)}</strong> | Requested Role: ${escapeHtml(u.role)} | Date: ${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'Recent'}
+        </div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn btn-primary" style="padding:6px 12px; font-size:12px; background:#10b981; border-color:#059669;" onclick="approveUserDirect('${escapeHtml(u._id || u.email)}', '${escapeHtml(u.email)}')">Accept Approval ✓</button>
+        <button type="button" class="btn btn-secondary" style="padding:6px 12px; font-size:12px; color:var(--red-600); border-color:var(--red-300);" onclick="rejectUserDirect('${escapeHtml(u._id || u.email)}', '${escapeHtml(u.email)}')">Reject ✗</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+window.approveUserDirect = async function(id, email) {
+  setLoading(`Approving user ${email}...`);
+  const res = await requestJson(`/api/users/${encodeURIComponent(id)}/approve`, { method: 'POST' });
+  if (res.ok) {
+    showToast(`User ${email} approved successfully!`, 'success');
+    await loadPendingUsers();
+    await loadDashboard();
+  }
+  showResult(res);
+};
+
+window.rejectUserDirect = async function(id, email) {
+  if (!confirm(`Reject registration request for ${email}?`)) return;
+  setLoading(`Rejecting user ${email}...`);
+  const res = await requestJson(`/api/users/${encodeURIComponent(id)}/reject`, { method: 'POST' });
+  if (res.ok) {
+    showToast(`Registration for ${email} rejected`, 'info');
+    await loadPendingUsers();
+  }
+  showResult(res);
+};
 
 function renderDashboardSummary(data) {
   const dashboardSummary = document.getElementById('dashboardSummary');
@@ -1790,6 +1865,44 @@ document.getElementById('searchForm')?.addEventListener('submit', async (event) 
 
 document.getElementById('menuToggle')?.addEventListener('click', () => {
   document.getElementById('sidebar')?.classList.toggle('open');
+});
+
+document.getElementById('showSignInTab')?.addEventListener('click', () => {
+  document.getElementById('showSignInTab')?.classList.add('active');
+  document.getElementById('showSignUpTab')?.classList.remove('active');
+  document.getElementById('signInCard')?.classList.remove('hidden');
+  document.getElementById('signUpCard')?.classList.add('hidden');
+  const title = document.getElementById('authHeaderTitle');
+  if (title) title.textContent = 'User Sign In';
+});
+
+document.getElementById('showSignUpTab')?.addEventListener('click', () => {
+  document.getElementById('showSignUpTab')?.classList.add('active');
+  document.getElementById('showSignInTab')?.classList.remove('active');
+  document.getElementById('signUpCard')?.classList.remove('hidden');
+  document.getElementById('signInCard')?.classList.add('hidden');
+  const title = document.getElementById('authHeaderTitle');
+  if (title) title.textContent = 'Department User Sign Up';
+});
+
+document.getElementById('signupForm')?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  setLoading('Submitting registration request...');
+  const formData = new FormData(event.target);
+  const data = Object.fromEntries(formData.entries());
+
+  const response = await requestJson('/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+
+  if (response.ok) {
+    showToast(response.message || 'Registration submitted! Please wait for Admin approval.', 'success');
+    event.target.reset();
+    document.getElementById('showSignInTab')?.click();
+  }
+  showResult(response);
 });
 
 bootstrapSession();

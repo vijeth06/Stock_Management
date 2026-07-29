@@ -18,6 +18,12 @@ const userSchema = new Schema(
       }
     },
     isActive: { type: Boolean, default: true },
+    isApproved: { type: Boolean, default: false },
+    status: {
+      type: String,
+      enum: ["PendingApproval", "Approved", "Rejected"],
+      default: "PendingApproval"
+    },
     lastLoginAt: { type: Date },
     failedLoginAttempts: { type: Number, default: 0 },
     lockedUntil: { type: Date }

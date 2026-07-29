@@ -43,24 +43,42 @@ function generateTokenId() {
 }
 
 async function registerUser({ name, email, password, role, department }) {
+  const userRole = role || "DepartmentUser";
+  const isApproved = userRole === "Administrator";
+  const status = isApproved ? "Approved" : "PendingApproval";
+
   if (mongoose.connection.readyState !== 1) {
     const user = {
-      _id: "mock-user-id",
+      _id: "user-" + Date.now(),
       email: email.toLowerCase().trim(),
       name: name,
-      role: role || "DepartmentUser",
-      department: department,
-      isActive: true
+      role: userRole,
+      department: department || "IT",
+      isActive: true,
+      isApproved,
+      status
     };
-    const token = signToken(user);
-    const tokenId = generateTokenId();
-    return { user, token, tokenId };
+    return { user, message: isApproved ? "User registered successfully" : "Registration submitted successfully. Pending Admin approval." };
   }
+
+  const existing = await User.findOne({ email: email.toLowerCase().trim() });
+  if (existing) {
+    throw new Error("User with this email already exists");
+  }
+
   const passwordHash = await hashPassword(password);
-  const user = await User.create({ name, email, passwordHash, role, department });
-  const token = signToken(user);
-  const tokenId = generateTokenId();
-  return { user, token, tokenId };
+  const user = await User.create({
+    name,
+    email: email.toLowerCase().trim(),
+    passwordHash,
+    role: userRole,
+    department: userRole === "DepartmentUser" ? department : undefined,
+    isActive: true,
+    isApproved,
+    status
+  });
+
+  return { user, message: isApproved ? "User registered successfully" : "Registration submitted successfully. Pending Admin approval." };
 }
 
 async function loginUser({ email, password }) {
@@ -70,7 +88,9 @@ async function loginUser({ email, password }) {
       email: email.toLowerCase().trim(),
       name: "Mock User",
       role: "Administrator",
-      isActive: true
+      isActive: true,
+      isApproved: true,
+      status: "Approved"
     };
     const token = signToken(user);
     const tokenId = generateTokenId();
@@ -79,6 +99,13 @@ async function loginUser({ email, password }) {
   const user = await User.findOne({ email: email.toLowerCase().trim(), isActive: true });
   if (!user) {
     throw new Error("Invalid email or password");
+  }
+
+  if (user.role !== "Administrator" && !user.isApproved) {
+    if (user.status === "Rejected") {
+      throw new Error("Your registration request was rejected by the Admin");
+    }
+    throw new Error("Your account is pending Admin approval. Please wait for an administrator to approve your account.");
   }
 
   if (user.failedLoginAttempts >= 5 && user.lockedUntil && user.lockedUntil > new Date()) {

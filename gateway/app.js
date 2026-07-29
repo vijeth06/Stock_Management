@@ -75,8 +75,83 @@ app.get("/health", async (req, res) => {
   }
 });
 
-app.post("/auth/register", register);
-app.post("/auth/login", login);
+app.post("/auth/register", async (req, res, next) => {
+  if (databaseReady) return register(req, res, next);
+  const { name, email, password, role, department } = req.body;
+  if (!name || !email || !password) {
+    return res.status(400).json({ ok: false, error: "Name, email, and password are required" });
+  }
+  const emailLower = email.toLowerCase().trim();
+  const existing = (mockDb.pendingUsers || []).concat(mockDb.approvedUsers || []).find(u => u.email === emailLower);
+  if (existing) {
+    return res.status(400).json({ ok: false, error: "User with this email already exists" });
+  }
+
+  const isApproved = role === "Administrator";
+  const newUser = {
+    _id: "usr-" + Date.now(),
+    name,
+    email: emailLower,
+    password,
+    role: role || "DepartmentUser",
+    department: role === "Administrator" ? undefined : (department || "IT"),
+    isApproved,
+    status: isApproved ? "Approved" : "PendingApproval",
+    createdAt: new Date().toISOString()
+  };
+
+  if (isApproved) {
+    mockDb.approvedUsers.push(newUser);
+    const jwt = require("jsonwebtoken");
+    const token = jwt.sign(
+      { sub: newUser._id, email: newUser.email, role: newUser.role, name: newUser.name, department: newUser.department },
+      process.env.JWT_SECRET || "change-me-in-development",
+      { expiresIn: "8h" }
+    );
+    return res.status(201).json({ ok: true, message: "User registered successfully", data: { user: newUser, token } });
+  } else {
+    mockDb.pendingUsers.push(newUser);
+    return res.status(201).json({ ok: true, message: "Registration submitted successfully! Your account is pending Admin approval.", data: { user: newUser } });
+  }
+});
+
+app.post("/auth/login", async (req, res, next) => {
+  if (databaseReady) return login(req, res, next);
+  const { email, password } = req.body;
+  const emailLower = (email || '').toLowerCase().trim();
+
+  const pending = (mockDb.pendingUsers || []).find(u => u.email === emailLower);
+  if (pending) {
+    if (pending.status === "Rejected") {
+      return res.status(403).json({ ok: false, error: "Your registration request was rejected by the Admin." });
+    }
+    return res.status(403).json({ ok: false, error: "Your account is pending Admin approval. Please wait for an administrator to approve your registration." });
+  }
+
+  const approved = (mockDb.approvedUsers || []).find(u => u.email === emailLower);
+  if (approved) {
+    const jwt = require("jsonwebtoken");
+    const token = jwt.sign(
+      { sub: approved._id, email: approved.email, role: approved.role, name: approved.name, department: approved.department },
+      process.env.JWT_SECRET || "change-me-in-development",
+      { expiresIn: "8h" }
+    );
+    return res.json({ ok: true, data: { user: approved, token } });
+  }
+
+  if (emailLower === "admin@assetmgmt.local") {
+    const jwt = require("jsonwebtoken");
+    const user = { id: "demo123", name: "Demo Admin", email: "admin@assetmgmt.local", role: "Administrator", isApproved: true };
+    const token = jwt.sign(
+      { sub: user.id, email: user.email, role: user.role, name: user.name },
+      process.env.JWT_SECRET || "change-me-in-development",
+      { expiresIn: "8h" }
+    );
+    return res.json({ ok: true, data: { user, token } });
+  }
+
+  return res.status(401).json({ ok: false, error: "Invalid email or password" });
+});
 
 app.get("/users/me", authenticate, async (req, res) => {
   try {
@@ -100,6 +175,13 @@ app.get("/users/me", authenticate, async (req, res) => {
 });
 
 const mockDb = {
+  pendingUsers: [
+    { _id: "usr-p101", name: "Prof. Alan Turing", email: "alan.turing@assetmgmt.local", role: "DepartmentUser", department: "IT", status: "PendingApproval", createdAt: new Date().toISOString() },
+    { _id: "usr-p102", name: "Dr. Sarah Connor", email: "sarah.connor@assetmgmt.local", role: "DepartmentUser", department: "Operations", status: "PendingApproval", createdAt: new Date().toISOString() }
+  ],
+  approvedUsers: [
+    { _id: "usr-a101", name: "Demo Admin", email: "admin@assetmgmt.local", role: "Administrator", department: "ALL", isApproved: true, status: "Approved" }
+  ],
   departments: [
     { _id: "dept-1", code: "IT", name: "Information Technology", description: "Hardware & Server Infrastructure", assetCount: 3, isActive: true },
     { _id: "dept-2", code: "FIN", name: "Finance & Accounts", description: "Financial Workstations & Audit Tools", assetCount: 1, isActive: true },
@@ -456,6 +538,35 @@ function buildDemoApiResponse(req) {
 
     if (path === "/departments") {
       return { ok: true, data: mockDb.departments };
+    }
+
+    if (path === "/users/pending") {
+      return { ok: true, data: mockDb.pendingUsers || [] };
+    }
+
+    if (method === "POST" && path.includes("/users/") && path.endsWith("/approve")) {
+      const userId = path.split("/")[2];
+      const idx = (mockDb.pendingUsers || []).findIndex(u => u._id === userId || u.email === userId);
+      if (idx !== -1) {
+        const approved = mockDb.pendingUsers.splice(idx, 1)[0];
+        approved.isApproved = true;
+        approved.status = "Approved";
+        mockDb.approvedUsers.push(approved);
+        return { ok: true, message: `User ${approved.email} approved successfully`, data: approved };
+      }
+      return { ok: false, error: "User not found" };
+    }
+
+    if (method === "POST" && path.includes("/users/") && path.endsWith("/reject")) {
+      const userId = path.split("/")[2];
+      const idx = (mockDb.pendingUsers || []).findIndex(u => u._id === userId || u.email === userId);
+      if (idx !== -1) {
+        const rejected = mockDb.pendingUsers.splice(idx, 1)[0];
+        rejected.isApproved = false;
+        rejected.status = "Rejected";
+        return { ok: true, message: `User ${rejected.email} registration rejected`, data: rejected };
+      }
+      return { ok: false, error: "User not found" };
     }
 
     if (path === "/bills") {
