@@ -2,9 +2,9 @@
   "name": "asset-management-chaincode",
   "version": "1.0.0",
   "description": "Hyperledger Fabric chaincode for Departmental Asset Management",
-  "main": "lib/asset-management.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node lib/asset-management.js",
+    "start": "fabric-chaincode-node start",
     "test": "mocha"
   },
   "keywords": [

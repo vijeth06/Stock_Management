@@ -294,10 +294,14 @@ class AssetManagementContract extends Contract {
             return JSON.stringify({ verified: false, error: `Asset or bill ${billId} does not exist` });
         }
 
-        const asset = JSON.parse(assetJSON.toString());
         const verified = asset.billHash && expectedHash === asset.billHash;
         return JSON.stringify({ verified, billId, expectedHash, storedHash: asset.billHash || null });
     }
 }
 
 module.exports = AssetManagementContract;
+
+if (require.main === module) {
+    const { Shim } = require('fabric-shim');
+    Shim.start(new AssetManagementContract());
+}

@@ -6,17 +6,47 @@ const ccpPath = path.resolve(
   __dirname,
   "../../network/connections/connection-org1.json"
 );
-const ccp = JSON.parse(fs.readFileSync(ccpPath, "utf8"));
+
+function getCCP() {
+  const ccpRaw = fs.readFileSync(ccpPath, "utf8");
+  let ccp = JSON.parse(ccpRaw);
+
+  const fabricHost = process.env.FABRIC_HOST || "localhost";
+  const peerPort = process.env.FABRIC_PEER_PORT || "7051";
+  const ordererPort = process.env.FABRIC_ORDERER_PORT || "7050";
+
+  if (fabricHost !== "localhost" || process.env.FABRIC_NETWORK_MODE === "REMOTE") {
+    const rawString = JSON.stringify(ccp);
+    const updatedString = rawString
+      .replace(/localhost:7051/g, `${fabricHost}:${peerPort}`)
+      .replace(/localhost:7050/g, `${fabricHost}:${ordererPort}`);
+    ccp = JSON.parse(updatedString);
+  }
+  return ccp;
+}
 
 async function getGateway() {
   const walletPath = path.join(__dirname, "../../network/wallet");
   const wallet = await Wallets.newFileSystemWallet(walletPath);
+  const ccp = getCCP();
+
+  const identityName = process.env.FABRIC_IDENTITY || "appUser";
+  const identityExists = await wallet.get(identityName);
+  
+  const selectedIdentity = identityExists ? identityName : "appUser";
+
+  const fabricHost = process.env.FABRIC_HOST || "localhost";
+  const isLocalhost = fabricHost === "localhost" && process.env.FABRIC_NETWORK_MODE !== "REMOTE";
+  const asLocalhost = process.env.FABRIC_DISCOVERY_AS_LOCALHOST !== undefined 
+    ? process.env.FABRIC_DISCOVERY_AS_LOCALHOST === "true"
+    : isLocalhost;
+  const discoveryEnabled = process.env.FABRIC_DISCOVERY_ENABLED === "true";
 
   const gateway = new Gateway();
   await gateway.connect(ccp, {
     wallet,
-    identity: "appUser",
-    discovery: { enabled: true, asLocalhost: true }
+    identity: selectedIdentity,
+    discovery: { enabled: discoveryEnabled, asLocalhost }
   });
 
   return gateway;
@@ -29,22 +59,22 @@ async function createAssetOnFabric(assetData) {
     const contract = network.getContract("asset-management");
     const tx = contract.createTransaction("CreateAsset");
     const result = await tx.submit(
-      assetData.assetId,
-      assetData.department,
-      assetData.category,
-      assetData.name,
-      assetData.purchaseDate,
-      String(assetData.purchaseValue),
-      assetData.location,
-      assetData.owner,
-      assetData.warrantyExpiry || "",
-      assetData.billHash || ""
+      String(assetData.assetId || ""),
+      String(assetData.department || ""),
+      String(assetData.category || ""),
+      String(assetData.name || ""),
+      String(assetData.purchaseDate || ""),
+      String(assetData.purchaseValue || 0),
+      String(assetData.location || ""),
+      String(assetData.owner || ""),
+      String(assetData.warrantyExpiry || ""),
+      String(assetData.billHash || "")
     );
 
     return {
       success: true,
       transactionId: tx.getTransactionId(),
-      result: JSON.parse(result.toString())
+      result: (result && result.length > 0) ? JSON.parse(result.toString()) : { assetId: assetData.assetId }
     };
   } catch (error) {
     return {

@@ -202,14 +202,25 @@ function updateUserChip() {
   if (currentUser && authToken) {
     headerUserName.textContent = currentUser.name || currentUser.email || 'Admin';
     userAvatar.textContent = (currentUser.name || currentUser.email || 'A').charAt(0).toUpperCase();
-    sessionBadge.textContent = currentUser.role ? `${currentUser.role}` : 'Administrator';
+    
+    let academicRoleTitle = 'HOD / Central Administrator';
+    if (currentUser.role === 'DepartmentUser') {
+      academicRoleTitle = `Lab In-Charge (${currentUser.department || 'CSE'})`;
+    } else if (currentUser.role === 'Auditor') {
+      academicRoleTitle = 'University Audit Officer';
+    } else if (currentUser.role) {
+      academicRoleTitle = currentUser.role;
+    }
+    
+    sessionBadge.textContent = academicRoleTitle;
     if (signOutBtn) signOutBtn.classList.remove('hidden');
   } else {
-    headerUserName.textContent = 'Guest';
+    headerUserName.textContent = 'Guest User';
     userAvatar.textContent = '?';
     sessionBadge.textContent = 'Not signed in';
     if (signOutBtn) signOutBtn.classList.add('hidden');
   }
+  loadPendingUsers();
 }
 
 document.getElementById('signOutBtn')?.addEventListener('click', () => {
@@ -268,14 +279,18 @@ async function loadPendingUsers() {
   const container = document.getElementById('pendingUsersList');
   if (!panel || !container) return;
 
-  if (currentUser && (currentUser.role === 'Administrator' || currentUser.role === 'Admin')) {
+  const isAdmin = currentUser && (currentUser.role === 'Administrator' || currentUser.role === 'Admin');
+  if (isAdmin) {
     panel.classList.remove('hidden');
+    panel.style.display = 'block';
     const res = await requestJson('/api/users/pending');
     if (res.ok && Array.isArray(res.data)) {
       renderPendingUsers(res.data);
     }
   } else {
     panel.classList.add('hidden');
+    panel.style.display = 'none';
+    container.innerHTML = '';
   }
 }
 
@@ -287,8 +302,11 @@ function renderPendingUsers(users) {
     return;
   }
 
-  container.innerHTML = users.map(u => `
-    <div class="detail-row" style="padding:14px 12px; align-items:center; background:#fffbe6; border-bottom:1px solid #fef3c7;">
+  container.innerHTML = users.map(u => {
+    const rawId = String(u._id || u.email);
+    const safeId = rawId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return `
+    <div id="pending-row-${safeId}" class="detail-row pending-user-item" style="padding:14px 12px; align-items:center; background:#fffbe6; border-bottom:1px solid #fef3c7; transition: all 0.3s ease; overflow: hidden;">
       <div style="flex:1;">
         <div style="display:flex; align-items:center; gap:8px;">
           <strong style="color:var(--gray-900); font-size:14px;">${escapeHtml(u.name)}</strong>
@@ -299,33 +317,56 @@ function renderPendingUsers(users) {
         </div>
       </div>
       <div style="display:flex; gap:8px;">
-        <button type="button" class="btn btn-primary" style="padding:6px 12px; font-size:12px; background:#10b981; border-color:#059669;" onclick="approveUserDirect('${escapeHtml(u._id || u.email)}', '${escapeHtml(u.email)}')">Accept Approval ✓</button>
-        <button type="button" class="btn btn-secondary" style="padding:6px 12px; font-size:12px; color:var(--red-600); border-color:var(--red-300);" onclick="rejectUserDirect('${escapeHtml(u._id || u.email)}', '${escapeHtml(u.email)}')">Reject ✗</button>
+        <button type="button" class="btn btn-primary" style="padding:6px 12px; font-size:12px; background:#10b981; border-color:#059669;" onclick="approveUserDirect('${escapeHtml(rawId)}', '${escapeHtml(u.email)}', 'pending-row-${safeId}')">Accept Approval ✓</button>
+        <button type="button" class="btn btn-secondary" style="padding:6px 12px; font-size:12px; color:var(--red-600); border-color:var(--red-300);" onclick="rejectUserDirect('${escapeHtml(rawId)}', '${escapeHtml(u.email)}', 'pending-row-${safeId}')">Reject ✗</button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
-window.approveUserDirect = async function(id, email) {
+function removePendingRowElement(rowId) {
+  const container = document.getElementById('pendingUsersList');
+  const row = document.getElementById(rowId);
+  if (row) {
+    row.style.opacity = '0';
+    row.style.maxHeight = '0px';
+    row.style.padding = '0px 12px';
+    row.style.margin = '0px';
+    setTimeout(() => {
+      row.remove();
+      if (container && container.querySelectorAll('.pending-user-item').length === 0) {
+        container.innerHTML = '<div class="empty-state" style="padding:16px;">No pending user registration requests. All requests processed.</div>';
+      }
+    }, 300);
+  }
+}
+
+window.approveUserDirect = async function(id, email, rowId) {
+  if (rowId) removePendingRowElement(rowId);
   setLoading(`Approving user ${email}...`);
   const res = await requestJson(`/api/users/${encodeURIComponent(id)}/approve`, { method: 'POST' });
   if (res.ok) {
     showToast(`User ${email} approved successfully!`, 'success');
     await loadPendingUsers();
     await loadDashboard();
+  } else {
+    showResult(res);
+    await loadPendingUsers();
   }
-  showResult(res);
 };
 
-window.rejectUserDirect = async function(id, email) {
-  if (!confirm(`Reject registration request for ${email}?`)) return;
+window.rejectUserDirect = async function(id, email, rowId) {
+  if (rowId) removePendingRowElement(rowId);
   setLoading(`Rejecting user ${email}...`);
   const res = await requestJson(`/api/users/${encodeURIComponent(id)}/reject`, { method: 'POST' });
   if (res.ok) {
     showToast(`Registration for ${email} rejected`, 'info');
     await loadPendingUsers();
+  } else {
+    showResult(res);
+    await loadPendingUsers();
   }
-  showResult(res);
 };
 
 function renderDashboardSummary(data) {
@@ -479,8 +520,11 @@ function renderAssetList(assets) {
     return;
   }
 
-  container.innerHTML = assets.map(asset => `
-    <div class="detail-row" style="padding:16px 12px; align-items:flex-start; flex-wrap:wrap; gap:10px;">
+  container.innerHTML = assets.map(asset => {
+    const rawAssetId = String(asset.assetId || asset._id);
+    const safeAssetId = rawAssetId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return `
+    <div id="asset-row-${safeAssetId}" class="detail-row" style="padding:16px 12px; align-items:flex-start; flex-wrap:wrap; gap:10px; transition: all 0.3s ease; overflow: hidden;">
       <div style="flex:1; min-width:200px;">
         <div style="display:flex; align-items:center; gap:8px;">
           <strong style="font-size:15px; color:var(--gray-900);">${escapeHtml(asset.assetId)}</strong>
@@ -491,7 +535,7 @@ function renderAssetList(assets) {
           Dept: <strong>${escapeHtml(asset.department)}</strong> | Cat: ${escapeHtml(asset.category)} | Location: ${escapeHtml(asset.location || 'Central')}
         </div>
         <div class="muted" style="font-family:var(--font-mono); font-size:11px; margin-top:2px;">
-          Serial: ${escapeHtml(asset.serialNumber || 'N/A')} | Value: $${Number(asset.purchaseValue || 0).toLocaleString()}
+          Serial: ${escapeHtml(asset.serialNumber || 'N/A')} | Value: ₹${Number(asset.purchaseValue || 0).toLocaleString()}
         </div>
       </div>
       <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
@@ -500,10 +544,11 @@ function renderAssetList(assets) {
         <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" onclick="openEditAsset('${escapeHtml(asset.assetId)}')">Edit</button>
         <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" onclick="openQuickTransfer('${escapeHtml(asset.assetId)}')">Transfer</button>
         <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:var(--amber-600);" onclick="openQuickCondemn('${escapeHtml(asset.assetId)}')">Condemn</button>
-        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:var(--red-600);" onclick="deleteAsset('${escapeHtml(asset.assetId)}')">Delete</button>
+        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:var(--red-600);" onclick="deleteAsset('${escapeHtml(asset.assetId)}', 'asset-row-${safeAssetId}')">Delete</button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 window.showAssetHistory = async function(assetId) {
@@ -520,7 +565,7 @@ window.showAssetHistory = async function(assetId) {
           <div>
             <h3 style="margin:0;">${escapeHtml(asset.name)} (${escapeHtml(asset.assetId)})</h3>
             <p style="margin:4px 0 0; color:var(--gray-600); font-size:13px;">
-              Dept: <strong>${escapeHtml(asset.department)}</strong> | Serial: ${escapeHtml(asset.serialNumber || 'N/A')} | Value: $${Number(asset.purchaseValue || 0).toLocaleString()}
+              Dept: <strong>${escapeHtml(asset.department)}</strong> | Serial: ${escapeHtml(asset.serialNumber || 'N/A')} | Value: ₹${Number(asset.purchaseValue || 0).toLocaleString()}
             </p>
           </div>
           <span class="status-pill ${asset.status === 'Active' ? 'ok' : 'neutral'}">${escapeHtml(asset.status)}</span>
@@ -597,17 +642,28 @@ document.getElementById('editAssetForm')?.addEventListener('submit', async (e) =
   showResult(res);
 });
 
-window.deleteAsset = async function(assetId) {
-  if (!confirm(`Are you sure you want to delete asset ${assetId}?`)) return;
+window.deleteAsset = async function(assetId, elementId) {
+  if (elementId) {
+    const el = document.getElementById(elementId);
+    if (el) {
+      el.style.opacity = '0';
+      el.style.maxHeight = '0px';
+      el.style.padding = '0px';
+      setTimeout(() => el.remove(), 300);
+    }
+  }
   setLoading(`Deleting asset ${assetId}...`);
   const res = await requestJson(`/api/assets/${encodeURIComponent(assetId)}`, {
     method: 'DELETE'
   });
   if (res.ok) {
-    showToast(`Asset ${assetId} deleted`, 'success');
-    loadAssets();
+    showToast(res.message || `Asset ${assetId} deleted`, 'success');
+    await loadAssets();
+    await loadDashboard();
+  } else {
+    showResult(res);
+    await loadAssets();
   }
-  showResult(res);
 };
 
 window.showQrBadge = function(assetId) {
@@ -695,7 +751,7 @@ function renderMaintenance(records) {
         </div>
         <div style="margin-top:2px; font-weight:500;">${escapeHtml(m.description)}</div>
         <div class="muted" style="margin-top:4px;">
-          Technician: <strong>${escapeHtml(m.technician)}</strong> | Cost: <strong>$${Number(m.cost || 0).toLocaleString()}</strong> | Date: ${escapeHtml(m.maintenanceDate)}
+          Technician: <strong>${escapeHtml(m.technician)}</strong> | Cost: <strong>₹${Number(m.cost || 0).toLocaleString()}</strong> | Date: ${escapeHtml(m.maintenanceDate)}
         </div>
       </div>
       <div>
@@ -709,7 +765,7 @@ function renderMaintenance(records) {
     analytics.innerHTML = `
       <div class="detail-row">
         <span>Total Service Expenditure</span>
-        <strong style="font-size:18px; color:var(--blue-700);">$${totalCost.toLocaleString()}</strong>
+        <strong style="font-size:18px; color:var(--blue-700);">₹${totalCost.toLocaleString()}</strong>
       </div>
       <div class="detail-row">
         <span>Total Service Jobs</span>
@@ -973,11 +1029,11 @@ async function loadFinancials() {
       kpiContainer.innerHTML = `
         <div class="kpi-card blue">
           <div class="kpi-label">Total Portfolio Valuation</div>
-          <div class="kpi-value">$${Number(totalValuation || 0).toLocaleString()}</div>
+          <div class="kpi-value">₹${Number(totalValuation || 0).toLocaleString()}</div>
         </div>
         <div class="kpi-card green">
           <div class="kpi-label">Net Book Value (Estimated)</div>
-          <div class="kpi-value">$${Number(netBookValue || 0).toLocaleString()}</div>
+          <div class="kpi-value">₹${Number(netBookValue || 0).toLocaleString()}</div>
         </div>
         <div class="kpi-card amber">
           <div class="kpi-label">Depreciation Method</div>
@@ -1004,8 +1060,8 @@ async function loadFinancials() {
               <div class="muted">Dept: ${escapeHtml(a.department)} | Cat: ${escapeHtml(a.category)} | Date: ${a.purchaseDate ? new Date(a.purchaseDate).toLocaleDateString() : 'N/A'}</div>
             </div>
             <div style="text-align:right;">
-              <div style="font-weight:600;">Original: $${val.toLocaleString()}</div>
-              <div style="font-size:12px; color:var(--gray-600);">Net Book Value: $${nbv.toLocaleString()}</div>
+              <div style="font-weight:600;">Original: ₹${val.toLocaleString()}</div>
+              <div style="font-size:12px; color:var(--gray-600);">Net Book Value: ₹${nbv.toLocaleString()}</div>
             </div>
           </div>
         `;
@@ -1050,7 +1106,7 @@ document.getElementById('exportFinancialCsvBtn')?.addEventListener('click', asyn
       return;
     }
 
-    const headers = ['Asset ID', 'Asset Name', 'Department', 'Category', 'Purchase Date', 'Purchase Value ($)', 'Annual Depreciation ($)', 'Accumulated Depreciation ($)', 'Current Value ($)'];
+    const headers = ['Asset ID', 'Asset Name', 'Department', 'Category', 'Purchase Date', 'Purchase Value (₹)', 'Annual Depreciation (₹)', 'Accumulated Depreciation (₹)', 'Current Value (₹)'];
     const rows = financialAssets.map(a => [
       `"${(a.assetId || '').replace(/"/g, '""')}"`,
       `"${(a.name || '').replace(/"/g, '""')}"`,
@@ -1092,13 +1148,25 @@ function renderDepartments(departments) {
   const summaryPanel = document.getElementById('departmentSummaryPanel');
   if (!container) return;
 
+  if (currentUser && currentUser.role === 'DepartmentUser' && currentUser.department) {
+    const userDept = currentUser.department.toUpperCase();
+    const scoped = (departments || []).filter(d =>
+      (d.code || '').toUpperCase() === userDept ||
+      (d.name || '').toUpperCase().includes(userDept)
+    );
+    if (scoped.length > 0) departments = scoped;
+  }
+
   if (!departments || departments.length === 0) {
     container.innerHTML = '<div class="empty-state">No departments found.</div>';
     return;
   }
 
-  container.innerHTML = departments.map(dept => `
-    <div class="detail-row" style="padding:14px 10px; align-items:center;">
+  container.innerHTML = departments.map(dept => {
+    const rawId = String(dept._id || dept.code);
+    const safeId = rawId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return `
+    <div id="dept-row-${safeId}" class="detail-row" style="padding:14px 10px; align-items:center; transition: all 0.3s ease; overflow: hidden;">
       <div style="flex:1;">
         <strong>${escapeHtml(dept.name || dept.code)} (${escapeHtml(dept.code)})</strong>
         <div class="muted">${escapeHtml(dept.description || 'No description')} | Manager: ${escapeHtml(dept.manager || 'Unassigned')}</div>
@@ -1106,10 +1174,11 @@ function renderDepartments(departments) {
       <div style="display:flex; align-items:center; gap:8px;">
         <span class="status-pill neutral">${escapeHtml(dept.assetCount || 0)} assets</span>
         <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" onclick="openEditDept('${escapeHtml(dept._id || dept.code)}', '${escapeHtml(dept.code)}', '${escapeHtml(dept.name)}', '${escapeHtml(dept.description || '')}', '${escapeHtml(dept.manager || '')}')">Edit</button>
-        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:var(--red-600);" onclick="deleteDept('${escapeHtml(dept._id || dept.code)}', '${escapeHtml(dept.code || '')}')">Delete</button>
+        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:var(--red-600);" onclick="deleteDept('${escapeHtml(dept._id || dept.code)}', '${escapeHtml(dept.code || '')}', 'dept-row-${safeId}')">Delete</button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   if (summaryPanel) {
     summaryPanel.innerHTML = `
@@ -1183,17 +1252,27 @@ document.getElementById('editDeptForm')?.addEventListener('submit', async (e) =>
   showResult(res);
 });
 
-window.deleteDept = async function(id, code) {
-  if (!confirm(`Are you sure you want to permanently delete department ${code || id}?`)) return;
+window.deleteDept = async function(id, code, elementId) {
+  if (elementId) {
+    const el = document.getElementById(elementId);
+    if (el) {
+      el.style.opacity = '0';
+      el.style.maxHeight = '0px';
+      el.style.padding = '0px';
+      setTimeout(() => el.remove(), 300);
+    }
+  }
   setLoading(`Deleting department ${code || id}...`);
   const res = await requestJson(`/api/departments/${encodeURIComponent(id)}`, {
     method: 'DELETE'
   });
   if (res.ok) {
-    showToast(`Department ${code || id} deleted successfully`, 'success');
+    showToast(res.message || `Department ${code || id} deleted successfully`, 'success');
+    await loadDepartments();
+  } else {
+    showResult(res);
     await loadDepartments();
   }
-  showResult(res);
 };
 
 async function loadReports() {
@@ -1216,7 +1295,7 @@ function renderReports(reports) {
     <div class="detail-row" style="padding:14px 10px; align-items:center;">
       <div style="flex:1;">
         <strong>${escapeHtml(report.reportId)} (${escapeHtml(report.year)})</strong>
-        <div class="muted">Generated on ${new Date(report.createdAt).toLocaleDateString()} | Assets: <strong>${report.totalAssets || 0}</strong> | Value: <strong>$${Number(report.totalPurchaseValue || 0).toLocaleString()}</strong></div>
+        <div class="muted">Generated on ${new Date(report.createdAt).toLocaleDateString()} | Assets: <strong>${report.totalAssets || 0}</strong> | Value: <strong>₹${Number(report.totalPurchaseValue || 0).toLocaleString()}</strong></div>
       </div>
       <div style="display:flex; gap:6px;">
         <button type="button" class="btn btn-primary" style="padding:4px 10px; font-size:11.5px;" onclick="exportReport('${escapeHtml(report.reportId)}', 'pdf')">PDF</button>
@@ -1411,7 +1490,7 @@ function renderEquipmentCondemnations(items) {
               <div><strong>${escapeHtml(i.description)}</strong> (Qty: ${i.quantity})</div>
               <div style="margin-top:2px;"><strong>Reason:</strong> ${escapeHtml(i.reasonForCondemnation || p.remarks || 'N/A')}</div>
               <div class="muted" style="margin-top:2px;">
-                Purchase Value: $${Number(i.purchaseValue || 0).toLocaleString()} | Book Value: $${Number(i.bookValue || 0).toLocaleString()}
+                Purchase Value: ₹${Number(i.purchaseValue || 0).toLocaleString()} | Book Value: ₹${Number(i.bookValue || 0).toLocaleString()}
               </div>
             </div>
           `).join('')}
@@ -1516,7 +1595,7 @@ function renderConsumableCondemnations(items) {
               <div><strong>${escapeHtml(i.description)}</strong> (Qty: ${i.quantity})</div>
               <div style="margin-top:2px;"><strong>Reason:</strong> ${escapeHtml(i.condemnationReason || p.remarks || 'N/A')}</div>
               <div class="muted" style="margin-top:2px;">
-                Book Stock: ${i.bookStock} | Physical: ${i.actualStock} | Book Value: $${Number(i.bookValue || 0).toLocaleString()}
+                Book Stock: ${i.bookStock} | Physical: ${i.actualStock} | Book Value: ₹${Number(i.bookValue || 0).toLocaleString()}
               </div>
             </div>
           `).join('')}
@@ -1887,10 +1966,22 @@ document.getElementById('showSignUpTab')?.addEventListener('click', () => {
 
 document.getElementById('signupForm')?.addEventListener('submit', async (event) => {
   event.preventDefault();
-  setLoading('Submitting registration request...');
   const formData = new FormData(event.target);
   const data = Object.fromEntries(formData.entries());
 
+  if (data.password !== data.confirmPassword) {
+    showToast('Passwords do not match. Please re-enter passwords.', 'error');
+    return;
+  }
+
+  if (!data.email || !data.email.trim()) {
+    const cleanName = (data.name || 'user').toLowerCase().replace(/[^a-z0-9]/g, '');
+    data.email = `${cleanName}@college.edu`;
+  } else {
+    data.email = data.email.trim();
+  }
+
+  setLoading('Submitting registration request...');
   const response = await requestJson('/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1905,26 +1996,145 @@ document.getElementById('signupForm')?.addEventListener('submit', async (event) 
   showResult(response);
 });
 
+// ── GMAIL AUTHENTICATION HANDLERS ─────────────────────────────
+document.getElementById('gmailSignInBtn')?.addEventListener('click', () => {
+  const modal = document.getElementById('gmailModal');
+  if (modal) modal.classList.remove('hidden');
+});
+
+document.getElementById('gmailSignUpBtn')?.addEventListener('click', () => {
+  const modal = document.getElementById('gmailModal');
+  if (modal) modal.classList.remove('hidden');
+});
+
+document.getElementById('gmailAuthForm')?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const formData = new FormData(event.target);
+  const email = (formData.get('gmail') || '').trim();
+  const name = (formData.get('name') || '').trim();
+  const departmentName = (formData.get('departmentName') || '').trim();
+  const department = (formData.get('department') || 'IT').trim().toUpperCase();
+
+  if (!email || !email.includes('@')) {
+    showToast('Please enter a valid Gmail address', 'error');
+    return;
+  }
+
+  setLoading('Authenticating with Gmail / Google Services...');
+  const response = await requestJson('/auth/gmail', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, name, departmentName, department })
+  });
+
+  const modal = document.getElementById('gmailModal');
+  if (modal) modal.classList.add('hidden');
+
+  if (response.ok) {
+    if (response.data?.token && response.data?.user) {
+      authToken = response.data.token;
+      currentUser = response.data.user;
+      localStorage.setItem('authToken', authToken);
+      localStorage.setItem('currentUser', JSON.stringify(currentUser));
+      updateUserChip();
+      showToast(response.message || `Welcome ${currentUser.name}! Authenticated via Gmail.`, 'success');
+      await loadDashboard();
+    } else {
+      showToast(response.message || 'Gmail registration submitted! Awaiting Admin approval.', 'success');
+      document.getElementById('showSignInTab')?.click();
+    }
+  } else {
+    showToast(response.error || 'Gmail authentication failed', 'error');
+  }
+  showResult(response);
+});
+
+// ── QUICK COLLEGE LAB ASSET PRESETS ────────────────────────────
+const COLLEGE_ASSET_PRESETS = {
+  pc: {
+    assetId: 'CSE-PC-' + Math.floor(100 + Math.random() * 900),
+    name: 'Dell OptiPlex 7090 Desktop (Core i7 / 16GB RAM / 512GB SSD)',
+    category: 'Computer Lab',
+    department: 'CSE',
+    location: 'CSE Lab 2 - Room 204, Main Academic Block',
+    serialNumber: 'SN-DELL-' + Math.floor(10000 + Math.random() * 90000),
+    purchaseValue: 68500,
+    lifespanYears: 5
+  },
+  projector: {
+    assetId: 'AV-PRJ-' + Math.floor(100 + Math.random() * 900),
+    name: 'Epson PowerLite 1080p Ceiling Interactive Projector',
+    category: 'Smart Classroom',
+    department: 'ECE',
+    location: 'ECE Seminar Hall - Room 301, Science Block',
+    serialNumber: 'SN-EPSON-' + Math.floor(10000 + Math.random() * 90000),
+    purchaseValue: 52000,
+    lifespanYears: 7
+  },
+  oscilloscope: {
+    assetId: 'ECE-DSO-' + Math.floor(100 + Math.random() * 900),
+    name: 'Tektronix 100MHz 2-Channel Digital Storage Oscilloscope',
+    category: 'Laboratory',
+    department: 'ECE',
+    location: 'Embedded Systems Lab - Room 102',
+    serialNumber: 'SN-TEK-' + Math.floor(10000 + Math.random() * 90000),
+    purchaseValue: 85000,
+    lifespanYears: 10
+  },
+  bench: {
+    assetId: 'FURN-DESK-' + Math.floor(100 + Math.random() * 900),
+    name: 'Dual Student Teakwood Lab Bench with Integrated Outlets',
+    category: 'Furniture',
+    department: 'ME',
+    location: 'Mechanical Design Studio - Workshop Block A',
+    serialNumber: 'SN-FURN-' + Math.floor(10000 + Math.random() * 90000),
+    purchaseValue: 14500,
+    lifespanYears: 12
+  },
+  spectro: {
+    assetId: 'CHE-SPEC-' + Math.floor(100 + Math.random() * 900),
+    name: 'Thermo Scientific UV-Vis Double Beam Spectrophotometer',
+    category: 'Laboratory',
+    department: 'CHE',
+    location: 'Analytical Chemistry Lab - Room 108',
+    serialNumber: 'SN-THERMO-' + Math.floor(10000 + Math.random() * 90000),
+    purchaseValue: 195000,
+    lifespanYears: 8
+  }
+};
+
+document.addEventListener('click', (e) => {
+  const chip = e.target.closest('.preset-chip');
+  if (!chip) return;
+  const key = chip.getAttribute('data-preset');
+  const preset = COLLEGE_ASSET_PRESETS[key];
+  if (!preset) return;
+  
+  const form = document.getElementById('addAssetForm');
+  if (!form) return;
+  
+  if (form.elements['assetId']) form.elements['assetId'].value = preset.assetId;
+  if (form.elements['name']) form.elements['name'].value = preset.name;
+  if (form.elements['category']) form.elements['category'].value = preset.category;
+  if (form.elements['department']) form.elements['department'].value = preset.department;
+  if (form.elements['location']) form.elements['location'].value = preset.location;
+  if (form.elements['serialNumber']) form.elements['serialNumber'].value = preset.serialNumber;
+  if (form.elements['purchaseValue']) form.elements['purchaseValue'].value = preset.purchaseValue;
+  if (form.elements['lifespanYears']) form.elements['lifespanYears'].value = preset.lifespanYears;
+  
+  const today = new Date().toISOString().split('T')[0];
+  if (form.elements['purchaseDate']) form.elements['purchaseDate'].value = today;
+  
+  showToast(`⚡ Populated Preset: ${preset.name}`, 'info');
+});
+
 bootstrapSession();
 
 (async function initializeApp() {
   await checkHealth();
   if (!authToken) {
-    const loginRes = await requestJson('/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'admin@assetmgmt.local', password: 'Admin@12345!' })
-    });
-    if (loginRes.ok && loginRes.data?.token) {
-      authToken = loginRes.data.token;
-      localStorage.setItem('authToken', authToken);
-      currentUser = loginRes.data.user || { name: 'Admin User', email: 'admin@assetmgmt.local', role: 'Administrator' };
-      localStorage.setItem('currentUser', JSON.stringify(currentUser));
-      updateUserChip();
-    } else {
-      navigateTo('login');
-      return;
-    }
+    navigateTo('login');
+    return;
   }
   await loadDashboard();
 })();

@@ -23,3 +23,4 @@ EXPOSE 8545 8546
 ENV NODE_ENV=production
 
 CMD ["npx", "hardhat", "node", "--hostname", "0.0.0.0"]
+

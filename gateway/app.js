@@ -77,50 +77,40 @@ app.get("/health", async (req, res) => {
 
 app.post("/auth/register", async (req, res, next) => {
   if (databaseReady) return register(req, res, next);
-  const { name, email, password, role, department } = req.body;
-  if (!name || !email || !password) {
-    return res.status(400).json({ ok: false, error: "Name, email, and password are required" });
+  const { name, departmentName, department, password } = req.body;
+  if (!name || !password) {
+    return res.status(400).json({ ok: false, error: "User name and password are required" });
   }
-  const emailLower = email.toLowerCase().trim();
-  const existing = (mockDb.pendingUsers || []).concat(mockDb.approvedUsers || []).find(u => u.email === emailLower);
+  const emailInput = req.body.email || `${(name || 'user').toLowerCase().replace(/[^a-z0-9]/g, '')}@college.edu`;
+  const emailLower = emailInput.toLowerCase().trim();
+  const existing = (mockDb.pendingUsers || []).concat(mockDb.approvedUsers || []).find(u => u.email === emailLower || u.name.toLowerCase() === name.toLowerCase());
   if (existing) {
-    return res.status(400).json({ ok: false, error: "User with this email already exists" });
+    return res.status(400).json({ ok: false, error: "User with this user name or email already exists" });
   }
 
-  const isApproved = role === "Administrator";
   const newUser = {
     _id: "usr-" + Date.now(),
     name,
     email: emailLower,
     password,
-    role: role || "DepartmentUser",
-    department: role === "Administrator" ? undefined : (department || "IT"),
-    isApproved,
-    status: isApproved ? "Approved" : "PendingApproval",
+    role: "DepartmentUser",
+    department: (department || "IT").toUpperCase(),
+    departmentName: departmentName || department || "IT",
+    isApproved: false,
+    status: "PendingApproval",
     createdAt: new Date().toISOString()
   };
 
-  if (isApproved) {
-    mockDb.approvedUsers.push(newUser);
-    const jwt = require("jsonwebtoken");
-    const token = jwt.sign(
-      { sub: newUser._id, email: newUser.email, role: newUser.role, name: newUser.name, department: newUser.department },
-      process.env.JWT_SECRET || "change-me-in-development",
-      { expiresIn: "8h" }
-    );
-    return res.status(201).json({ ok: true, message: "User registered successfully", data: { user: newUser, token } });
-  } else {
-    mockDb.pendingUsers.push(newUser);
-    return res.status(201).json({ ok: true, message: "Registration submitted successfully! Your account is pending Admin approval.", data: { user: newUser } });
-  }
+  mockDb.pendingUsers.push(newUser);
+  return res.status(201).json({ ok: true, message: "Registration submitted successfully! Your account is pending Admin approval.", data: { user: newUser } });
 });
 
 app.post("/auth/login", async (req, res, next) => {
   if (databaseReady) return login(req, res, next);
-  const { email, password } = req.body;
-  const emailLower = (email || '').toLowerCase().trim();
+  const { password } = req.body;
+  const input = (req.body.email || req.body.name || req.body.username || '').toLowerCase().trim();
 
-  const pending = (mockDb.pendingUsers || []).find(u => u.email === emailLower);
+  const pending = (mockDb.pendingUsers || []).find(u => u.email === input || u.name.toLowerCase() === input);
   if (pending) {
     if (pending.status === "Rejected") {
       return res.status(403).json({ ok: false, error: "Your registration request was rejected by the Admin." });
@@ -128,7 +118,7 @@ app.post("/auth/login", async (req, res, next) => {
     return res.status(403).json({ ok: false, error: "Your account is pending Admin approval. Please wait for an administrator to approve your registration." });
   }
 
-  const approved = (mockDb.approvedUsers || []).find(u => u.email === emailLower);
+  const approved = (mockDb.approvedUsers || []).find(u => u.email === input || u.name.toLowerCase() === input);
   if (approved) {
     const jwt = require("jsonwebtoken");
     const token = jwt.sign(
@@ -139,7 +129,7 @@ app.post("/auth/login", async (req, res, next) => {
     return res.json({ ok: true, data: { user: approved, token } });
   }
 
-  if (emailLower === "admin@assetmgmt.local") {
+  if (input === "admin@assetmgmt.local" || input === "admin") {
     const jwt = require("jsonwebtoken");
     const user = { id: "demo123", name: "Demo Admin", email: "admin@assetmgmt.local", role: "Administrator", isApproved: true };
     const token = jwt.sign(
@@ -150,7 +140,49 @@ app.post("/auth/login", async (req, res, next) => {
     return res.json({ ok: true, data: { user, token } });
   }
 
-  return res.status(401).json({ ok: false, error: "Invalid email or password" });
+  return res.status(401).json({ ok: false, error: "Invalid credentials" });
+});
+
+app.post("/auth/gmail", async (req, res, next) => {
+  const { email, name, department, departmentName } = req.body;
+  if (!email || !email.includes("@")) {
+    return res.status(400).json({ ok: false, error: "Valid Gmail address is required" });
+  }
+
+  const emailLower = email.toLowerCase().trim();
+  const userName = name || emailLower.split("@")[0];
+  const jwt = require("jsonwebtoken");
+
+  let user = (mockDb.approvedUsers || []).find(u => u.email === emailLower);
+  if (!user) {
+    const isAdmin = emailLower.includes("admin") || emailLower === "admin@assetmgmt.local";
+    user = {
+      _id: "usr-gmail-" + Date.now(),
+      name: userName,
+      email: emailLower,
+      password: "gmail_authenticated",
+      role: isAdmin ? "Administrator" : "DepartmentUser",
+      department: (department || "IT").toUpperCase(),
+      departmentName: departmentName || department || "Information Technology",
+      isApproved: true,
+      status: "Approved",
+      authProvider: "Google",
+      createdAt: new Date().toISOString()
+    };
+    mockDb.approvedUsers.push(user);
+  }
+
+  const token = jwt.sign(
+    { sub: user._id, email: user.email, role: user.role, name: user.name, department: user.department },
+    process.env.JWT_SECRET || "change-me-in-development",
+    { expiresIn: "8h" }
+  );
+
+  return res.json({
+    ok: true,
+    message: `Successfully authenticated as ${user.name} (${user.role}) via Google!`,
+    data: { user, token }
+  });
 });
 
 app.get("/users/me", authenticate, async (req, res) => {
@@ -491,20 +523,29 @@ function buildDemoApiResponse(req) {
     if (path === "/verification/consumables/condemnation") {
       return { ok: true, data: mockDb.consumableCondemnations, pagination: { page: 1, limit: 50, total: mockDb.consumableCondemnations.length, pages: 1 } };
     }
+    const isDeptUser = req.user && req.user.role === "DepartmentUser";
+    const userDept = (req.user && req.user.department ? req.user.department : "").toUpperCase();
+
     if (path === "/dashboard") {
-      const totalAssets = mockDb.assets.length;
-      const activeAssets = mockDb.assets.filter(a => a.status === "Active").length;
-      const maintenanceAssets = mockDb.assets.filter(a => a.status === "Maintenance").length;
-      const condemnedAssets = mockDb.assets.filter(a => a.status === "Condemned" || a.status === "CondemnationRequested").length;
-      const disposedAssets = mockDb.assets.filter(a => a.status === "Disposed").length;
+      const assets = isDeptUser && userDept ? mockDb.assets.filter(a => (a.department || "").toUpperCase() === userDept) : mockDb.assets;
+      const bills = isDeptUser && userDept ? mockDb.bills.filter(b => { const a = mockDb.assets.find(ast => ast.assetId === b.assetId); return a && (a.department || "").toUpperCase() === userDept; }) : mockDb.bills;
+      const maintenance = isDeptUser && userDept ? mockDb.maintenance.filter(m => { const a = mockDb.assets.find(ast => ast.assetId === m.assetId); return a && (a.department || "").toUpperCase() === userDept; }) : mockDb.maintenance;
+      const condemnation = isDeptUser && userDept ? mockDb.condemnation.filter(c => { const a = mockDb.assets.find(ast => ast.assetId === c.assetId); return a && (a.department || "").toUpperCase() === userDept; }) : mockDb.condemnation;
+      const transfers = isDeptUser && userDept ? mockDb.transfers.filter(t => (t.fromDepartment || "").toUpperCase() === userDept || (t.toDepartment || "").toUpperCase() === userDept) : mockDb.transfers;
+
+      const totalAssets = assets.length;
+      const activeAssets = assets.filter(a => a.status === "Active").length;
+      const maintenanceAssets = assets.filter(a => a.status === "Maintenance").length;
+      const condemnedAssets = assets.filter(a => a.status === "Condemned" || a.status === "CondemnationRequested").length;
+      const disposedAssets = assets.filter(a => a.status === "Disposed").length;
 
       const deptSummary = {};
-      mockDb.assets.forEach(a => {
+      assets.forEach(a => {
         deptSummary[a.department] = (deptSummary[a.department] || 0) + 1;
       });
 
       const statusSummary = {};
-      mockDb.assets.forEach(a => {
+      assets.forEach(a => {
         statusSummary[a.status] = (statusSummary[a.status] || 0) + 1;
       });
 
@@ -517,72 +558,53 @@ function buildDemoApiResponse(req) {
             maintenanceAssets,
             condemnedAssets,
             disposedAssets,
-            totalBills: mockDb.bills.length,
-            verifiedBills: mockDb.bills.filter(b => b.verified).length,
-            totalMaintenances: mockDb.maintenance.length,
-            totalCondemnationRequests: mockDb.condemnation.length,
-            totalTransfers: mockDb.transfers.length
+            totalBills: bills.length,
+            verifiedBills: bills.filter(b => b.verified).length,
+            totalMaintenances: maintenance.length,
+            totalCondemnationRequests: condemnation.length,
+            totalTransfers: transfers.length
           },
           analytics: {
             assetStatus: statusSummary,
             departmentSummary: deptSummary
           },
-          recentAssets: mockDb.assets.slice(0, 5)
+          recentAssets: assets.slice(0, 5)
         }
       };
     }
 
     if (path === "/assets") {
-      return { ok: true, data: mockDb.assets, pagination: { page: 1, limit: 50, total: mockDb.assets.length, pages: 1 } };
+      const assets = isDeptUser && userDept ? mockDb.assets.filter(a => (a.department || "").toUpperCase() === userDept) : mockDb.assets;
+      return { ok: true, data: assets, pagination: { page: 1, limit: 50, total: assets.length, pages: 1 } };
     }
 
     if (path === "/departments") {
-      return { ok: true, data: mockDb.departments };
+      const depts = isDeptUser && userDept ? mockDb.departments.filter(d => (d.code || "").toUpperCase() === userDept || (d.name || "").toUpperCase().includes(userDept)) : mockDb.departments;
+      return { ok: true, data: depts };
     }
 
-    if (path === "/users/pending") {
+    if (path === "/users/pending" || path === "/api/users/pending") {
       return { ok: true, data: mockDb.pendingUsers || [] };
     }
 
-    if (method === "POST" && path.includes("/users/") && path.endsWith("/approve")) {
-      const userId = path.split("/")[2];
-      const idx = (mockDb.pendingUsers || []).findIndex(u => u._id === userId || u.email === userId);
-      if (idx !== -1) {
-        const approved = mockDb.pendingUsers.splice(idx, 1)[0];
-        approved.isApproved = true;
-        approved.status = "Approved";
-        mockDb.approvedUsers.push(approved);
-        return { ok: true, message: `User ${approved.email} approved successfully`, data: approved };
-      }
-      return { ok: false, error: "User not found" };
-    }
-
-    if (method === "POST" && path.includes("/users/") && path.endsWith("/reject")) {
-      const userId = path.split("/")[2];
-      const idx = (mockDb.pendingUsers || []).findIndex(u => u._id === userId || u.email === userId);
-      if (idx !== -1) {
-        const rejected = mockDb.pendingUsers.splice(idx, 1)[0];
-        rejected.isApproved = false;
-        rejected.status = "Rejected";
-        return { ok: true, message: `User ${rejected.email} registration rejected`, data: rejected };
-      }
-      return { ok: false, error: "User not found" };
-    }
-
     if (path === "/bills") {
-      return { ok: true, data: mockDb.bills };
+      const bills = isDeptUser && userDept ? mockDb.bills.filter(b => { const a = mockDb.assets.find(ast => ast.assetId === b.assetId); return a && (a.department || "").toUpperCase() === userDept; }) : mockDb.bills;
+      return { ok: true, data: bills };
     }
 
     if (path === "/maintenance") {
-      return { ok: true, data: mockDb.maintenance };
+      const maintenance = isDeptUser && userDept ? mockDb.maintenance.filter(m => { const a = mockDb.assets.find(ast => ast.assetId === m.assetId); return a && (a.department || "").toUpperCase() === userDept; }) : mockDb.maintenance;
+      return { ok: true, data: maintenance };
     }
 
     if (path === "/condemnation") {
-      return { ok: true, data: mockDb.condemnation };
+      const condemnation = isDeptUser && userDept ? mockDb.condemnation.filter(c => { const a = mockDb.assets.find(ast => ast.assetId === c.assetId); return a && (a.department || "").toUpperCase() === userDept; }) : mockDb.condemnation;
+      return { ok: true, data: condemnation };
     }
 
     if (path === "/transfers") {
-      return { ok: true, data: mockDb.transfers };
+      const transfers = isDeptUser && userDept ? mockDb.transfers.filter(t => (t.fromDepartment || "").toUpperCase() === userDept || (t.toDepartment || "").toUpperCase() === userDept) : mockDb.transfers;
+      return { ok: true, data: transfers };
     }
 
     if (path === "/reports") {
@@ -591,7 +613,8 @@ function buildDemoApiResponse(req) {
 
     if (path === "/reports/financial") {
       const currentYear = new Date().getFullYear();
-      const financialData = mockDb.assets.map(asset => {
+      const assets = isDeptUser && userDept ? mockDb.assets.filter(a => (a.department || "").toUpperCase() === userDept) : mockDb.assets;
+      const financialData = assets.map(asset => {
         const purchaseYear = new Date(asset.purchaseDate || "2024-01-01").getFullYear();
         const ageYears = Math.max(0, currentYear - purchaseYear);
         const lifespan = asset.lifespanYears || 5;
@@ -646,26 +669,73 @@ const { generatePdfBuffer, generateExcelBuffer } = require("../backend/services/
 
     if (method === "DELETE") {
       if (path.startsWith("/departments/")) {
-        const id = path.split("/")[2];
-        const idx = mockDb.departments.findIndex(d => d._id === id || d.code === id);
+        const rawId = path.split("/")[2];
+        const id = decodeURIComponent(rawId || "").toLowerCase().trim();
+        const idx = mockDb.departments.findIndex(d =>
+          String(d._id).toLowerCase() === id ||
+          (d.code && d.code.toLowerCase() === id) ||
+          (d.name && d.name.toLowerCase() === id)
+        );
         let deleted = null;
         if (idx !== -1) {
           deleted = mockDb.departments.splice(idx, 1)[0];
         }
-        return { ok: true, data: { message: "Department deleted successfully", department: deleted } };
+        return { ok: true, message: "Department deleted successfully", data: { department: deleted } };
       }
       if (path.startsWith("/assets/")) {
-        const assetId = path.split("/")[2];
-        const idx = mockDb.assets.findIndex(a => a.assetId === assetId || a._id === assetId);
+        const rawId = path.split("/")[2];
+        const assetId = decodeURIComponent(rawId || "").toLowerCase().trim();
+        const idx = mockDb.assets.findIndex(a =>
+          String(a._id).toLowerCase() === assetId ||
+          (a.assetId && a.assetId.toLowerCase() === assetId)
+        );
         let deleted = null;
         if (idx !== -1) {
           deleted = mockDb.assets.splice(idx, 1)[0];
         }
-        return { ok: true, data: { message: "Asset deleted", asset: deleted } };
+        return { ok: true, message: `Asset ${deleted ? deleted.assetId : assetId} deleted`, data: { asset: deleted } };
       }
     }
 
   if (method === "POST") {
+    if (path.includes("/users/") && path.endsWith("/approve")) {
+      const parts = path.split("/").filter(Boolean);
+      const rawUserId = parts.length >= 2 ? parts[parts.length - 2] : parts[0];
+      const userId = decodeURIComponent(rawUserId).toLowerCase().trim();
+      const idx = (mockDb.pendingUsers || []).findIndex(u =>
+        String(u._id).toLowerCase() === userId ||
+        (u.email && u.email.toLowerCase() === userId) ||
+        (u.name && u.name.toLowerCase() === userId)
+      );
+      if (idx !== -1) {
+        const approved = mockDb.pendingUsers.splice(idx, 1)[0];
+        approved.isApproved = true;
+        approved.status = "Approved";
+        if (!mockDb.approvedUsers) mockDb.approvedUsers = [];
+        mockDb.approvedUsers.push(approved);
+        return { ok: true, message: `User ${approved.email} approved successfully!`, data: approved };
+      }
+      return { ok: false, error: "Pending user not found" };
+    }
+
+    if (path.includes("/users/") && path.endsWith("/reject")) {
+      const parts = path.split("/").filter(Boolean);
+      const rawUserId = parts.length >= 2 ? parts[parts.length - 2] : parts[0];
+      const userId = decodeURIComponent(rawUserId).toLowerCase().trim();
+      const idx = (mockDb.pendingUsers || []).findIndex(u =>
+        String(u._id).toLowerCase() === userId ||
+        (u.email && u.email.toLowerCase() === userId) ||
+        (u.name && u.name.toLowerCase() === userId)
+      );
+      if (idx !== -1) {
+        const rejected = mockDb.pendingUsers.splice(idx, 1)[0];
+        rejected.isApproved = false;
+        rejected.status = "Rejected";
+        return { ok: true, message: `User ${rejected.email} registration rejected`, data: rejected };
+      }
+      return { ok: false, error: "Pending user not found" };
+    }
+
     if (path === "/departments") {
       const existing = mockDb.departments.find(d => d.code === body.code);
       if (existing) return { ok: false, error: "Department code already exists" };

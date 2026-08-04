@@ -3,23 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ChainTrack - Departmental Asset Management</title>
+  <title>CampusTrack | College Stock & Asset Management Portal</title>
   <link rel="stylesheet" href="style.css">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="app-layout">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">
         <div class="brand-mark">
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <rect width="28" height="28" rx="7" fill="#1e40af"/>
-            <path d="M7 14h4l2-5 4 10 2-5h4" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+            <path d="M6 12v5c3 3 9 3 12 0v-5"/>
           </svg>
         </div>
         <div class="brand-text">
-          <strong>ChainTrack</strong>
-          <span>Asset Management</span>
+          <strong>CampusTrack</strong>
+          <span>College Stock Portal</span>
         </div>
       </div>
       <nav class="sidebar-nav">
@@ -129,13 +129,39 @@
       </header>
 
       <main class="page-content">
+        <!-- CAMPUS BRAND HEADER BANNER -->
+        <div class="campus-header-banner">
+          <div class="banner-left">
+            <div class="banner-crest">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+                <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="banner-title">Kongu Engineering College</h2>
+              <p class="banner-subtitle">Campus Stock & Departmental Asset Ledger</p>
+            </div>
+          </div>
+          <div class="banner-right">
+            <span class="academic-year-badge">🎓 AY 2025–2026</span>
+            <div class="dept-quick-pills">
+              <span class="dept-pill active">CSE</span>
+              <span class="dept-pill">ECE</span>
+              <span class="dept-pill">ME</span>
+              <span class="dept-pill">CE</span>
+              <span class="dept-pill">CHE</span>
+              <span class="dept-pill">LIB</span>
+            </div>
+          </div>
+        </div>
 
         <!-- DASHBOARD -->
         <section class="page active" id="page-dashboard">
           <div class="page-header">
             <div>
-              <h1>Departmental Asset Dashboard</h1>
-              <p class="page-subtitle">Overview of departmental assets and blockchain status</p>
+              <h1>Campus Departmental Stock Dashboard</h1>
+              <p class="page-subtitle">Real-time asset tracking, lab equipment management, and official proforma audit logs</p>
             </div>
             <div class="page-actions">
               <button type="button" class="btn btn-secondary" id="dashboardRefreshBtn">Refresh</button>
@@ -180,7 +206,7 @@
           </div>
 
           <!-- PENDING USER APPROVALS PANEL (ADMIN ONLY) -->
-          <div class="panel hidden" id="adminPendingUsersPanel" style="margin-top:20px; border:2px solid #f59e0b;">
+          <div class="panel hidden" id="adminPendingUsersPanel" style="margin-top:20px; border:2px solid #f59e0b; display: none;">
             <div class="panel-header" style="background:#fffbe6;">
               <div>
                 <h2 style="color:#92400e;">Pending User Registration Approvals</h2>
@@ -576,8 +602,8 @@
               </div>
               <form id="loginForm" class="form-grid">
                 <div class="form-field">
-                  <label>Email Address</label>
-                  <input name="email" type="email" placeholder="user@college.edu" required>
+                  <label>Email Address / Gmail</label>
+                  <input name="email" type="email" placeholder="user@gmail.com" required>
                 </div>
                 <div class="form-field">
                   <label>Password</label>
@@ -595,37 +621,33 @@
                 <h2>Department User Sign Up</h2>
                 <p>Register a new account (requires Admin approval)</p>
               </div>
+
               <form id="signupForm" class="form-grid">
                 <div class="form-field">
-                  <label>Full Name</label>
-                  <input name="name" placeholder="Prof. John Doe" required>
+                  <label>User Name</label>
+                  <input name="name" placeholder="Enter user name" required>
                 </div>
                 <div class="form-field">
-                  <label>Email Address</label>
-                  <input name="email" type="email" placeholder="john.doe@college.edu" required>
+                  <label>Gmail / Email Address</label>
+                  <input name="email" type="email" placeholder="e.g. rohithsky45@gmail.com" required>
+                </div>
+                <div class="form-field">
+                  <label>Department Name</label>
+                  <input name="departmentName" placeholder="e.g. Computer Science & Engineering" required>
+                </div>
+                <div class="form-field">
+                  <label>Department Code</label>
+                  <input name="department" placeholder="e.g. CSE" required style="text-transform:uppercase;">
                 </div>
                 <div class="form-field">
                   <label>Password</label>
-                  <input name="password" type="password" placeholder="Create password" required minlength="6">
+                  <input name="password" type="password" placeholder="Enter password" required minlength="6">
                 </div>
                 <div class="form-field">
-                  <label>Assigned Department</label>
-                  <select name="department" required>
-                    <option value="IT">Information Technology (IT)</option>
-                    <option value="CSE">Computer Science & Engineering (CSE)</option>
-                    <option value="ECE">Electronics & Communication (ECE)</option>
-                    <option value="ME">Mechanical Engineering (ME)</option>
-                    <option value="CIVIL">Civil Engineering (CIVIL)</option>
-                    <option value="FIN">Finance & Accounts (FIN)</option>
-                    <option value="OPS">Operations & Logistics (OPS)</option>
-                    <option value="HR">Human Resources (HR)</option>
-                  </select>
+                  <label>Confirm Password</label>
+                  <input name="confirmPassword" type="password" placeholder="Confirm password" required minlength="6">
                 </div>
-                <div class="form-field">
-                  <label>Role Requested</label>
-                  <input value="Department User" readonly style="background:var(--gray-100);">
-                  <input type="hidden" name="role" value="DepartmentUser">
-                </div>
+                <input type="hidden" name="role" value="DepartmentUser">
                 <div style="grid-column: 1 / -1; background:var(--blue-50); border-left:4px solid var(--blue-600); padding:10px 14px; border-radius:4px; font-size:12px; color:var(--blue-900);">
                   ℹ️ <strong>Note:</strong> Your registration request will be sent to the Administrator. Once accepted by the Admin, you will be able to log in and view your department's details.
                 </div>
@@ -635,23 +657,7 @@
               </form>
             </div>
 
-            <div class="panel">
-              <div class="panel-header">
-                <h2>Demo Credentials</h2>
-                <p>Use these credentials to test Admin authorization:</p>
-              </div>
-              <div class="demo-credentials">
-                <div class="credential-row">
-                  <strong>Email:</strong> admin@assetmgmt.local
-                </div>
-                <div class="credential-row">
-                  <strong>Password:</strong> Admin@12345!
-                </div>
-                <div class="credential-row">
-                  <strong>Role:</strong> Administrator
-                </div>
-              </div>
-            </div>
+
           </div>
         </section>
       </main>
@@ -663,54 +669,67 @@
 
   <!-- Add Asset Modal -->
   <div id="addAssetModal" class="modal-backdrop hidden">
-    <div class="modal-card">
+    <div class="modal-card modal-lg">
       <div class="modal-header">
-        <h3>Register New Departmental Asset</h3>
+        <h3>Register Campus Stock / Lab Asset</h3>
         <button type="button" class="modal-close" data-modal-close>&times;</button>
+      </div>
+      <div class="preset-toolbar">
+        <span class="preset-title">🎓 Quick Lab Presets:</span>
+        <button type="button" class="preset-chip" data-preset="pc">💻 Dell Lab PC</button>
+        <button type="button" class="preset-chip" data-preset="projector">📹 Epson Projector</button>
+        <button type="button" class="preset-chip" data-preset="oscilloscope">⚡ Digital Oscilloscope</button>
+        <button type="button" class="preset-chip" data-preset="bench">🪑 Student Lab Bench</button>
+        <button type="button" class="preset-chip" data-preset="spectro">🧪 Spectrophotometer</button>
       </div>
       <form id="addAssetForm" class="modal-body form-grid">
         <div class="form-field">
-          <label>Asset ID</label>
-          <input name="assetId" required placeholder="e.g. ASSET-105">
+          <label>Asset ID / Tag No.</label>
+          <input name="assetId" required placeholder="e.g. CSE-PC-204">
         </div>
         <div class="form-field">
-          <label>Asset Name</label>
-          <input name="name" required placeholder="e.g. Dell Precision Workstation">
+          <label>Asset / Item Name</label>
+          <input name="name" required placeholder="e.g. Dell OptiPlex 7090 Desktop">
         </div>
         <div class="form-field">
           <label>Category</label>
           <select name="category" required>
-            <option value="Hardware">Hardware & Servers</option>
-            <option value="Computing">Computing & Laptops</option>
-            <option value="Networking">Networking Infrastructure</option>
-            <option value="Office Equipment">Office & Printers</option>
-            <option value="Laboratory">Laboratory & Scientific</option>
+            <option value="Computer Lab">Computer Lab & Workstations</option>
+            <option value="Smart Classroom">Smart Classroom & AV Systems</option>
+            <option value="Laboratory">Scientific & Engg Lab Equipment</option>
+            <option value="Library Racks">Library Racks & Stock</option>
+            <option value="Furniture">Classroom & Lab Furniture</option>
+            <option value="Campus Utility">Campus Utility & Power Backups</option>
+            <option value="Office Equipment">Department Office & Printers</option>
           </select>
         </div>
         <div class="form-field">
-          <label>Department</label>
+          <label>Academic Department</label>
           <select name="department" required>
-            <option value="IT">Information Technology (IT)</option>
-            <option value="FIN">Finance & Accounts (FIN)</option>
-            <option value="OPS">Operations & Logistics (OPS)</option>
-            <option value="HR">Human Resources (HR)</option>
+            <option value="CSE">Computer Science & Engg (CSE)</option>
+            <option value="ECE">Electronics & Comm. (ECE)</option>
+            <option value="ME">Mechanical Engg & Workshop (ME)</option>
+            <option value="CE">Civil & Structural Engg (CE)</option>
+            <option value="CHE">Chemistry & Chemical Labs (CHE)</option>
+            <option value="LIB">Central University Library (LIB)</option>
+            <option value="ADM">Academic Admin & Exams (ADM)</option>
           </select>
         </div>
         <div class="form-field">
-          <label>Location / Room</label>
-          <input name="location" required placeholder="e.g. Room 402, Block B">
+          <label>Campus Location / Room No.</label>
+          <input name="location" required placeholder="e.g. CSE Lab 2 - Room 204, Main Block">
         </div>
         <div class="form-field">
-          <label>Serial Number</label>
-          <input name="serialNumber" required placeholder="e.g. SN-99812-X">
+          <label>Serial Number / Equipment ID</label>
+          <input name="serialNumber" required placeholder="e.g. SN-DELL-8841-X">
         </div>
         <div class="form-field">
           <label>Purchase Date</label>
           <input name="purchaseDate" type="date" required>
         </div>
         <div class="form-field">
-          <label>Purchase Value ($)</label>
-          <input name="purchaseValue" type="number" step="0.01" required placeholder="2500">
+          <label>Purchase Cost (₹)</label>
+          <input name="purchaseValue" type="number" step="0.01" required placeholder="65000">
         </div>
         <div class="form-field">
           <label>Expected Lifespan (Years)</label>
@@ -718,7 +737,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
-          <button type="submit" class="btn btn-primary">Register on Blockchain</button>
+          <button type="submit" class="btn btn-primary">Register on Blockchain Ledger</button>
         </div>
       </form>
     </div>
@@ -745,7 +764,7 @@
           <input name="maintenanceDate" type="date" required>
         </div>
         <div class="form-field">
-          <label>Service Cost ($)</label>
+          <label>Service Cost (₹)</label>
           <input name="cost" type="number" step="0.01" value="150">
         </div>
         <div class="form-field full-width">
@@ -814,25 +833,28 @@
           <input name="assetId" required placeholder="e.g. ASSET-103">
         </div>
         <div class="form-field">
-          <label>Destination Department</label>
+          <label>Destination Academic Department</label>
           <select name="toDepartment" required>
-            <option value="IT">Information Technology (IT)</option>
-            <option value="FIN">Finance & Accounts (FIN)</option>
-            <option value="OPS">Operations & Logistics (OPS)</option>
-            <option value="HR">Human Resources (HR)</option>
+            <option value="CSE">Computer Science & Engg (CSE)</option>
+            <option value="ECE">Electronics & Comm. (ECE)</option>
+            <option value="ME">Mechanical Engg & Workshop (ME)</option>
+            <option value="CE">Civil & Structural Engg (CE)</option>
+            <option value="CHE">Chemistry & Chemical Labs (CHE)</option>
+            <option value="LIB">Central University Library (LIB)</option>
+            <option value="ADM">Academic Admin & Exams (ADM)</option>
           </select>
         </div>
         <div class="form-field">
-          <label>New Location / Room</label>
-          <input name="newLocation" placeholder="e.g. Data Center Room B">
+          <label>New Campus Location / Room</label>
+          <input name="newLocation" placeholder="e.g. ECE Microprocessor Lab - Room 102">
         </div>
         <div class="form-field">
           <label>Transfer Requested By</label>
-          <input name="requestedBy" required placeholder="e.g. Operations Supervisor">
+          <input name="requestedBy" required placeholder="e.g. Dr. HOD (CSE)">
         </div>
         <div class="form-field full-width">
-          <label>Reason for Transfer</label>
-          <input name="reason" required placeholder="e.g. Centralized infrastructure consolidation">
+          <label>Reason for Inter-Department Transfer</label>
+          <input name="reason" required placeholder="e.g. Reallocated for cross-departmental AI lab project">
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
@@ -1115,7 +1137,7 @@
           </select>
         </div>
         <div class="form-field">
-          <label>Purchase Value ($)</label>
+          <label>Purchase Value (₹)</label>
           <input name="purchaseValue" type="number" step="0.01" value="2500" required>
         </div>
         <div class="form-field full-width">
@@ -1171,11 +1193,11 @@
           <input name="purchaseDate" type="date" required>
         </div>
         <div class="form-field">
-          <label>Purchase Value ($)</label>
+          <label>Purchase Value (₹)</label>
           <input name="purchaseValue" type="number" step="0.01" value="3500" required>
         </div>
         <div class="form-field">
-          <label>Current Book Value ($)</label>
+          <label>Current Book Value (₹)</label>
           <input name="bookValue" type="number" step="0.01" value="200" required>
         </div>
         <div class="form-field full-width">
@@ -1243,7 +1265,7 @@
           <input name="actualPhysicalStock" type="number" value="15" min="0" required>
         </div>
         <div class="form-field">
-          <label>Purchase Value ($)</label>
+          <label>Purchase Value (₹)</label>
           <input name="purchaseValue" type="number" step="0.01" value="750" required>
         </div>
         <div class="form-field full-width">
@@ -1307,7 +1329,7 @@
           <input name="purchaseDate" type="date" required>
         </div>
         <div class="form-field">
-          <label>Book Value ($)</label>
+          <label>Book Value (₹)</label>
           <input name="bookValue" type="number" step="0.01" value="400" required>
         </div>
         <div class="form-field full-width">

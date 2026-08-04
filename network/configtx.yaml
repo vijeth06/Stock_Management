@@ -2,7 +2,7 @@
 Organizations:
   - Name: OrdererOrg
     ID: OrdererMSP
-    MSPDir: network/crypto-config/ordererOrganizations/example.com/msp
+    MSPDir: crypto-config/ordererOrganizations/example.com/msp
     Policies:
       Readers:
         Type: Signature
@@ -16,7 +16,7 @@ Organizations:
 
   - Name: Org1
     ID: Org1MSP
-    MSPDir: network/crypto-config/peerOrganizations/org1.example.com/msp
+    MSPDir: crypto-config/peerOrganizations/org1.example.com/msp
     Policies:
       Readers:
         Type: Signature
@@ -41,14 +41,22 @@ Capabilities:
 
 Profiles:
   TwoOrgsOrdererGenesis:
+    Policies:
+      Readers:
+        Type: ImplicitMeta
+        Rule: "ANY Readers"
+      Writers:
+        Type: ImplicitMeta
+        Rule: "ANY Writers"
+      Admins:
+        Type: ImplicitMeta
+        Rule: "MAJORITY Admins"
+    Capabilities:
+      V2_0: true
     Orderer:
-      OrdererType: etcdraft
-      EtcdRaft:
-        Consenters:
-          - Host: orderer.example.com
-            Port: 7050
-            ClientTLSCert: network/crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt
-            ServerTLSCert: network/crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt
+      OrdererType: solo
+      Capabilities:
+        V2_0: true
       Addresses:
         - orderer.example.com:7050
       BatchTimeout: 2s
@@ -59,7 +67,7 @@ Profiles:
       Organizations:
         - Name: OrdererOrg
           ID: OrdererMSP
-          MSPDir: network/crypto-config/ordererOrganizations/example.com/msp
+          MSPDir: crypto-config/ordererOrganizations/example.com/msp
           Policies:
             Readers:
               Type: Signature
@@ -88,14 +96,14 @@ Profiles:
         Organizations:
           - Name: Org1
             ID: Org1MSP
-            MSPDir: network/crypto-config/peerOrganizations/org1.example.com/msp
+            MSPDir: crypto-config/peerOrganizations/org1.example.com/msp
             Policies:
               Readers:
                 Type: Signature
-                Rule: "OR('Org1MSP.admin', 'Org1MSP.peer', 'Org1MSP.client')"
+                Rule: "OR('Org1MSP.admin')"
               Writers:
                 Type: Signature
-                Rule: "OR('Org1MSP.admin', 'Org1MSP.client')"
+                Rule: "OR('Org1MSP.admin')"
               Admins:
                 Type: Signature
                 Rule: "OR('Org1MSP.admin')"
@@ -105,21 +113,41 @@ Profiles:
 
   TwoOrgsChannel:
     Consortium: SampleConsortium
+    Policies:
+      Readers:
+        Type: ImplicitMeta
+        Rule: "ANY Readers"
+      Writers:
+        Type: ImplicitMeta
+        Rule: "ANY Writers"
+      Admins:
+        Type: ImplicitMeta
+        Rule: "MAJORITY Admins"
+    Capabilities:
+      V2_0: true
     Application:
+      Capabilities:
+        V2_0: true
       Organizations:
         - Name: Org1
           ID: Org1MSP
-          MSPDir: network/crypto-config/peerOrganizations/org1.example.com/msp
+          MSPDir: crypto-config/peerOrganizations/org1.example.com/msp
           Policies:
             Readers:
               Type: Signature
-              Rule: "OR('Org1MSP.admin', 'Org1MSP.peer', 'Org1MSP.client')"
+              Rule: "OR('Org1MSP.admin', 'Org1MSP.peer', 'Org1MSP.client', 'Org1MSP.member')"
             Writers:
               Type: Signature
-              Rule: "OR('Org1MSP.admin', 'Org1MSP.client')"
+              Rule: "OR('Org1MSP.admin', 'Org1MSP.client', 'Org1MSP.member')"
             Admins:
               Type: Signature
-              Rule: "OR('Org1MSP.admin')"
+              Rule: "OR('Org1MSP.admin', 'Org1MSP.member')"
+            Endorsement:
+              Type: Signature
+              Rule: "OR('Org1MSP.admin', 'Org1MSP.peer', 'Org1MSP.client', 'Org1MSP.member')"
+            LifecycleEndorsement:
+              Type: Signature
+              Rule: "OR('Org1MSP.admin', 'Org1MSP.peer', 'Org1MSP.client', 'Org1MSP.member')"
           AnchorPeers:
             - Host: peer0.org1.example.com
               Port: 7051
@@ -133,3 +161,9 @@ Profiles:
         Admins:
           Type: ImplicitMeta
           Rule: "MAJORITY Admins"
+        LifecycleEndorsement:
+          Type: ImplicitMeta
+          Rule: "ANY Readers"
+        Endorsement:
+          Type: ImplicitMeta
+          Rule: "ANY Readers"

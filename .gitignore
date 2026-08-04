@@ -16,10 +16,18 @@ gateway/node_modules/
 blockchain/node_modules/
 shared/generated/
 
+# ── Fabric Crypto Secrets & Ledger Storage ────────────────────
+network/crypto-config/
+network/channel-artifacts/
+network/wallet/*.id
+!network/wallet/.gitkeep
+
 # Runtime data
 gateway/uploads/
+uploads/
 data/
 mongo-data/
+tmp/
 
 # ── OS ────────────────────────────────────────────────────────
 .DS_Store

@@ -87,7 +87,13 @@ async function getPendingUsers(req, res, next) {
 async function approveUser(req, res, next) {
   try {
     const userId = req.params.id;
-    const user = await User.findByIdAndUpdate(userId, { isApproved: true, status: "Approved" }, { new: true });
+    const mongoose = require("mongoose");
+    let user;
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      user = await User.findByIdAndUpdate(userId, { isApproved: true, status: "Approved" }, { new: true });
+    } else {
+      user = await User.findOneAndUpdate({ email: userId.toLowerCase().trim() }, { isApproved: true, status: "Approved" }, { new: true });
+    }
     if (!user) {
       return res.status(404).json({ ok: false, error: "User not found" });
     }
@@ -100,7 +106,13 @@ async function approveUser(req, res, next) {
 async function rejectUser(req, res, next) {
   try {
     const userId = req.params.id;
-    const user = await User.findByIdAndUpdate(userId, { isApproved: false, status: "Rejected" }, { new: true });
+    const mongoose = require("mongoose");
+    let user;
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      user = await User.findByIdAndUpdate(userId, { isApproved: false, status: "Rejected" }, { new: true });
+    } else {
+      user = await User.findOneAndUpdate({ email: userId.toLowerCase().trim() }, { isApproved: false, status: "Rejected" }, { new: true });
+    }
     if (!user) {
       return res.status(404).json({ ok: false, error: "User not found" });
     }
@@ -110,4 +122,63 @@ async function rejectUser(req, res, next) {
   }
 }
 
-module.exports = { register, login, getPendingUsers, approveUser, rejectUser };
+async function gmailAuth(req, res, next) {
+  try {
+    const { email, name, department, departmentName } = req.body;
+    if (!email || !email.includes("@")) {
+      return res.status(400).json({ ok: false, error: "Valid Gmail address is required" });
+    }
+
+    const mongoose = require("mongoose");
+    if (mongoose.connection.readyState !== 1) {
+      const emailLower = email.toLowerCase().trim();
+      const userName = name || emailLower.split("@")[0];
+      const user = {
+        _id: "usr-gmail-" + Date.now(),
+        name: userName,
+        email: emailLower,
+        role: "DepartmentUser",
+        department: (department || "IT").toUpperCase(),
+        departmentName: departmentName || "Information Technology",
+        isApproved: false,
+        status: "PendingApproval"
+      };
+      return res.status(201).json({
+        ok: true,
+        message: `Gmail registration for ${emailLower} submitted! Pending Admin approval.`,
+        data: { user }
+      });
+    }
+
+    const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+    if (existingUser) {
+      if (!existingUser.isApproved) {
+        if (existingUser.status === "Rejected") {
+          return res.status(403).json({ ok: false, error: "Your Gmail registration request was rejected by Admin." });
+        }
+        return res.status(403).json({ ok: false, error: "Your Gmail account registration is pending Admin approval." });
+      }
+      const { signToken } = require("../services/authService");
+      const token = signToken(existingUser);
+      return res.json({ ok: true, message: "Logged in via Gmail!", data: { user: existingUser, token } });
+    }
+
+    const result = await registerUser({
+      name: name || email.split("@")[0],
+      email: email.toLowerCase().trim(),
+      password: "gmail_authenticated",
+      role: "DepartmentUser",
+      department: department || "IT"
+    });
+
+    res.status(201).json({
+      ok: true,
+      message: result.message || `Gmail registration submitted for ${email}`,
+      data: { user: result.user }
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+}
+
+module.exports = { register, login, getPendingUsers, approveUser, rejectUser, gmailAuth };

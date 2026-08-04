@@ -1,5 +1,5 @@
 {
-  "name": "asset-management-network",
+  "name": "asset-management-remote-network",
   "version": "1.0.0",
   "client": {
     "organization": "Org1",
@@ -22,7 +22,7 @@
   },
   "orderers": {
     "orderer.example.com": {
-      "url": "grpc://localhost:7050",
+      "url": "grpc://${FABRIC_HOST}:${FABRIC_ORDERER_PORT}",
       "grpcOptions": {
         "ssl-target-name-override": "orderer.example.com"
       }
@@ -30,7 +30,7 @@
   },
   "peers": {
     "peer0.org1.example.com": {
-      "url": "grpc://localhost:7051",
+      "url": "grpc://${FABRIC_HOST}:${FABRIC_PEER_PORT}",
       "grpcOptions": {
         "ssl-target-name-override": "peer0.org1.example.com"
       }
@@ -38,10 +38,7 @@
   },
   "organizations": {
     "Org1": {
-      "mspid": "Org1MSP",
-      "peers": [
-        "peer0.org1.example.com"
-      ]
+      "mspid": "Org1MSP"
     }
   }
 }

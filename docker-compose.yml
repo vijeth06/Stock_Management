@@ -17,6 +17,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - fabric-network
 
   couchdb:
     image: couchdb:3.2
@@ -34,22 +36,24 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - fabric-network
 
   orderer.example.com:
     image: hyperledger/fabric-orderer:2.5
-    container_name: am-orderer
+    container_name: orderer.example.com
     environment:
+      - FABRIC_CFG_PATH=/etc/hyperledger/fabric
       - ORDERER_GENERAL_LOGLEVEL=INFO
       - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
-      - ORDERER_GENERAL_GENESISMETHOD=file
-      - ORDERER_GENERAL_GENESISFILE=/etc/hyperledger/fabric/genesis.block
+      - ORDERER_GENERAL_BOOTSTRAPMETHOD=file
+      - ORDERER_GENERAL_BOOTSTRAPFILE=/network/channel-artifacts/genesis.block
       - ORDERER_GENERAL_LOCALMSPID=OrdererMSP
-      - ORDERER_GENERAL_LOCALMSPDIR=/etc/hyperledger/fabric/msp
-    working_dir: /opt/gopath/src/github.com/hyperledger/fabric
+      - ORDERER_GENERAL_LOCALMSPDIR=/network/crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/msp
+      - ORDERER_GENERAL_TLS_ENABLED=false
     command: orderer
     volumes:
-      - ./network/channel-artifacts:/etc/hyperledger/fabric
-      - ./network/crypto-config:/etc/hyperledger/fabric
+      - ./network:/network
     ports:
       - "7050:7050"
     networks:
@@ -59,20 +63,31 @@ services:
 
   peer0.org1.example.com:
     image: hyperledger/fabric-peer:2.5
-    container_name: am-peer0
+    container_name: peer0.org1.example.com
     environment:
+      - FABRIC_CFG_PATH=/etc/hyperledger/fabric
       - CORE_VM_ENDPOINT=unix:///var/run/docker.sock
-      - FABULA_LOGGING_SPEC=INFO
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=fabric-network
+      - FABRIC_LOGGING_SPEC=INFO
       - CORE_PEER_ID=peer0.org1.example.com
       - CORE_PEER_ADDRESS=peer0.org1.example.com:7051
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:7051
+      - CORE_PEER_CHAINCODEADDRESS=peer0.org1.example.com:7052
+      - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:7052
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.org1.example.com:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.org1.example.com:7051
       - CORE_PEER_LOCALMSPID=Org1MSP
-      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
+      - CORE_PEER_MSPCONFIGPATH=/network/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/msp
       - CORE_PEER_TLS_ENABLED=false
-    working_dir: /opt/gopath/src/github.com/hyperledger/fabric/peer
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=am-couchdb:5984
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=password
     command: peer node start
     volumes:
-      - ./network/crypto-config:/etc/hyperledger/fabric
-      - /etc/utmp:/etc/utmp
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./network:/network
+      - ./chaincode:/chaincode
     ports:
       - "7051:7051"
     networks:
@@ -142,3 +157,4 @@ volumes:
 
 networks:
   fabric-network:
+    name: fabric-network

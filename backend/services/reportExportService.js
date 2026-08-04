@@ -77,7 +77,7 @@ async function generatePdfBuffer(reportData) {
 
       const kpis = [
         { label: "Total Asset Count", value: String(reportData.totalAssets || 0) },
-        { label: "Portfolio Value", value: `$${Number(reportData.totalPurchaseValue || 0).toLocaleString()}` },
+        { label: "Portfolio Value", value: `₹${Number(reportData.totalPurchaseValue || 0).toLocaleString()}` },
         { label: "Active Assets", value: String(reportData.activeAssets || 0) },
         { label: "Under Maintenance", value: String(reportData.maintenanceAssets || 0) },
         { label: "Condemned Assets", value: String(reportData.condemnedAssets || 0) },
@@ -136,7 +136,7 @@ async function generatePdfBuffer(reportData) {
           doc.fillColor("#0f172a").fontSize(9).font("Helvetica");
           doc.text(dept, 50, y + 4);
           doc.text(String(item.count || 0), 250, y + 4);
-          doc.text(`$${Number(item.totalValue || 0).toLocaleString()}`, 420, y + 4);
+          doc.text(`₹${Number(item.totalValue || 0).toLocaleString()}`, 420, y + 4);
           y += 18;
         });
       }
@@ -172,7 +172,7 @@ async function generatePdfBuffer(reportData) {
           doc.fillColor("#0f172a").fontSize(9).font("Helvetica");
           doc.text(cat, 50, y + 4);
           doc.text(String(item.count || 0), 250, y + 4);
-          doc.text(`$${Number(item.totalValue || 0).toLocaleString()}`, 420, y + 4);
+          doc.text(`₹${Number(item.totalValue || 0).toLocaleString()}`, 420, y + 4);
           y += 18;
         });
       }
@@ -195,7 +195,7 @@ async function generatePdfBuffer(reportData) {
         doc.text("Department", 275, pageY + 6);
         doc.text("Category", 355, pageY + 6);
         doc.text("Status", 435, pageY + 6);
-        doc.text("Value ($)", 495, pageY + 6);
+        doc.text("Value (₹)", 495, pageY + 6);
 
         pageY += 20;
         reportData.assetsList.forEach((ast) => {
@@ -265,7 +265,7 @@ async function generateExcelBuffer(reportData) {
     { metric: "Audit Officer", value: reportData.auditOfficer || "Administrator" },
     { metric: "Audit Date", value: new Date(reportData.auditDate || Date.now()).toLocaleDateString() },
     { metric: "Total Registered Assets", value: reportData.totalAssets || 0 },
-    { metric: "Total Portfolio Value ($)", value: reportData.totalPurchaseValue || 0 },
+    { metric: "Total Portfolio Value (₹)", value: reportData.totalPurchaseValue || 0 },
     { metric: "Active Assets", value: reportData.activeAssets || 0 },
     { metric: "Maintenance Assets", value: reportData.maintenanceAssets || 0 },
     { metric: "Condemned Assets", value: reportData.condemnedAssets || 0 },
@@ -274,7 +274,7 @@ async function generateExcelBuffer(reportData) {
 
   // Department Breakdown section
   summarySheet.addRow([]);
-  const deptHeaderRow = summarySheet.addRow(["Department Breakdown", "Asset Count", "Total Value ($)"]);
+  const deptHeaderRow = summarySheet.addRow(["Department Breakdown", "Asset Count", "Total Value (₹)"]);
   deptHeaderRow.font = { bold: true };
   
   const deptSummary = reportData.departmentSummary || {};
@@ -294,7 +294,7 @@ async function generateExcelBuffer(reportData) {
       { header: "Status", key: "status", width: 15 },
       { header: "Location", key: "location", width: 25 },
       { header: "Purchase Date", key: "purchaseDate", width: 15 },
-      { header: "Purchase Value ($)", key: "purchaseValue", width: 18 },
+      { header: "Purchase Value (₹)", key: "purchaseValue", width: 18 },
       { header: "Serial Number", key: "serialNumber", width: 20 }
     ];
 

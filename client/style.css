@@ -3,8 +3,12 @@
    Light, professional B2B SaaS aesthetic
    ═══════════════════════════════════════════════════════════════ */
 
+.hidden {
+  display: none !important;
+}
+
 :root {
-  --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'IBM Plex Mono', 'Consolas', monospace;
 
   --white: #ffffff;
@@ -25,6 +29,7 @@
   --blue-600: #2563eb;
   --blue-700: #1d4ed8;
   --blue-800: #1e40af;
+  --navy-900: #0b1329;
 
   --green-50: #f0fdf4;
   --green-500: #22c55e;
@@ -1595,4 +1600,223 @@ button, input, select, textarea { font: inherit; }
     transform: translateY(0) scale(1);
   }
 }
+
+/* ── Google / Gmail Social Auth ─────────────────────────────── */
+.btn-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  background: #ffffff;
+  color: #3c4043;
+  border: 1px solid #dadce0;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 11px 16px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(60,64,67,0.08);
+  transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.1s;
+}
+
+.btn-google:hover {
+  background-color: #f8f9fa;
+  border-color: #c0c4c9;
+  box-shadow: 0 2px 4px rgba(60,64,67,0.15);
+}
+
+.btn-google:active {
+  background-color: #f1f3f4;
+  transform: translateY(1px);
+}
+
+.social-auth-divider {
+  display: flex;
+  align-items: center;
+  margin: 18px 0;
+  color: var(--gray-400);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.social-auth-divider::before,
+.social-auth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.social-auth-divider span {
+  padding: 0 12px;
+}
+
+.gmail-card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #e8f0fe;
+  color: #1a73e8;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CAMPUS & COLLEGE ACADEMIC STYLING SYSTEM
+   ═══════════════════════════════════════════════════════════════ */
+
+.campus-header-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #1d4ed8 100%);
+  color: #ffffff;
+  padding: 16px 24px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  box-shadow: 0 10px 25px -5px rgba(30, 58, 138, 0.25);
+  flex-wrap: wrap;
+  gap: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.campus-header-banner::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -10%;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.banner-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.banner-crest {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  color: #93c5fd;
+  flex-shrink: 0;
+}
+
+.banner-title {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.banner-subtitle {
+  font-size: 12.5px;
+  color: #cbd5e1;
+  margin: 2px 0 0;
+}
+
+.banner-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.academic-year-badge {
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fef3c7;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+}
+
+.dept-quick-pills {
+  display: flex;
+  gap: 6px;
+}
+
+.dept-pill {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.dept-pill:hover,
+.dept-pill.active {
+  background: #ffffff;
+  color: #1e3a8a;
+  font-weight: 700;
+}
+
+/* QUICK LAB PRESETS TOOLBAR IN MODAL */
+.preset-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #f0f9ff;
+  border-bottom: 1px solid #bae6fd;
+  flex-wrap: wrap;
+}
+
+.preset-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0369a1;
+  margin-right: 4px;
+}
+
+.preset-chip {
+  background: #ffffff;
+  border: 1px solid #7dd3fc;
+  color: #0284c7;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.preset-chip:hover {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #0284c7;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(2, 132, 199, 0.25);
+}
+
+.preset-chip:active {
+  transform: translateY(0);
+}
+
+
 
