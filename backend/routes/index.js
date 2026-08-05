@@ -7,9 +7,10 @@ const upload = multer({ dest: path.join(__dirname, "../../uploads/bills") });
 const { authenticate, authorize } = require("../middleware/auth");
 
 const departmentController = require("../controllers/departmentController");
-const assetController = require("../controllers/assetController");
+const assetController = require("../controllers/assetController.blockchain");
 const maintenanceController = require("../controllers/maintenanceController");
 const billController = require("../controllers/billController");
+const billControllerBlockchain = require("../controllers/billController.blockchain");
 const condemnationController = require("../controllers/condemnationController");
 const verificationController = require("../controllers/verificationController");
 const reportController = require("../controllers/reportController");
@@ -36,8 +37,8 @@ router.put("/maintenance/:recordId", authorize(["Administrator", "DepartmentUser
 
 router.get("/bills", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), billController.getBills);
 router.get("/bills/:billId", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), billController.getBill);
-router.post("/bills", authorize(["Administrator", "DepartmentUser"]), upload.single("billDocument"), billController.uploadBill);
-router.post("/bills/:billId/verify", authorize(["Administrator", "AuditOfficer"]), billController.verifyBill);
+router.post("/bills", authorize(["Administrator", "DepartmentUser"]), upload.single("billDocument"), billControllerBlockchain.uploadBill);
+router.post("/bills/:billId/verify", authorize(["Administrator", "AuditOfficer"]), billControllerBlockchain.verifyBill);
 router.put("/bills/:billId/payment", authorize(["Administrator", "DepartmentUser"]), billController.updatePaymentStatus);
 
 router.get("/condemnation", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), condemnationController.getCondemnationRecords);

@@ -237,5 +237,45 @@ module.exports = {
   requestCondemnationOnFabric,
   approveCondemnationOnFabric,
   generateYearlyReportOnFabric,
-  verifyBillOnFabric
+  verifyBillOnFabric,
+  // Read helpers
+  readAssetFromFabric: async function(assetId) {
+    const gateway = await getGateway();
+    try {
+      const network = await gateway.getNetwork("assets");
+      const contract = network.getContract("asset-management");
+      const result = await contract.evaluateTransaction('ReadAsset', String(assetId));
+      return { success: true, asset: JSON.parse(result.toString()) };
+    } catch (error) {
+      return { success: false, error: error.message };
+    } finally {
+      try { gateway.disconnect(); } catch (e) {}
+    }
+  },
+  getAllAssetsFromFabric: async function() {
+    const gateway = await getGateway();
+    try {
+      const network = await gateway.getNetwork("assets");
+      const contract = network.getContract("asset-management");
+      const result = await contract.evaluateTransaction('GetAllAssets');
+      return { success: true, assets: JSON.parse(result.toString()) };
+    } catch (error) {
+      return { success: false, error: error.message };
+    } finally {
+      try { gateway.disconnect(); } catch (e) {}
+    }
+  },
+  getAssetHistoryFromFabric: async function(assetId) {
+    const gateway = await getGateway();
+    try {
+      const network = await gateway.getNetwork("assets");
+      const contract = network.getContract("asset-management");
+      const result = await contract.evaluateTransaction('GetAssetHistory', String(assetId));
+      return { success: true, history: JSON.parse(result.toString()) };
+    } catch (error) {
+      return { success: false, error: error.message };
+    } finally {
+      try { gateway.disconnect(); } catch (e) {}
+    }
+  }
 };
