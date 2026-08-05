@@ -12,7 +12,7 @@ async function createMaintenanceRecord(req, res, next) {
       return res.status(404).json({ ok: false, error: "Asset not found" });
     }
 
-    if (asset.status === "Condemned" || asset.status === "Disposed") {
+    if (["Condemned", "Disposed", "Retired", "Condemnation Requested"].includes(asset.status)) {
       return res.status(400).json({ ok: false, error: `Cannot schedule maintenance for asset in '${asset.status}' state` });
     }
 
@@ -25,7 +25,9 @@ async function createMaintenanceRecord(req, res, next) {
       recordId, technician, maintenanceDate, description, cost, status: record.status, createdAt: new Date()
     });
     asset.maintenanceCount = (asset.maintenanceCount || 0) + 1;
-    asset.status = "Maintenance";
+    if (asset.status !== "Maintenance") {
+      asset.status = "Maintenance";
+    }
     await asset.save();
 
     await recordAuditLog({
@@ -114,9 +116,16 @@ async function updateMaintenanceRecord(req, res, next) {
 
     if (record.status === "Completed") {
       const asset = await Asset.findOne({ assetId: record.assetId });
-      if (asset) {
-        asset.status = "Active";
-        await asset.save();
+      if (asset && asset.status === "Maintenance") {
+        const openMaintenance = await MaintenanceRecord.countDocuments({
+          assetId: record.assetId,
+          status: { $in: ["Pending", "In Progress"] },
+          recordId: { $ne: record.recordId }
+        });
+        if (!openMaintenance) {
+          asset.status = "Active";
+          await asset.save();
+        }
       }
     }
 

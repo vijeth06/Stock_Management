@@ -22,14 +22,14 @@ router.put("/departments/:id", authorize(["Administrator"]), departmentControlle
 router.delete("/departments/:id", authorize(["Administrator"]), departmentController.deleteDepartment);
 
 router.get("/assets", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), assetController.getAssets);
-router.get("/assets/:assetId", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), assetController.getAsset);
 router.get("/assets/:assetId/history", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), assetController.getAssetHistory);
+router.get("/assets/:assetId", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), assetController.getAsset);
 router.post("/assets", authorize(["Administrator", "DepartmentUser"]), assetController.createAsset);
 router.put("/assets/:assetId", authorize(["Administrator", "DepartmentUser"]), assetController.updateAsset);
 router.delete("/assets/:assetId", authorize(["Administrator"]), assetController.deleteAsset);
 
 router.get("/maintenance", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), maintenanceController.getMaintenanceRecords);
-router.get("/maintenance/:assetId", authorize(["Administrator", "DepartmentUser"]), maintenanceController.getMaintenanceHistory);
+router.get("/maintenance/history/:assetId", authorize(["Administrator", "DepartmentUser"]), maintenanceController.getMaintenanceHistory);
 router.post("/maintenance", authorize(["Administrator", "DepartmentUser"]), maintenanceController.createMaintenanceRecord);
 router.get("/maintenance/:recordId", authorize(["Administrator", "DepartmentUser"]), maintenanceController.getMaintenanceRecord);
 router.put("/maintenance/:recordId", authorize(["Administrator", "DepartmentUser"]), maintenanceController.updateMaintenanceRecord);

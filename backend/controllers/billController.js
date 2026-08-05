@@ -60,6 +60,18 @@ async function uploadBill(req, res, next) {
         documentHash: docHash, billHash: docHash
       });
 
+      if (assetId && docHash) {
+        try {
+          const fabricResult = await updateAssetOnFabric(assetId, { field: 'billHash', newValue: docHash });
+          if (fabricResult && fabricResult.success && fabricResult.transactionId) {
+            bill.blockchainTxHash = fabricResult.transactionId;
+            await bill.save();
+          }
+        } catch (e) {
+          console.warn('Failed to write billHash to ledger:', e.message || e);
+        }
+      }
+
       res.status(201).json({
         ok: true,
         data: bill
@@ -130,24 +142,28 @@ async function verifyBill(req, res, next) {
     let blockchain = null;
     let statusLabel = "DOCUMENT MODIFIED / INVALID";
 
-    if (!documentHash && !bill.documentHash) {
-      statusLabel = "DOCUMENT MISSING";
-    } else if (documentHash && bill.documentHash) {
+    if (!bill.documentHash) {
+      statusLabel = "NO RECORDED BILL HASH";
+    } else if (!documentHash) {
+      statusLabel = "DOCUMENT HASH REQUIRED";
+    } else {
       verified = documentHash === bill.documentHash;
-    } else if (!documentHash && bill.documentHash) {
-      verified = true; // compare recorded hash
     }
 
-    const fabricKey = bill.assetId || bill.billId;
+    if (!bill.assetId) {
+      return res.status(400).json({ ok: false, error: "Bill must be linked to an asset for blockchain verification" });
+    }
+
+    const fabricKey = bill.assetId;
     try {
-      blockchain = await verifyBillOnFabric(fabricKey, documentHash || bill.documentHash).catch((error) => ({ success: false, error: error.message }));
+      blockchain = await verifyBillOnFabric(fabricKey, documentHash).catch((error) => ({ success: false, error: error.message }));
       verifiedOnBlockchain = blockchain?.verified === true || blockchain?.verified === 'true';
     } catch (e) {
       console.error("Blockchain verification error:", e);
       blockchain = { success: false, error: e.message };
     }
 
-    const integrity = verified && (verifiedOnBlockchain || !blockchain || blockchain.success === false);
+    const integrity = verified && verifiedOnBlockchain;
     if (integrity) {
       statusLabel = "VERIFIED";
     }

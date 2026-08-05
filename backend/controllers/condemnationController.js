@@ -12,8 +12,8 @@ async function requestCondemnation(req, res, next) {
       return res.status(404).json({ ok: false, error: "Asset not found" });
     }
 
-    if (asset.status === "Condemned" || asset.status === "Condemnation Requested") {
-      return res.status(400).json({ ok: false, error: "Asset is already condemned or pending condemnation" });
+    if (["Condemned", "Disposed", "Retired", "Condemnation Requested"].includes(asset.status)) {
+      return res.status(400).json({ ok: false, error: "Asset is already condemned, retired, disposed, or pending condemnation" });
     }
 
     const recordId = `COND-${Date.now()}`;
@@ -163,7 +163,7 @@ async function rejectCondemnation(req, res, next) {
     await record.save();
 
     const asset = await Asset.findOne({ assetId: record.assetId });
-    if (asset) {
+    if (asset && asset.status === "Condemnation Requested") {
       asset.status = "Active";
       await asset.save();
     }

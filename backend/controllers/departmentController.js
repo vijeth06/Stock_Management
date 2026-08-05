@@ -127,8 +127,9 @@ async function getDepartmentSummary(req, res, next) {
     }
 
     const Asset = require("../models/Asset");
+    const departmentKey = department.code || department.name;
     const stats = await Asset.aggregate([
-      { $match: { department: department.name } },
+      { $match: { department: departmentKey } },
       {
         $group: {
           _id: null,

@@ -82,13 +82,26 @@ class AssetManagementContract extends Contract {
     async UpdateAsset(ctx, assetId, field, newValue) {
         console.info(`=== UpdateAsset: Updating ${field} for asset ${assetId} ===`);
 
+        const allowedFields = ["status", "location", "owner", "billHash", "department", "warrantyExpiry", "category", "name"];
+        if (!allowedFields.includes(field)) {
+            throw new Error(`Field ${field} cannot be updated on the ledger`);
+        }
+
         const assetJSON = await ctx.stub.getState(assetId);
         if (!assetJSON || assetJSON.length === 0) {
             throw new Error(`Asset ${assetId} does not exist`);
         }
 
         const asset = JSON.parse(assetJSON.toString());
-        asset[field] = newValue;
+
+        if (field === 'status') {
+            const allowedStatuses = ['Active', 'Maintenance', 'Condemned', 'Disposed', 'Retired', 'Condemnation Requested'];
+            if (!allowedStatuses.includes(newValue)) {
+                throw new Error(`Status ${newValue} is not allowed`);
+            }
+        }
+
+        asset[field] = field === 'purchaseValue' ? parseFloat(newValue) : newValue;
         asset.updatedAt = new Date().toISOString();
 
         await ctx.stub.putState(assetId, Buffer.from(JSON.stringify(asset)));
@@ -289,11 +302,16 @@ class AssetManagementContract extends Contract {
     async VerifyBill(ctx, billId, expectedHash) {
         console.info(`=== VerifyBill: Verifying bill ${billId} ===`);
 
-        const assetJSON = await ctx.stub.getState(billId);
-        if (!assetJSON || assetJSON.length === 0) {
-            return JSON.stringify({ verified: false, error: `Asset or bill ${billId} does not exist` });
+        if (!expectedHash) {
+            return JSON.stringify({ verified: false, error: 'Expected bill hash is required' });
         }
 
+        const assetJSON = await ctx.stub.getState(billId);
+        if (!assetJSON || assetJSON.length === 0) {
+            return JSON.stringify({ verified: false, error: `Asset ${billId} does not exist` });
+        }
+
+        const asset = JSON.parse(assetJSON.toString());
         const verified = asset.billHash && expectedHash === asset.billHash;
         return JSON.stringify({ verified, billId, expectedHash, storedHash: asset.billHash || null });
     }

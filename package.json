@@ -7,7 +7,8 @@
     "test": "node tests/api.test.js",
     "test:backend": "node tests/api.test.js",
     "test:api": "node tests/api.test.js",
-    "test:e2e": "node tests/api.test.js"
+    "test:e2e": "node tests/api.test.js",
+    "test:regression": "node tests/regression-asset-history-bill.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

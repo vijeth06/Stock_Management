@@ -6,15 +6,21 @@ const { checkDepartmentAccess } = require("../middleware/auth");
 
 async function createAsset(req, res, next) {
   try {
-    const {
+    let {
       assetId, department, category, name, description, purchaseDate,
       purchaseValue, location, owner, warrantyExpiry, billHash, billDocument, status
     } = req.body;
 
+    if (department) {
+      department = String(department).trim().toUpperCase();
+    }
+
     if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
-      if (department && department.toUpperCase() !== req.user.department.toUpperCase()) {
+      const userDept = String(req.user.department).trim().toUpperCase();
+      if (department && department !== userDept) {
         return res.status(403).json({ ok: false, error: "Cannot create assets for another department" });
       }
+      department = userDept;
     }
 
     if (purchaseValue !== undefined && Number(purchaseValue) < 0) {
@@ -123,19 +129,48 @@ async function updateAsset(req, res, next) {
       return res.status(400).json({ ok: false, error: "Disposed assets cannot be modified or re-activated" });
     }
 
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const userDept = String(req.user.department).trim().toUpperCase();
+      if (req.body.department && String(req.body.department).trim().toUpperCase() !== userDept) {
+        return res.status(403).json({ ok: false, error: "Cannot move asset to another department" });
+      }
+    }
+
     if (req.body.status && req.body.status !== existingAsset.status) {
       if (existingAsset.status === "Condemned" && req.body.status === "Active") {
         return res.status(400).json({ ok: false, error: "Condemned asset cannot return to Active state" });
       }
     }
 
+    const allowedUpdates = [
+      "status", "location", "owner", "department", "warrantyExpiry",
+      "category", "name", "description", "purchaseDate", "purchaseValue", "billHash"
+    ];
+    const updatePayload = {};
+    for (const key of allowedUpdates) {
+      if (req.body[key] !== undefined) {
+        updatePayload[key] = req.body[key];
+      }
+    }
+
+    if (updatePayload.department) {
+      updatePayload.department = String(updatePayload.department).trim().toUpperCase();
+    }
+
+    updatePayload.updatedAt = new Date();
+
     const asset = await Asset.findOneAndUpdate(
       { assetId: req.params.assetId },
-      { $set: { ...req.body, updatedAt: new Date() } },
+      { $set: updatePayload },
       { new: true, runValidators: true }
     );
 
-    const blockchain = await updateAssetOnFabric(req.params.assetId, { status: asset.status }).catch((error) => ({ success: false, error: error.message }));
+    let blockchain = null;
+    const ledgerSyncFields = ["status", "department", "location", "owner", "billHash"];
+    const changeField = ledgerSyncFields.find((field) => req.body[field] !== undefined && req.body[field] !== existingAsset[field]);
+    if (changeField) {
+      blockchain = await updateAssetOnFabric(req.params.assetId, { field: changeField, newValue: asset[changeField] }).catch((error) => ({ success: false, error: error.message }));
+    }
 
     res.json({
       ok: true,
@@ -233,12 +268,30 @@ async function getAssetHistory(req, res, next) {
 async function transferAsset(req, res, next) {
   try {
     const { assetId, toDepartment, newLocation, requestedBy, reason } = req.body;
+    if (!assetId || !toDepartment) {
+      return res.status(400).json({ ok: false, error: "assetId and toDepartment are required" });
+    }
+
+    const Department = require("../models/Department");
+    const normalizedToDepartment = String(toDepartment).trim().toUpperCase();
+    const departmentExists = await Department.findOne({ code: normalizedToDepartment });
+    if (!departmentExists) {
+      return res.status(400).json({ ok: false, error: "Destination department does not exist" });
+    }
+
     const asset = await Asset.findOne({ assetId });
     if (!asset) {
       return res.status(404).json({ ok: false, error: "Asset not found" });
     }
+
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      if (asset.department.toUpperCase() !== req.user.department.toUpperCase()) {
+        return res.status(403).json({ ok: false, error: "Cannot transfer asset from another department" });
+      }
+    }
+
     const fromDepartment = asset.department;
-    asset.department = toDepartment || asset.department;
+    asset.department = String(toDepartment).trim().toUpperCase();
     if (newLocation) asset.location = newLocation;
     asset.updatedAt = new Date();
     await asset.save();
@@ -249,8 +302,10 @@ async function transferAsset(req, res, next) {
       action: "TRANSFER_ASSET",
       resourceType: "Asset",
       resourceId: assetId,
-      details: { fromDepartment, toDepartment, newLocation, reason }
+      details: { fromDepartment, toDepartment: asset.department, newLocation, reason }
     }).catch(() => {});
+
+    const blockchain = await updateAssetOnFabric(assetId, { field: "department", newValue: asset.department }).catch((error) => ({ success: false, error: error.message }));
 
     res.json({
       ok: true,
@@ -258,8 +313,9 @@ async function transferAsset(req, res, next) {
         transferId: `XFR-${Date.now()}`,
         assetId,
         fromDepartment,
-        toDepartment,
-        status: "Completed"
+        toDepartment: asset.department,
+        status: "Completed",
+        blockchain
       }
     });
   } catch (error) {

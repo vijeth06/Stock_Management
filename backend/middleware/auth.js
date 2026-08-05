@@ -38,10 +38,10 @@ function checkDepartmentAccess(user, targetDepartment) {
     return true;
   }
   if (user.role === "DepartmentUser") {
-    if (!user.department) return true;
+    if (!user.department) return false;
     return user.department.toUpperCase() === (targetDepartment || "").toUpperCase();
   }
-  return true;
+  return false;
 }
 
 module.exports = { authenticate, authorize, checkDepartmentAccess };
