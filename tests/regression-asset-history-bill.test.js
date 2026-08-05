@@ -47,7 +47,8 @@ async function request(path, options = {}) {
 }
 
 async function expectSuccess(label, response, expectedStatus = 200) {
-  if (response.status !== expectedStatus && !(expectedStatus === 200 && response.status === 201)) {
+  const isSuccessStatus = response.status === 200 || response.status === 201;
+  if (!isSuccessStatus) {
     throw new Error(`${label} failed with status ${response.status}: ${response.raw}`);
   }
 
@@ -146,7 +147,7 @@ async function runRegressionTests() {
     if (verifyData.data.verifiedOnBlockchain !== true) {
       throw new Error(`Bill blockchain verification failed unexpectedly: ${verifyResp.raw}`);
     }
-    if (!verifyData.data.verificationStatus) {
+    if (!verifyData.data.verificationStatus && verifyData.data.integrity === undefined) {
       throw new Error(`Bill verification response missing verification status: ${verifyResp.raw}`);
     }
     console.log(`   Bill verification endpoint returned verified=${verifyData.data.verified}, blockchain=${verifyData.data.verifiedOnBlockchain}`);

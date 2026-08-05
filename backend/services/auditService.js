@@ -1,28 +1,50 @@
-const AuditLog = require("../models/AuditLog");
+const auditLogsStore = [];
 
 async function recordAuditLog(entry) {
-  return AuditLog.create(entry);
+  const logObj = {
+    _id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    actor: entry.actor || "system",
+    role: entry.role || "User",
+    action: entry.action || "LOG",
+    resourceType: entry.resourceType || "General",
+    resourceId: entry.resourceId || "",
+    details: entry.details || {},
+    createdAt: new Date().toISOString()
+  };
+  auditLogsStore.unshift(logObj);
+  return logObj;
 }
 
 async function listAuditLogs(query = {}, page = 1, limit = 50) {
-  const filters = {};
-  
-  if (query.action) filters.action = new RegExp(String(query.action), "i");
-  if (query.resourceType) filters.resourceType = new RegExp(String(query.resourceType), "i");
-  if (query.actor) filters.actor = new RegExp(String(query.actor), "i");
-  if (query.resourceId) filters.resourceId = new RegExp(String(query.resourceId), "i");
+  let items = [...auditLogsStore];
 
-  const [items, total] = await Promise.all([
-    AuditLog.find(filters).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
-    AuditLog.countDocuments(filters),
-  ]);
+  if (query.action) {
+    const act = String(query.action).toLowerCase();
+    items = items.filter(i => (i.action || '').toLowerCase().includes(act));
+  }
+  if (query.resourceType) {
+    const res = String(query.resourceType).toLowerCase();
+    items = items.filter(i => (i.resourceType || '').toLowerCase().includes(res));
+  }
+  if (query.actor) {
+    const act = String(query.actor).toLowerCase();
+    items = items.filter(i => (i.actor || '').toLowerCase().includes(act));
+  }
+  if (query.resourceId) {
+    const rid = String(query.resourceId).toLowerCase();
+    items = items.filter(i => (i.resourceId || '').toLowerCase().includes(rid));
+  }
+
+  const total = items.length;
+  const skip = (Number(page) - 1) * Number(limit);
+  const paginated = items.slice(skip, skip + Number(limit));
 
   return {
-    items,
-    page,
-    limit,
+    items: paginated,
+    page: Number(page),
+    limit: Number(limit),
     total,
-    totalPages: Math.ceil(total / limit) || 1,
+    totalPages: Math.ceil(total / Number(limit)) || 1
   };
 }
 

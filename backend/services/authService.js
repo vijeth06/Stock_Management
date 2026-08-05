@@ -1,8 +1,12 @@
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
-const User = require("../models/User");
-const mongoose = require("mongoose");
+const {
+  createUserOnFabric,
+  readUserFromFabric,
+  updateUserOnFabric,
+  getAllUsersFromFabric
+} = require("./fabricService");
 
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-development";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "8h";
@@ -21,13 +25,14 @@ async function hashPassword(password) {
 }
 
 async function comparePassword(password, passwordHash) {
+  if (!password || !passwordHash) return false;
   return bcrypt.compare(password, passwordHash);
 }
 
 function signToken(user) {
   return jwt.sign(
     {
-      sub: String(user._id),
+      sub: String(user._id || user.userId),
       email: user.email,
       role: user.role,
       name: user.name,
@@ -42,64 +47,72 @@ function generateTokenId() {
   return crypto.randomBytes(16).toString("hex");
 }
 
-async function registerUser({ name, email, password, role, department }) {
-  const userRole = role || "DepartmentUser";
-  const isApproved = userRole === "Administrator";
-  const status = isApproved ? "Approved" : "PendingApproval";
+async function registerUser({ name, email, password, role, department, departmentName }) {
+  const emailLower = (email || '').toLowerCase().trim();
+  const existingRes = await readUserFromFabric(emailLower);
 
-  if (mongoose.connection.readyState !== 1) {
-    const user = {
-      _id: "user-" + Date.now(),
-      email: email.toLowerCase().trim(),
-      name: name,
-      role: userRole,
-      department: department || "IT",
-      isActive: true,
-      isApproved,
-      status
-    };
-    return { user, message: isApproved ? "User registered successfully" : "Registration submitted successfully. Pending Admin approval." };
-  }
-
-  const existing = await User.findOne({ email: email.toLowerCase().trim() });
-  if (existing) {
+  if (existingRes.success && existingRes.user) {
     throw new Error("User with this email already exists");
   }
 
+  const userRole = role || "DepartmentUser";
+  const isApproved = userRole === "Administrator";
+  const status = isApproved ? "Active" : "PendingApproval";
   const passwordHash = await hashPassword(password);
-  const user = await User.create({
+  const userId = `usr-${Date.now()}`;
+
+  const fabricRes = await createUserOnFabric({
+    userId,
     name,
-    email: email.toLowerCase().trim(),
-    passwordHash,
+    email: emailLower,
+    password: passwordHash,
     role: userRole,
-    department: userRole === "DepartmentUser" ? department : undefined,
+    department: (department || "IT").toUpperCase(),
+    departmentName: departmentName || department || "IT",
+    status,
+    isApproved
+  });
+
+  if (!fabricRes.success) {
+    throw new Error(`Failed to store user on ledger: ${fabricRes.error}`);
+  }
+
+  const user = {
+    _id: userId,
+    userId,
+    name,
+    email: emailLower,
+    role: userRole,
+    department: (department || "IT").toUpperCase(),
+    departmentName: departmentName || department || "IT",
     isActive: true,
     isApproved,
     status
-  });
+  };
 
-  return { user, message: isApproved ? "User registered successfully" : "Registration submitted successfully. Pending Admin approval." };
+  return {
+    user,
+    message: isApproved
+      ? "User registered successfully"
+      : "Registration submitted successfully. Pending Admin approval."
+  };
 }
 
 async function loginUser({ email, password }) {
-  if (mongoose.connection.readyState !== 1) {
-    const user = {
-      _id: "mock-user-id",
-      email: email.toLowerCase().trim(),
-      name: "Mock User",
-      role: "Administrator",
-      isActive: true,
-      isApproved: true,
-      status: "Approved"
-    };
-    const token = signToken(user);
-    const tokenId = generateTokenId();
-    return { user, token, tokenId };
+  const emailLower = (email || '').toLowerCase().trim();
+  let userRes = await readUserFromFabric(emailLower);
+
+  // Auto seed demo admin if missing
+  if ((!userRes.success || !userRes.user) && emailLower === DEMO_ADMIN_EMAIL.toLowerCase()) {
+    await seedDemoAdmin();
+    userRes = await readUserFromFabric(emailLower);
   }
-  const user = await User.findOne({ email: email.toLowerCase().trim(), isActive: true });
-  if (!user) {
+
+  if (!userRes.success || !userRes.user) {
     throw new Error("Invalid email or password");
   }
+
+  const user = userRes.user;
 
   if (user.role !== "Administrator" && !user.isApproved) {
     if (user.status === "Rejected") {
@@ -108,24 +121,24 @@ async function loginUser({ email, password }) {
     throw new Error("Your account is pending Admin approval. Please wait for an administrator to approve your account.");
   }
 
-  if (user.failedLoginAttempts >= 5 && user.lockedUntil && user.lockedUntil > new Date()) {
+  if (user.failedLoginAttempts >= 5 && user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
     throw new Error("Account is temporarily locked due to too many failed login attempts");
   }
 
-  const valid = await comparePassword(password, user.passwordHash);
+  const valid = await comparePassword(password, user.password);
   if (!valid) {
     user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
     if (user.failedLoginAttempts >= 5) {
-      user.lockedUntil = new Date(Date.now() + 30 * 60 * 1000);
+      user.lockedUntil = new Date(Date.now() + 30 * 60 * 1000).toISOString();
     }
-    await user.save();
+    await updateUserOnFabric(emailLower, user);
     throw new Error("Invalid email or password");
   }
 
   user.failedLoginAttempts = 0;
   user.lockedUntil = null;
-  user.lastLoginAt = new Date();
-  await user.save();
+  user.lastLoginAt = new Date().toISOString();
+  await updateUserOnFabric(emailLower, user);
 
   const token = signToken(user);
   const tokenId = generateTokenId();
@@ -133,26 +146,26 @@ async function loginUser({ email, password }) {
 }
 
 async function seedDemoAdmin() {
+  const emailLower = DEMO_ADMIN_EMAIL.toLowerCase();
   const passwordHash = await hashPassword(DEMO_ADMIN_PASSWORD);
-  const user = await User.findOneAndUpdate(
-    { email: DEMO_ADMIN_EMAIL.toLowerCase() },
-    {
-      $set: {
-        name: DEMO_ADMIN_NAME,
-        email: DEMO_ADMIN_EMAIL.toLowerCase(),
-        passwordHash,
-        role: "Administrator",
-        isActive: true,
-      },
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
+
+  await createUserOnFabric({
+    userId: "usr-demo-admin",
+    name: DEMO_ADMIN_NAME,
+    email: emailLower,
+    password: passwordHash,
+    role: "Administrator",
+    department: "IT",
+    departmentName: "Information Technology",
+    status: "Active",
+    isApproved: true
+  });
 
   return {
-    email: user.email,
+    email: emailLower,
     password: DEMO_ADMIN_PASSWORD,
-    name: user.name,
-    role: user.role,
+    name: DEMO_ADMIN_NAME,
+    role: "Administrator"
   };
 }
 
@@ -166,5 +179,5 @@ module.exports = {
   loginUser,
   hasRequiredRole,
   signToken,
-  seedDemoAdmin,
+  seedDemoAdmin
 };

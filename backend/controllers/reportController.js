@@ -1,58 +1,37 @@
-const AuditReport = require("../models/AuditReport");
-const Asset = require("../models/Asset");
-const Bill = require("../models/Bill");
-const CondemnationRecord = require("../models/CondemnationRecord");
-const MaintenanceRecord = require("../models/MaintenanceRecord");
+const {
+  generateYearlyReportOnFabric,
+  getAllAssetsFromFabric,
+  getAllBillsFromFabric,
+  getAllMaintenanceRecordsFromFabric,
+  getAllCondemnationRecordsFromFabric
+} = require("../services/fabricService");
+const { generatePdfBuffer, generateExcelBuffer } = require("../services/reportExportService");
 
 async function generateYearlyReport(req, res, next) {
   try {
     const { year, auditOfficer, auditPeriod } = req.body;
+    const reportYear = Number(year || new Date().getFullYear());
 
-    const assets = await Asset.find({});
-    const bills = await Bill.find({});
-    const condemations = await CondemnationRecord.find({ status: "Approved" });
-    const maintenances = await MaintenanceRecord.find({});
+    const fabricReportRes = await generateYearlyReportOnFabric(reportYear);
+    const result = fabricReportRes.result || {};
 
-    const totalAssets = assets.length;
-    const totalPurchaseValue = assets.reduce((sum, a) => sum + (a.purchaseValue || 0), 0);
-
-    const categorySummary = {};
-    const departmentSummary = {};
-    const activeAssets = assets.filter(a => a.status === "Active").length;
-    const maintenanceAssets = assets.filter(a => a.status === "Maintenance").length;
-    const condemnedAssets = assets.filter(a => a.status === "Condemned").length;
-    const disposedAssets = assets.filter(a => a.status === "Disposed" || a.status === "Retired").length;
-
-    assets.forEach(asset => {
-      if (asset.category) {
-        categorySummary[asset.category] = {
-          count: (categorySummary[asset.category]?.count || 0) + 1,
-          totalValue: (categorySummary[asset.category]?.totalValue || 0) + (asset.purchaseValue || 0)
-        };
-      }
-      if (asset.department) {
-        departmentSummary[asset.department] = {
-          count: (departmentSummary[asset.department]?.count || 0) + 1,
-          totalValue: (departmentSummary[asset.department]?.totalValue || 0) + (asset.purchaseValue || 0)
-        };
-      }
-    });
-
-    const report = await AuditReport.create({
-      reportId: `RPT-${year}-${Date.now()}`,
-      year,
-      auditDate: new Date(),
-      auditOfficer,
-      auditPeriod,
-      totalAssets,
-      totalPurchaseValue,
-      categorySummary,
-      departmentSummary,
-      activeAssets,
-      maintenanceAssets,
-      condemnedAssets,
-      disposedAssets
-    });
+    const report = {
+      _id: `report-${Date.now()}`,
+      reportId: `RPT-${reportYear}-${Date.now()}`,
+      year: reportYear,
+      auditDate: new Date().toISOString(),
+      auditOfficer: auditOfficer || "Audit Officer",
+      auditPeriod: auditPeriod || `FY ${reportYear}`,
+      totalAssets: result.totalAssets || 0,
+      totalPurchaseValue: result.totalPurchaseValue || 0,
+      categorySummary: result.categorySummary || {},
+      departmentSummary: result.departmentSummary || {},
+      activeAssets: result.activeAssets || 0,
+      maintenanceAssets: result.maintenanceAssets || 0,
+      condemnedAssets: result.condemnedAssets || 0,
+      disposedAssets: result.disposedAssets || 0,
+      createdAt: new Date().toISOString()
+    };
 
     res.status(201).json({
       ok: true,
@@ -65,29 +44,20 @@ async function generateYearlyReport(req, res, next) {
 
 async function getReports(req, res, next) {
   try {
-    const { year, status, page = 1, limit = 20 } = req.query;
-
-    const filter = {};
-    if (year) filter.year = Number(year);
-    if (status) filter.status = status;
-
-    const skip = (page - 1) * limit;
-    const reports = await AuditReport.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit));
-
-    const total = await AuditReport.countDocuments(filter);
+    const { year } = req.query;
+    const reportYear = Number(year || new Date().getFullYear());
+    const reportRes = await generateYearlyReportOnFabric(reportYear);
+    const reportData = reportRes.result || {
+      reportId: `RPT-${reportYear}-001`,
+      year: reportYear,
+      totalAssets: 0,
+      totalPurchaseValue: 0
+    };
 
     res.json({
       ok: true,
-      data: reports,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        pages: Math.ceil(total / limit)
-      }
+      data: [reportData],
+      pagination: { page: 1, limit: 20, total: 1, pages: 1 }
     });
   } catch (error) {
     next(error);
@@ -96,13 +66,11 @@ async function getReports(req, res, next) {
 
 async function getReport(req, res, next) {
   try {
-    const report = await AuditReport.findOne({ reportId: req.params.reportId });
-    if (!report) {
-      return res.status(404).json({ ok: false, error: "Report not found" });
-    }
+    const reportYear = new Date().getFullYear();
+    const reportRes = await generateYearlyReportOnFabric(reportYear);
     res.json({
       ok: true,
-      data: report
+      data: reportRes.result || {}
     });
   } catch (error) {
     next(error);
@@ -111,10 +79,15 @@ async function getReport(req, res, next) {
 
 async function getDashboard(req, res, next) {
   try {
-    const assets = await Asset.find({});
-    const bills = await Bill.find({});
-    const maintenances = await MaintenanceRecord.find({});
-    const condemnations = await CondemnationRecord.find({ status: { $in: ["Pending", "Approved", "Rejected"] } });
+    const assetsRes = await getAllAssetsFromFabric();
+    const billsRes = await getAllBillsFromFabric();
+    const mntRes = await getAllMaintenanceRecordsFromFabric();
+    const condRes = await getAllCondemnationRecordsFromFabric();
+
+    const assets = assetsRes.assets || [];
+    const bills = billsRes.bills || [];
+    const maintenances = mntRes.records || [];
+    const condemnations = condRes.records || [];
 
     const statusCounts = {
       Active: 0,
@@ -128,7 +101,11 @@ async function getDashboard(req, res, next) {
 
     assets.forEach(asset => {
       const status = asset.status || "Other";
-      statusCounts[status] = (statusCounts[status] || 0) + 1;
+      if (statusCounts[status] !== undefined) {
+        statusCounts[status] += 1;
+      } else {
+        statusCounts.Other += 1;
+      }
       if (asset.department) {
         departmentSummary[asset.department] = (departmentSummary[asset.department] || 0) + 1;
       }
@@ -138,22 +115,25 @@ async function getDashboard(req, res, next) {
       counts: {
         totalAssets: assets.length,
         activeAssets: statusCounts.Active,
-        maintenanceAssets: statusCounts.Maintenance,
+        maintenanceAssets: statusCounts.Maintenance + maintenances.length,
         condemnedAssets: statusCounts.Condemned,
         disposedAssets: statusCounts.Disposed + statusCounts.Retired,
         totalBills: bills.length,
         verifiedBills: bills.filter(b => b.verified).length,
         totalMaintenances: maintenances.length,
-        totalCondemnationRequests: condemnations.length
+        totalCondemnationRequests: condemnations.length,
+        totalTransfers: assets.filter(a => a.maintenanceRecords && a.maintenanceRecords.length > 0).length
       },
       analytics: {
         assetStatus: statusCounts,
         departmentSummary
       },
-      recentAssets: assets
-        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
-        .slice(0, 5)
-        .map(asset => ({ assetId: asset.assetId, name: asset.name, status: asset.status, department: asset.department }))
+      recentAssets: assets.slice(0, 5).map(a => ({
+        assetId: a.assetId,
+        name: a.name,
+        status: a.status,
+        department: a.department
+      }))
     };
 
     res.json({ ok: true, data: summary });
@@ -162,35 +142,31 @@ async function getDashboard(req, res, next) {
   }
 }
 
-const { generatePdfBuffer, generateExcelBuffer } = require("../services/reportExportService");
-
 async function exportReport(req, res, next) {
   try {
     const { format = "pdf" } = req.query;
-    const report = await AuditReport.findOne({ reportId: req.params.reportId });
+    const reportYear = new Date().getFullYear();
+    const reportRes = await generateYearlyReportOnFabric(reportYear);
+    const assetsRes = await getAllAssetsFromFabric();
 
-    if (!report) {
-      return res.status(404).json({ ok: false, error: "Report not found" });
-    }
-
-    const assetsList = await Asset.find({});
     const reportData = {
-      ...report.toObject(),
-      assetsList
+      ...(reportRes.result || {}),
+      assetsList: assetsRes.assets || []
     };
 
     if (format === "excel") {
       const buffer = await generateExcelBuffer(reportData);
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename=${report.reportId}.xlsx`);
+      res.setHeader("Content-Disposition", `attachment; filename=report-${reportYear}.xlsx`);
       return res.send(buffer);
     } else {
       const buffer = await generatePdfBuffer(reportData);
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename=${report.reportId}.pdf`);
+      res.setHeader("Content-Disposition", `attachment; filename=report-${reportYear}.pdf`);
       return res.send(buffer);
     }
   } catch (error) {
+    console.error("Export report error:", error);
     next(error);
   }
 }
@@ -198,40 +174,20 @@ async function exportReport(req, res, next) {
 async function getAnnualSummary(req, res, next) {
   try {
     const { year } = req.params;
+    const reportYear = Number(year || new Date().getFullYear());
+    const reportRes = await generateYearlyReportOnFabric(reportYear);
+    const billsRes = await getAllBillsFromFabric();
 
-    const assets = await Asset.find({});
-    const bills = await Bill.find({});
-    const maintenances = await MaintenanceRecord.find({});
-    const condemations = await CondemnationRecord.find({ status: "Approved" });
-
-    const summary = {
-      year,
-      totalAssets: assets.length,
-      totalPurchaseValue: assets.reduce((sum, a) => sum + (a.purchaseValue || 0), 0),
-      categorySummary: {},
-      departmentSummary: {},
-      activeAssets: assets.filter(a => a.status === "Active").length,
-      maintenanceAssets: assets.filter(a => a.status === "Maintenance").length,
-      maintenanceCount: maintenances.length,
-      condemnedAssets: assets.filter(a => a.status === "Condemned").length,
-      condemnedCount: condemations.length,
-      disposedAssets: assets.filter(a => a.status === "Disposed" || a.status === "Retired").length,
-      totalBills: bills.length,
-      totalBillValue: bills.reduce((sum, b) => sum + (b.totalAmount || 0), 0)
-    };
-
-    assets.forEach(asset => {
-      if (asset.category) {
-        summary.categorySummary[asset.category] = (summary.categorySummary[asset.category] || 0) + 1;
-      }
-      if (asset.department) {
-        summary.departmentSummary[asset.department] = (summary.departmentSummary[asset.department] || 0) + 1;
-      }
-    });
+    const bills = billsRes.bills || [];
+    const report = reportRes.result || {};
 
     res.json({
       ok: true,
-      data: summary
+      data: {
+        ...report,
+        totalBills: bills.length,
+        totalBillValue: bills.reduce((sum, b) => sum + (Number(b.amount) || 0), 0)
+      }
     });
   } catch (error) {
     next(error);
@@ -240,9 +196,11 @@ async function getAnnualSummary(req, res, next) {
 
 async function getFinancialReport(req, res, next) {
   try {
-    const assets = await Asset.find({});
-    const totalValuation = assets.reduce((sum, a) => sum + (a.purchaseValue || 0), 0);
+    const assetsRes = await getAllAssetsFromFabric();
+    const assets = assetsRes.assets || [];
+    const totalValuation = assets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0);
     const netBookValue = totalValuation * 0.7;
+
     res.json({
       ok: true,
       data: {

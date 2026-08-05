@@ -7,13 +7,14 @@ const upload = multer({ dest: path.join(__dirname, "../../uploads/bills") });
 const { authenticate, authorize } = require("../middleware/auth");
 
 const departmentController = require("../controllers/departmentController");
-const assetController = require("../controllers/assetController.blockchain");
+const assetController = require("../controllers/assetController");
 const maintenanceController = require("../controllers/maintenanceController");
 const billController = require("../controllers/billController");
-const billControllerBlockchain = require("../controllers/billController.blockchain");
 const condemnationController = require("../controllers/condemnationController");
 const verificationController = require("../controllers/verificationController");
 const reportController = require("../controllers/reportController");
+
+router.use(authenticate);
 
 router.get("/departments", authorize(["Administrator", "AuditOfficer"]), departmentController.getDepartments);
 router.get("/departments/:id", authorize(["Administrator", "AuditOfficer"]), departmentController.getDepartment);
@@ -37,8 +38,8 @@ router.put("/maintenance/:recordId", authorize(["Administrator", "DepartmentUser
 
 router.get("/bills", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), billController.getBills);
 router.get("/bills/:billId", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), billController.getBill);
-router.post("/bills", authorize(["Administrator", "DepartmentUser"]), upload.single("billDocument"), billControllerBlockchain.uploadBill);
-router.post("/bills/:billId/verify", authorize(["Administrator", "AuditOfficer"]), billControllerBlockchain.verifyBill);
+router.post("/bills", authorize(["Administrator", "DepartmentUser"]), upload.single("billDocument"), billController.uploadBill);
+router.post("/bills/:billId/verify", authorize(["Administrator", "AuditOfficer"]), billController.verifyBill);
 router.put("/bills/:billId/payment", authorize(["Administrator", "DepartmentUser"]), billController.updatePaymentStatus);
 
 router.get("/condemnation", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), condemnationController.getCondemnationRecords);
@@ -70,8 +71,8 @@ router.get("/transfers", authorize(["Administrator", "DepartmentUser", "AuditOff
 router.get("/reports/financial", authorize(["Administrator", "AuditOfficer"]), reportController.getFinancialReport);
 router.get("/dashboard", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.getDashboard);
 router.get("/reports", authorize(["Administrator", "AuditOfficer"]), reportController.getReports);
-router.get("/reports/:reportId", authorize(["Administrator", "AuditOfficer"]), reportController.getReport);
 router.get("/reports/:reportId/export", authorize(["Administrator", "AuditOfficer"]), reportController.exportReport);
+router.get("/reports/:reportId", authorize(["Administrator", "AuditOfficer"]), reportController.getReport);
 router.post("/reports", authorize(["Administrator", "AuditOfficer"]), reportController.generateYearlyReport);
 router.get("/summary/:year", authorize(["Administrator", "AuditOfficer"]), reportController.getAnnualSummary);
 

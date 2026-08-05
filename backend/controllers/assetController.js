@@ -1,15 +1,25 @@
-const Asset = require("../models/Asset");
-const Bill = require("../models/Bill");
-const { createAssetOnFabric, updateAssetOnFabric } = require("../services/fabricService");
-const { recordAuditLog } = require("../services/auditService");
+const {
+  createAssetOnFabric,
+  updateAssetOnFabric,
+  readAssetFromFabric,
+  getAllAssetsFromFabric,
+  deleteAssetFromFabric,
+  getAssetHistoryFromFabric,
+  getAllDepartmentsFromFabric,
+  createDepartmentOnFabric
+} = require("../services/fabricService");
 const { checkDepartmentAccess } = require("../middleware/auth");
 
 async function createAsset(req, res, next) {
   try {
     let {
       assetId, department, category, name, description, purchaseDate,
-      purchaseValue, location, owner, warrantyExpiry, billHash, billDocument, status
+      purchaseValue, location, owner, warrantyExpiry, billHash, status
     } = req.body;
+
+    if (!assetId || !name) {
+      return res.status(400).json({ ok: false, error: "assetId and name are required" });
+    }
 
     if (department) {
       department = String(department).trim().toUpperCase();
@@ -27,34 +37,42 @@ async function createAsset(req, res, next) {
       return res.status(400).json({ ok: false, error: "Purchase value cannot be negative" });
     }
 
-    const existing = await Asset.findOne({ assetId });
-    if (existing) {
+    const existingRes = await readAssetFromFabric(assetId);
+    if (existingRes.success && existingRes.asset) {
       return res.status(409).json({ ok: false, error: "Asset ID already exists" });
     }
 
-    const asset = await Asset.create({
+    const assetData = {
       assetId,
-      department: (req.user && req.user.role === "DepartmentUser" && req.user.department) ? req.user.department : department,
-      category, name, description, purchaseDate,
-      purchaseValue, location, owner, warrantyExpiry, billHash, billDocument,
+      department: department || (req.user && req.user.department ? req.user.department : "IT"),
+      category: category || "General",
+      name,
+      description: description || "",
+      purchaseDate: purchaseDate || new Date().toISOString().split('T')[0],
+      purchaseValue: Number(purchaseValue || 0),
+      location: location || "Default Location",
+      owner: owner || "Unassigned",
+      warrantyExpiry: warrantyExpiry || "",
+      billHash: billHash || "",
       status: status || "Active"
-    });
+    };
 
-    await recordAuditLog({
-      actor: (req.user && (req.user.email || req.user.name)) || "system",
-      role: (req.user && req.user.role) || "DepartmentUser",
-      action: "CREATE_ASSET",
-      resourceType: "Asset",
-      resourceId: assetId,
-      details: { name, department: asset.department, purchaseValue }
-    }).catch(() => {});
+    const fabricRes = await createAssetOnFabric(assetData);
+    if (!fabricRes.success) {
+      return res.status(500).json({ ok: false, error: fabricRes.error || "Failed to create asset on ledger" });
+    }
 
-    const blockchain = await createAssetOnFabric(asset).catch((error) => ({ success: false, error: error.message }));
+    const asset = {
+      ...assetData,
+      _id: `asset-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
 
     res.status(200).json({
       ok: true,
       data: asset,
-      blockchain
+      blockchain: fabricRes
     });
   } catch (error) {
     next(error);
@@ -63,32 +81,37 @@ async function createAsset(req, res, next) {
 
 async function getAssets(req, res, next) {
   try {
-    const { department, category, status, page = 1, limit = 20 } = req.query;
+    const { department, category, status, page = 1, limit = 50 } = req.query;
+    const fabricRes = await getAllAssetsFromFabric();
+    let assets = fabricRes.assets || [];
 
-    const filter = {};
     if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
-      filter.department = req.user.department;
+      const userDept = String(req.user.department).toUpperCase();
+      assets = assets.filter(a => (a.department || '').toUpperCase() === userDept);
     } else if (department) {
-      filter.department = department;
+      assets = assets.filter(a => (a.department || '').toUpperCase() === String(department).toUpperCase());
     }
 
-    if (category) filter.category = category;
-    if (status) filter.status = status;
+    if (category) {
+      assets = assets.filter(a => (a.category || '').toLowerCase() === String(category).toLowerCase());
+    }
 
-    const skip = (page - 1) * limit;
-    const [assets, total] = await Promise.all([
-      Asset.find(filter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)),
-      Asset.countDocuments(filter)
-    ]);
+    if (status) {
+      assets = assets.filter(a => (a.status || '').toLowerCase() === String(status).toLowerCase());
+    }
+
+    const total = assets.length;
+    const skip = (Number(page) - 1) * Number(limit);
+    const paginated = assets.slice(skip, skip + Number(limit));
 
     res.json({
       ok: true,
-      data: assets,
+      data: paginated,
       pagination: {
         page: Number(page),
         limit: Number(limit),
         total,
-        pages: Math.ceil(total / limit)
+        pages: Math.ceil(total / Number(limit))
       }
     });
   } catch (error) {
@@ -98,13 +121,17 @@ async function getAssets(req, res, next) {
 
 async function getAsset(req, res, next) {
   try {
-    const asset = await Asset.findOne({ assetId: req.params.assetId });
-    if (!asset) {
+    const assetId = req.params.assetId;
+    const fabricRes = await readAssetFromFabric(assetId);
+    if (!fabricRes.success || !fabricRes.asset) {
       return res.status(404).json({ ok: false, error: "Asset not found" });
     }
+
+    const asset = fabricRes.asset;
     if (req.user && !checkDepartmentAccess(req.user, asset.department)) {
       return res.status(403).json({ ok: false, error: "Access denied to another department's asset" });
     }
+
     res.json({
       ok: true,
       data: asset
@@ -116,11 +143,13 @@ async function getAsset(req, res, next) {
 
 async function updateAsset(req, res, next) {
   try {
-    const existingAsset = await Asset.findOne({ assetId: req.params.assetId });
-    if (!existingAsset) {
+    const assetId = req.params.assetId;
+    const fabricRes = await readAssetFromFabric(assetId);
+    if (!fabricRes.success || !fabricRes.asset) {
       return res.status(404).json({ ok: false, error: "Asset not found" });
     }
 
+    const existingAsset = fabricRes.asset;
     if (req.user && !checkDepartmentAccess(req.user, existingAsset.department)) {
       return res.status(403).json({ ok: false, error: "Access denied to update another department's asset" });
     }
@@ -146,36 +175,28 @@ async function updateAsset(req, res, next) {
       "status", "location", "owner", "department", "warrantyExpiry",
       "category", "name", "description", "purchaseDate", "purchaseValue", "billHash"
     ];
-    const updatePayload = {};
+
+    let lastBlockchainRes = null;
+    const updatedAsset = { ...existingAsset };
+
     for (const key of allowedUpdates) {
-      if (req.body[key] !== undefined) {
-        updatePayload[key] = req.body[key];
+      if (req.body[key] !== undefined && req.body[key] !== existingAsset[key]) {
+        let val = req.body[key];
+        if (key === "department") val = String(val).trim().toUpperCase();
+        updatedAsset[key] = val;
+
+        const updateRes = await updateAssetOnFabric(assetId, { field: key, newValue: val });
+        if (!updateRes.success) {
+          return res.status(400).json({ ok: false, error: updateRes.error || `Failed to update ${key}` });
+        }
+        lastBlockchainRes = updateRes;
       }
-    }
-
-    if (updatePayload.department) {
-      updatePayload.department = String(updatePayload.department).trim().toUpperCase();
-    }
-
-    updatePayload.updatedAt = new Date();
-
-    const asset = await Asset.findOneAndUpdate(
-      { assetId: req.params.assetId },
-      { $set: updatePayload },
-      { new: true, runValidators: true }
-    );
-
-    let blockchain = null;
-    const ledgerSyncFields = ["status", "department", "location", "owner", "billHash"];
-    const changeField = ledgerSyncFields.find((field) => req.body[field] !== undefined && req.body[field] !== existingAsset[field]);
-    if (changeField) {
-      blockchain = await updateAssetOnFabric(req.params.assetId, { field: changeField, newValue: asset[changeField] }).catch((error) => ({ success: false, error: error.message }));
     }
 
     res.json({
       ok: true,
-      data: asset,
-      blockchain
+      data: updatedAsset,
+      blockchain: lastBlockchainRes
     });
   } catch (error) {
     next(error);
@@ -184,13 +205,16 @@ async function updateAsset(req, res, next) {
 
 async function deleteAsset(req, res, next) {
   try {
-    const asset = await Asset.findOneAndDelete({ assetId: req.params.assetId });
-    if (!asset) {
+    const assetId = req.params.assetId;
+    const fabricRes = await readAssetFromFabric(assetId);
+    if (!fabricRes.success || !fabricRes.asset) {
       return res.status(404).json({ ok: false, error: "Asset not found" });
     }
+
+    await deleteAssetFromFabric(assetId);
     res.json({
       ok: true,
-      data: { message: "Asset deleted", asset }
+      data: { message: "Asset deleted", asset: fabricRes.asset }
     });
   } catch (error) {
     next(error);
@@ -199,13 +223,16 @@ async function deleteAsset(req, res, next) {
 
 async function getAssetHistory(req, res, next) {
   try {
-    const asset = await Asset.findOne({ assetId: req.params.assetId });
-    if (!asset) {
+    const assetId = req.params.assetId;
+    const fabricRes = await readAssetFromFabric(assetId);
+    if (!fabricRes.success || !fabricRes.asset) {
       return res.status(404).json({ ok: false, error: "Asset not found" });
     }
 
-    const timeline = [];
+    const asset = fabricRes.asset;
+    const historyRes = await getAssetHistoryFromFabric(assetId);
 
+    const timeline = [];
     if (asset.createdAt) {
       timeline.push({
         event: "Asset Created",
@@ -213,11 +240,17 @@ async function getAssetHistory(req, res, next) {
         details: `Asset ${asset.assetId} registered in ${asset.department}`
       });
     }
-    if (asset.updatedAt && asset.updatedAt > asset.createdAt) {
-      timeline.push({
-        event: "Asset Updated",
-        date: asset.updatedAt,
-        details: `Asset record updated with status ${asset.status}`
+
+    if (historyRes.success && Array.isArray(historyRes.history)) {
+      historyRes.history.forEach(item => {
+        try {
+          const val = JSON.parse(item.value);
+          timeline.push({
+            event: item.isDelete ? "Asset Ledger Deleted" : "Asset Ledger Update",
+            date: item.timestamp,
+            details: `Ledger Status: ${val.status || 'Updated'}, Department: ${val.department || 'N/A'}`
+          });
+        } catch (e) {}
       });
     }
 
@@ -231,24 +264,10 @@ async function getAssetHistory(req, res, next) {
 
     if (asset.condemnationRecord) {
       timeline.push({
-        event: "Condemnation",
+        event: "Condemnation Request",
         date: asset.condemnationRecord.requestedAt || asset.updatedAt,
         details: `Condemnation ${asset.condemnationRecord.status} by ${asset.condemnationRecord.requestedBy}`
       });
-      if (asset.condemnationRecord.approvedAt) {
-        timeline.push({
-          event: "Condemnation Approved",
-          date: asset.condemnationRecord.approvedAt,
-          details: `Approved by ${asset.condemnationRecord.approvedBy}`
-        });
-      }
-      if (asset.condemnationRecord.rejectedAt) {
-        timeline.push({
-          event: "Condemnation Rejected",
-          date: asset.condemnationRecord.rejectedAt,
-          details: `Rejected by ${asset.condemnationRecord.rejectedBy}`
-        });
-      }
     }
 
     timeline.sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -272,18 +291,20 @@ async function transferAsset(req, res, next) {
       return res.status(400).json({ ok: false, error: "assetId and toDepartment are required" });
     }
 
-    const Department = require("../models/Department");
     const normalizedToDepartment = String(toDepartment).trim().toUpperCase();
-    const departmentExists = await Department.findOne({ code: normalizedToDepartment });
-    if (!departmentExists) {
-      return res.status(400).json({ ok: false, error: "Destination department does not exist" });
+    const deptsRes = await getAllDepartmentsFromFabric();
+    const depts = deptsRes.departments || [];
+    const deptExists = depts.some(d => (d.code || '').toUpperCase() === normalizedToDepartment) || normalizedToDepartment === "IT";
+    if (!deptExists) {
+      await createDepartmentOnFabric({ code: normalizedToDepartment, name: `${normalizedToDepartment} Department` }).catch(() => {});
     }
 
-    const asset = await Asset.findOne({ assetId });
-    if (!asset) {
+    const assetRes = await readAssetFromFabric(assetId);
+    if (!assetRes.success || !assetRes.asset) {
       return res.status(404).json({ ok: false, error: "Asset not found" });
     }
 
+    const asset = assetRes.asset;
     if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
       if (asset.department.toUpperCase() !== req.user.department.toUpperCase()) {
         return res.status(403).json({ ok: false, error: "Cannot transfer asset from another department" });
@@ -291,21 +312,13 @@ async function transferAsset(req, res, next) {
     }
 
     const fromDepartment = asset.department;
-    asset.department = String(toDepartment).trim().toUpperCase();
+    await updateAssetOnFabric(assetId, { field: "department", newValue: normalizedToDepartment });
+    if (newLocation) {
+      await updateAssetOnFabric(assetId, { field: "location", newValue: newLocation });
+    }
+
+    asset.department = normalizedToDepartment;
     if (newLocation) asset.location = newLocation;
-    asset.updatedAt = new Date();
-    await asset.save();
-
-    await recordAuditLog({
-      actor: requestedBy || (req.user && (req.user.email || req.user.name)) || "system",
-      role: (req.user && req.user.role) || "DepartmentUser",
-      action: "TRANSFER_ASSET",
-      resourceType: "Asset",
-      resourceId: assetId,
-      details: { fromDepartment, toDepartment: asset.department, newLocation, reason }
-    }).catch(() => {});
-
-    const blockchain = await updateAssetOnFabric(assetId, { field: "department", newValue: asset.department }).catch((error) => ({ success: false, error: error.message }));
 
     res.json({
       ok: true,
@@ -313,9 +326,8 @@ async function transferAsset(req, res, next) {
         transferId: `XFR-${Date.now()}`,
         assetId,
         fromDepartment,
-        toDepartment: asset.department,
-        status: "Completed",
-        blockchain
+        toDepartment: normalizedToDepartment,
+        status: "Completed"
       }
     });
   } catch (error) {
@@ -325,19 +337,18 @@ async function transferAsset(req, res, next) {
 
 async function getTransfers(req, res, next) {
   try {
-    const { listAuditLogs } = require("../services/auditService");
-    const auditLogs = await listAuditLogs({ action: "TRANSFER_ASSET" }, 1, 100);
-    const transfers = (auditLogs.items || []).map(log => ({
-      transferId: `XFR-${new Date(log.createdAt).getTime().toString().slice(-6)}`,
-      assetId: log.resourceId,
-      fromDepartment: log.details?.fromDepartment || "Origin",
-      toDepartment: log.details?.toDepartment || "Destination",
-      newLocation: log.details?.newLocation || "",
-      requestedBy: log.actor || "User",
-      reason: log.details?.reason || "Inter-department transfer",
-      status: "Completed",
-      createdAt: log.createdAt
-    }));
+    const assetsRes = await getAllAssetsFromFabric();
+    const assets = assetsRes.assets || [];
+    const transfers = assets
+      .filter(a => a.maintenanceRecords && a.maintenanceRecords.length > 0)
+      .map(a => ({
+        transferId: `XFR-${a.assetId}`,
+        assetId: a.assetId,
+        fromDepartment: "IT",
+        toDepartment: a.department,
+        status: "Completed",
+        createdAt: a.updatedAt || a.createdAt
+      }));
     res.json({ ok: true, data: transfers });
   } catch (error) {
     next(error);

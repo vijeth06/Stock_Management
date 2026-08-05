@@ -1,56 +1,55 @@
-const MaintenanceRecord = require("../models/MaintenanceRecord");
-const Asset = require("../models/Asset");
-const { addMaintenanceOnFabric } = require("../services/fabricService");
-const { recordAuditLog } = require("../services/auditService");
+const {
+  addMaintenanceOnFabric,
+  readAssetFromFabric,
+  updateAssetOnFabric,
+  getAllMaintenanceRecordsFromFabric
+} = require("../services/fabricService");
 
 async function createMaintenanceRecord(req, res, next) {
   try {
-    const { assetId, technician, maintenanceDate, description, cost, status, priority } = req.body;
+    const { assetId, technician, maintenanceDate, description, cost, status } = req.body;
 
-    const asset = await Asset.findOne({ assetId });
-    if (!asset) {
+    const assetRes = await readAssetFromFabric(assetId);
+    if (!assetRes.success || !assetRes.asset) {
       return res.status(404).json({ ok: false, error: "Asset not found" });
     }
 
+    const asset = assetRes.asset;
     if (["Condemned", "Disposed", "Retired", "Condemnation Requested"].includes(asset.status)) {
       return res.status(400).json({ ok: false, error: `Cannot schedule maintenance for asset in '${asset.status}' state` });
     }
 
-    const recordId = `MNT-${Date.now()}`;
-    const record = await MaintenanceRecord.create({
-      recordId, assetId, technician, maintenanceDate, description, cost, status: status || "In Progress", priority
+    const mntRes = await addMaintenanceOnFabric(assetId, {
+      technician: technician || "Technician",
+      maintenanceDate: maintenanceDate || new Date().toISOString().split('T')[0],
+      description: description || "Routine maintenance",
+      cost: Number(cost || 0),
+      status: status || "Completed"
     });
 
-    asset.maintenanceRecords.push({
-      recordId, technician, maintenanceDate, description, cost, status: record.status, createdAt: new Date()
-    });
-    asset.maintenanceCount = (asset.maintenanceCount || 0) + 1;
-    if (asset.status !== "Maintenance") {
-      asset.status = "Maintenance";
+    if (!mntRes.success) {
+      return res.status(500).json({ ok: false, error: mntRes.error || "Failed to log maintenance on ledger" });
     }
-    await asset.save();
 
-    await recordAuditLog({
-      actor: (req.user && (req.user.email || req.user.name)) || "system",
-      role: (req.user && req.user.role) || "DepartmentUser",
-      action: "LOG_MAINTENANCE",
-      resourceType: "MaintenanceRecord",
-      resourceId: recordId,
-      details: { assetId, technician, cost }
-    }).catch(() => {});
+    if (asset.status !== "Maintenance" && (status || "Completed") !== "Completed") {
+      await updateAssetOnFabric(assetId, { field: "status", newValue: "Maintenance" });
+    }
 
-    const blockchain = await addMaintenanceOnFabric(assetId, {
+    const record = mntRes.result || {
+      recordId: `MNT-${Date.now()}`,
+      assetId,
       technician,
       maintenanceDate,
       description,
       cost,
-      status: record.status
-    }).catch((error) => ({ success: false, error: error.message }));
+      status: status || "Completed",
+      createdAt: new Date().toISOString()
+    };
 
     res.status(201).json({
       ok: true,
       data: record,
-      blockchain
+      blockchain: mntRes
     });
   } catch (error) {
     next(error);
@@ -59,28 +58,29 @@ async function createMaintenanceRecord(req, res, next) {
 
 async function getMaintenanceRecords(req, res, next) {
   try {
-    const { assetId, status, page = 1, limit = 20 } = req.query;
+    const { assetId, status, page = 1, limit = 50 } = req.query;
+    const recordsRes = await getAllMaintenanceRecordsFromFabric();
+    let records = recordsRes.records || [];
 
-    const filter = {};
-    if (assetId) filter.assetId = assetId;
-    if (status) filter.status = status;
+    if (assetId) {
+      records = records.filter(r => r.assetId === assetId);
+    }
+    if (status) {
+      records = records.filter(r => r.status === status);
+    }
 
-    const skip = (page - 1) * limit;
-    const records = await MaintenanceRecord.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit));
-
-    const total = await MaintenanceRecord.countDocuments(filter);
+    const total = records.length;
+    const skip = (Number(page) - 1) * Number(limit);
+    const paginated = records.slice(skip, skip + Number(limit));
 
     res.json({
       ok: true,
-      data: records,
+      data: paginated,
       pagination: {
         page: Number(page),
         limit: Number(limit),
         total,
-        pages: Math.ceil(total / limit)
+        pages: Math.ceil(total / Number(limit))
       }
     });
   } catch (error) {
@@ -90,10 +90,15 @@ async function getMaintenanceRecords(req, res, next) {
 
 async function getMaintenanceRecord(req, res, next) {
   try {
-    const record = await MaintenanceRecord.findOne({ recordId: req.params.recordId });
+    const recordId = req.params.recordId;
+    const recordsRes = await getAllMaintenanceRecordsFromFabric();
+    const records = recordsRes.records || [];
+    const record = records.find(r => r.recordId === recordId || r._id === recordId);
+
     if (!record) {
       return res.status(404).json({ ok: false, error: "Maintenance record not found" });
     }
+
     res.json({
       ok: true,
       data: record
@@ -105,42 +110,28 @@ async function getMaintenanceRecord(req, res, next) {
 
 async function updateMaintenanceRecord(req, res, next) {
   try {
-    const record = await MaintenanceRecord.findOneAndUpdate(
-      { recordId: req.params.recordId },
-      { $set: { ...req.body, updatedAt: new Date() } },
-      { new: true, runValidators: true }
-    );
+    const recordId = req.params.recordId;
+    const recordsRes = await getAllMaintenanceRecordsFromFabric();
+    const records = recordsRes.records || [];
+    const record = records.find(r => r.recordId === recordId || r._id === recordId);
+
     if (!record) {
       return res.status(404).json({ ok: false, error: "Maintenance record not found" });
     }
 
-    if (record.status === "Completed") {
-      const asset = await Asset.findOne({ assetId: record.assetId });
-      if (asset && asset.status === "Maintenance") {
-        const openMaintenance = await MaintenanceRecord.countDocuments({
-          assetId: record.assetId,
-          status: { $in: ["Pending", "In Progress"] },
-          recordId: { $ne: record.recordId }
-        });
-        if (!openMaintenance) {
-          asset.status = "Active";
-          await asset.save();
-        }
-      }
-    }
+    const updated = {
+      ...record,
+      ...req.body,
+      updatedAt: new Date().toISOString()
+    };
 
-    await recordAuditLog({
-      actor: (req.user && (req.user.email || req.user.name)) || "system",
-      role: (req.user && req.user.role) || "DepartmentUser",
-      action: "UPDATE_MAINTENANCE",
-      resourceType: "MaintenanceRecord",
-      resourceId: record.recordId,
-      details: { status: record.status }
-    }).catch(() => {});
+    if (updated.status === "Completed") {
+      await updateAssetOnFabric(updated.assetId, { field: "status", newValue: "Active" });
+    }
 
     res.json({
       ok: true,
-      data: record
+      data: updated
     });
   } catch (error) {
     next(error);
@@ -149,21 +140,22 @@ async function updateMaintenanceRecord(req, res, next) {
 
 async function getMaintenanceHistory(req, res, next) {
   try {
-    const asset = await Asset.findOne({ assetId: req.params.assetId });
-    if (!asset) {
+    const assetId = req.params.assetId;
+    const assetRes = await readAssetFromFabric(assetId);
+    if (!assetRes.success || !assetRes.asset) {
       return res.status(404).json({ ok: false, error: "Asset not found" });
     }
 
-    const records = await MaintenanceRecord.find({ assetId: req.params.assetId })
-      .sort({ createdAt: -1 });
+    const recordsRes = await getAllMaintenanceRecordsFromFabric();
+    const records = (recordsRes.records || []).filter(r => r.assetId === assetId);
 
     res.json({
       ok: true,
       data: {
-        assetId: req.params.assetId,
+        assetId,
         maintenanceRecords: records,
         totalRecords: records.length,
-        totalCost: records.reduce((sum, r) => sum + (r.cost || 0), 0)
+        totalCost: records.reduce((sum, r) => sum + (Number(r.cost) || 0), 0)
       }
     });
   } catch (error) {

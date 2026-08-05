@@ -1,46 +1,46 @@
-const CondemnationRecord = require("../models/CondemnationRecord");
-const Asset = require("../models/Asset");
-const { requestCondemnationOnFabric, approveCondemnationOnFabric } = require("../services/fabricService");
-const { recordAuditLog } = require("../services/auditService");
+const {
+  requestCondemnationOnFabric,
+  approveCondemnationOnFabric,
+  rejectCondemnationOnFabric,
+  readAssetFromFabric,
+  getAllCondemnationRecordsFromFabric
+} = require("../services/fabricService");
 
 async function requestCondemnation(req, res, next) {
   try {
-    const { assetId, reason, requestedBy, disposalMethod, inspectionDetails } = req.body;
+    const { assetId, reason, requestedBy, disposalMethod } = req.body;
 
-    const asset = await Asset.findOne({ assetId });
-    if (!asset) {
+    const assetRes = await readAssetFromFabric(assetId);
+    if (!assetRes.success || !assetRes.asset) {
       return res.status(404).json({ ok: false, error: "Asset not found" });
     }
 
+    const asset = assetRes.asset;
     if (["Condemned", "Disposed", "Retired", "Condemnation Requested"].includes(asset.status)) {
       return res.status(400).json({ ok: false, error: "Asset is already condemned, retired, disposed, or pending condemnation" });
     }
 
-    const recordId = `COND-${Date.now()}`;
-    const record = await CondemnationRecord.create({
-      recordId, assetId, reason, requestedBy, disposalMethod, inspectionDetails, status: "Pending"
-    });
+    const reqUser = requestedBy || (req.user && (req.user.email || req.user.name)) || "DepartmentUser";
+    const condRes = await requestCondemnationOnFabric(assetId, reason || "Asset obsolete/damaged", reqUser);
 
-    asset.status = "Condemnation Requested";
-    asset.condemnationRecord = record;
-    await asset.save();
+    if (!condRes.success) {
+      return res.status(500).json({ ok: false, error: condRes.error || "Failed to submit condemnation on ledger" });
+    }
 
-    await recordAuditLog({
-      actor: requestedBy || (req.user && (req.user.email || req.user.name)) || "system",
-      role: (req.user && req.user.role) || "DepartmentUser",
-      action: "REQUEST_CONDEMNATION",
-      resourceType: "CondemnationRecord",
-      resourceId: recordId,
-      details: { assetId, reason }
-    }).catch(() => {});
-
-    const blockchain = await requestCondemnationOnFabric(assetId, reason, requestedBy)
-      .catch((error) => ({ success: false, error: error.message }));
+    const record = condRes.result || {
+      recordId: `COND-${Date.now()}`,
+      assetId,
+      reason: reason || "Asset obsolete/damaged",
+      requestedBy: reqUser,
+      disposalMethod: disposalMethod || "Scrap",
+      status: "Pending",
+      requestedAt: new Date().toISOString()
+    };
 
     res.status(201).json({
       ok: true,
       data: record,
-      blockchain
+      blockchain: condRes
     });
   } catch (error) {
     next(error);
@@ -49,26 +49,26 @@ async function requestCondemnation(req, res, next) {
 
 async function getCondemnationRecords(req, res, next) {
   try {
-    const { status, page = 1, limit = 20 } = req.query;
+    const { status, page = 1, limit = 50 } = req.query;
+    const recordsRes = await getAllCondemnationRecordsFromFabric();
+    let records = recordsRes.records || [];
 
-    const filter = status ? { status } : {};
+    if (status) {
+      records = records.filter(r => r.status === status);
+    }
 
-    const skip = (page - 1) * limit;
-    const records = await CondemnationRecord.find(filter)
-      .sort({ requestedAt: -1 })
-      .skip(skip)
-      .limit(Number(limit));
-
-    const total = await CondemnationRecord.countDocuments(filter);
+    const total = records.length;
+    const skip = (Number(page) - 1) * Number(limit);
+    const paginated = records.slice(skip, skip + Number(limit));
 
     res.json({
       ok: true,
-      data: records,
+      data: paginated,
       pagination: {
         page: Number(page),
         limit: Number(limit),
         total,
-        pages: Math.ceil(total / limit)
+        pages: Math.ceil(total / Number(limit))
       }
     });
   } catch (error) {
@@ -78,10 +78,15 @@ async function getCondemnationRecords(req, res, next) {
 
 async function getCondemnationRecord(req, res, next) {
   try {
-    const record = await CondemnationRecord.findOne({ recordId: req.params.recordId });
+    const recordId = req.params.recordId;
+    const recordsRes = await getAllCondemnationRecordsFromFabric();
+    const records = recordsRes.records || [];
+    const record = records.find(r => r.recordId === recordId || r._id === recordId);
+
     if (!record) {
       return res.status(404).json({ ok: false, error: "Condemnation record not found" });
     }
+
     res.json({
       ok: true,
       data: record
@@ -94,9 +99,10 @@ async function getCondemnationRecord(req, res, next) {
 async function approveCondemnation(req, res, next) {
   try {
     const { recordId } = req.params;
-    const { approvedBy, disposalMethod } = req.body;
+    const recordsRes = await getAllCondemnationRecordsFromFabric();
+    const records = recordsRes.records || [];
+    const record = records.find(r => r.recordId === recordId || r._id === recordId);
 
-    const record = await CondemnationRecord.findOne({ recordId });
     if (!record) {
       return res.status(404).json({ ok: false, error: "Condemnation record not found" });
     }
@@ -105,36 +111,17 @@ async function approveCondemnation(req, res, next) {
       return res.status(400).json({ ok: false, error: "Condemnation request is not pending" });
     }
 
+    const approver = req.body.approvedBy || (req.user && (req.user.email || req.user.name)) || "Administrator";
+    const condRes = await approveCondemnationOnFabric(record.assetId, approver);
+
     record.status = "Approved";
-    record.approvedAt = new Date();
-    record.approvedBy = approvedBy || (req.user && (req.user.email || req.user.name)) || "Administrator";
-    if (disposalMethod) record.disposalMethod = disposalMethod;
-
-    await record.save();
-
-    const asset = await Asset.findOne({ assetId: record.assetId });
-    if (asset) {
-      asset.status = "Condemned";
-      asset.condemnationRecord = record;
-      await asset.save();
-    }
-
-    await recordAuditLog({
-      actor: record.approvedBy,
-      role: (req.user && req.user.role) || "Administrator",
-      action: "APPROVE_CONDEMNATION",
-      resourceType: "CondemnationRecord",
-      resourceId: recordId,
-      details: { assetId: record.assetId, disposalMethod: record.disposalMethod }
-    }).catch(() => {});
-
-    const blockchain = await approveCondemnationOnFabric(record.assetId, record.approvedBy)
-      .catch((error) => ({ success: false, error: error.message }));
+    record.approvedBy = approver;
+    record.approvedAt = new Date().toISOString();
 
     res.json({
       ok: true,
       data: record,
-      blockchain
+      blockchain: condRes
     });
   } catch (error) {
     next(error);
@@ -144,9 +131,10 @@ async function approveCondemnation(req, res, next) {
 async function rejectCondemnation(req, res, next) {
   try {
     const { recordId } = req.params;
-    const { rejectedBy, rejectionReason } = req.body;
+    const recordsRes = await getAllCondemnationRecordsFromFabric();
+    const records = recordsRes.records || [];
+    const record = records.find(r => r.recordId === recordId || r._id === recordId);
 
-    const record = await CondemnationRecord.findOne({ recordId });
     if (!record) {
       return res.status(404).json({ ok: false, error: "Condemnation record not found" });
     }
@@ -155,31 +143,17 @@ async function rejectCondemnation(req, res, next) {
       return res.status(400).json({ ok: false, error: "Condemnation request is not pending" });
     }
 
+    const rejector = req.body.rejectedBy || (req.user && (req.user.email || req.user.name)) || "Administrator";
+    const condRes = await rejectCondemnationOnFabric(record.assetId, rejector);
+
     record.status = "Rejected";
-    record.rejectedAt = new Date();
-    record.rejectedBy = rejectedBy || (req.user && (req.user.email || req.user.name)) || "Administrator";
-    record.rejectionReason = rejectionReason || "Request declined by auditor";
-
-    await record.save();
-
-    const asset = await Asset.findOne({ assetId: record.assetId });
-    if (asset && asset.status === "Condemnation Requested") {
-      asset.status = "Active";
-      await asset.save();
-    }
-
-    await recordAuditLog({
-      actor: record.rejectedBy,
-      role: (req.user && req.user.role) || "Administrator",
-      action: "REJECT_CONDEMNATION",
-      resourceType: "CondemnationRecord",
-      resourceId: recordId,
-      details: { assetId: record.assetId, rejectionReason: record.rejectionReason }
-    }).catch(() => {});
+    record.rejectedBy = rejector;
+    record.rejectedAt = new Date().toISOString();
 
     res.json({
       ok: true,
-      data: record
+      data: record,
+      blockchain: condRes
     });
   } catch (error) {
     next(error);

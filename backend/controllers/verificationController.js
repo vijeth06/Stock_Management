@@ -1,9 +1,12 @@
-const EquipmentVerification = require("../models/EquipmentVerification");
-const EquipmentCondemnation = require("../models/EquipmentCondemnation");
-const ConsumableVerification = require("../models/ConsumableVerification");
-const ConsumableCondemnation = require("../models/ConsumableCondemnation");
 const { recordAuditLog } = require("../services/auditService");
 const { checkDepartmentAccess } = require("../middleware/auth");
+
+const verificationsStore = {
+  equipmentVerifications: [],
+  equipmentCondemnations: [],
+  consumableVerifications: [],
+  consumableCondemnations: []
+};
 
 function validateNonNegativeItems(items, fields) {
   if (!Array.isArray(items)) return null;
@@ -45,20 +48,14 @@ async function createEquipmentVerification(req, res, next) {
       });
     }
 
-    const verification = await EquipmentVerification.create({
+    const verification = {
       ...payload,
+      _id: recordId,
       recordId,
-      status: payload.status || "Completed"
-    });
-
-    await recordAuditLog({
-      actor: (req.user && (req.user.email || req.user.name)) || payload.staffInCharge || "system",
-      role: (req.user && req.user.role) || "AuditOfficer",
-      action: "PROFORMA_1_EQUIPMENT_VERIFICATION",
-      resourceType: "EquipmentVerification",
-      resourceId: recordId,
-      details: { department: payload.department, laboratory: payload.laboratory }
-    }).catch(() => {});
+      status: payload.status || "Completed",
+      createdAt: new Date().toISOString()
+    };
+    verificationsStore.equipmentVerifications.unshift(verification);
 
     res.status(201).json({ ok: true, data: verification });
   } catch (error) {
@@ -69,22 +66,20 @@ async function createEquipmentVerification(req, res, next) {
 async function getEquipmentVerifications(req, res, next) {
   try {
     const { department, year, page = 1, limit = 20 } = req.query;
-    const filter = {};
+    let items = [...verificationsStore.equipmentVerifications];
+
     if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
-      filter.department = req.user.department;
+      items = items.filter(i => (i.department || '').toUpperCase() === req.user.department.toUpperCase());
     } else if (department) {
-      filter.department = department;
+      items = items.filter(i => (i.department || '').toUpperCase() === String(department).toUpperCase());
     }
-    if (year) filter.auditYear = Number(year);
+    if (year) items = items.filter(i => i.auditYear === Number(year));
 
-    const skip = (page - 1) * limit;
-    const items = await EquipmentVerification.find(filter)
-      .sort({ verificationDate: -1 })
-      .skip(Number(skip))
-      .limit(Number(limit));
-    const total = await EquipmentVerification.countDocuments(filter);
+    const total = items.length;
+    const skip = (Number(page) - 1) * Number(limit);
+    const paginated = items.slice(skip, skip + Number(limit));
 
-    res.json({ ok: true, data: items, pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / limit) } });
+    res.json({ ok: true, data: paginated, pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / limit) || 1 } });
   } catch (error) {
     next(error);
   }
@@ -92,7 +87,7 @@ async function getEquipmentVerifications(req, res, next) {
 
 async function getEquipmentVerification(req, res, next) {
   try {
-    const item = await EquipmentVerification.findOne({ recordId: req.params.recordId });
+    const item = verificationsStore.equipmentVerifications.find(i => i.recordId === req.params.recordId || i._id === req.params.recordId);
     if (!item) return res.status(404).json({ ok: false, error: "Equipment verification record not found" });
     if (req.user && !checkDepartmentAccess(req.user, item.department)) {
       return res.status(403).json({ ok: false, error: "Access denied to another department's verification" });
@@ -117,11 +112,14 @@ async function createEquipmentCondemnation(req, res, next) {
       return res.status(400).json({ ok: false, error: invalidErrMsg });
     }
 
-    const record = await EquipmentCondemnation.create({
+    const record = {
       ...payload,
+      _id: recordId,
       recordId,
-      status: payload.status || "Pending"
-    });
+      status: payload.status || "Pending",
+      createdAt: new Date().toISOString()
+    };
+    verificationsStore.equipmentCondemnations.unshift(record);
 
     res.status(201).json({ ok: true, data: record });
   } catch (error) {
@@ -132,23 +130,21 @@ async function createEquipmentCondemnation(req, res, next) {
 async function getEquipmentCondemnations(req, res, next) {
   try {
     const { department, status, year, page = 1, limit = 20 } = req.query;
-    const filter = {};
+    let items = [...verificationsStore.equipmentCondemnations];
+
     if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
-      filter.department = req.user.department;
+      items = items.filter(i => (i.department || '').toUpperCase() === req.user.department.toUpperCase());
     } else if (department) {
-      filter.department = department;
+      items = items.filter(i => (i.department || '').toUpperCase() === String(department).toUpperCase());
     }
-    if (status) filter.status = status;
-    if (year) filter.auditYear = Number(year);
+    if (status) items = items.filter(i => i.status === status);
+    if (year) items = items.filter(i => i.auditYear === Number(year));
 
-    const skip = (page - 1) * limit;
-    const items = await EquipmentCondemnation.find(filter)
-      .sort({ verificationDate: -1 })
-      .skip(Number(skip))
-      .limit(Number(limit));
-    const total = await EquipmentCondemnation.countDocuments(filter);
+    const total = items.length;
+    const skip = (Number(page) - 1) * Number(limit);
+    const paginated = items.slice(skip, skip + Number(limit));
 
-    res.json({ ok: true, data: items, pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / limit) } });
+    res.json({ ok: true, data: paginated, pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / limit) || 1 } });
   } catch (error) {
     next(error);
   }
@@ -156,7 +152,7 @@ async function getEquipmentCondemnations(req, res, next) {
 
 async function getEquipmentCondemnation(req, res, next) {
   try {
-    const item = await EquipmentCondemnation.findOne({ recordId: req.params.recordId });
+    const item = verificationsStore.equipmentCondemnations.find(i => i.recordId === req.params.recordId || i._id === req.params.recordId);
     if (!item) return res.status(404).json({ ok: false, error: "Equipment condemnation record not found" });
     if (req.user && !checkDepartmentAccess(req.user, item.department)) {
       return res.status(403).json({ ok: false, error: "Access denied to another department's condemnation record" });
@@ -171,7 +167,7 @@ async function approveEquipmentCondemnation(req, res, next) {
   try {
     const { recordId } = req.params;
     const { approvedBy } = req.body;
-    const record = await EquipmentCondemnation.findOne({ recordId });
+    const record = verificationsStore.equipmentCondemnations.find(i => i.recordId === recordId || i._id === recordId);
     if (!record) return res.status(404).json({ ok: false, error: "Record not found" });
 
     if (record.status !== "Pending") {
@@ -180,8 +176,7 @@ async function approveEquipmentCondemnation(req, res, next) {
 
     record.status = "Approved";
     record.approvedBy = approvedBy;
-    record.approvedAt = new Date();
-    await record.save();
+    record.approvedAt = new Date().toISOString();
 
     res.json({ ok: true, data: record });
   } catch (error) {
@@ -193,7 +188,7 @@ async function rejectEquipmentCondemnation(req, res, next) {
   try {
     const { recordId } = req.params;
     const { rejectedBy } = req.body;
-    const record = await EquipmentCondemnation.findOne({ recordId });
+    const record = verificationsStore.equipmentCondemnations.find(i => i.recordId === recordId || i._id === recordId);
     if (!record) return res.status(404).json({ ok: false, error: "Record not found" });
 
     if (record.status !== "Pending") {
@@ -202,8 +197,7 @@ async function rejectEquipmentCondemnation(req, res, next) {
 
     record.status = "Rejected";
     record.rejectedBy = rejectedBy;
-    record.rejectedAt = new Date();
-    await record.save();
+    record.rejectedAt = new Date().toISOString();
 
     res.json({ ok: true, data: record });
   } catch (error) {
@@ -236,20 +230,14 @@ async function createConsumableVerification(req, res, next) {
       });
     }
 
-    const verification = await ConsumableVerification.create({
+    const verification = {
       ...payload,
+      _id: recordId,
       recordId,
-      status: payload.status || "Completed"
-    });
-
-    await recordAuditLog({
-      actor: (req.user && (req.user.email || req.user.name)) || payload.staffInCharge || "system",
-      role: (req.user && req.user.role) || "AuditOfficer",
-      action: "PROFORMA_3_CONSUMABLE_VERIFICATION",
-      resourceType: "ConsumableVerification",
-      resourceId: recordId,
-      details: { department: payload.department, laboratory: payload.laboratory }
-    }).catch(() => {});
+      status: payload.status || "Completed",
+      createdAt: new Date().toISOString()
+    };
+    verificationsStore.consumableVerifications.unshift(verification);
 
     res.status(201).json({ ok: true, data: verification });
   } catch (error) {
@@ -260,22 +248,20 @@ async function createConsumableVerification(req, res, next) {
 async function getConsumableVerifications(req, res, next) {
   try {
     const { department, year, page = 1, limit = 20 } = req.query;
-    const filter = {};
+    let items = [...verificationsStore.consumableVerifications];
+
     if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
-      filter.department = req.user.department;
+      items = items.filter(i => (i.department || '').toUpperCase() === req.user.department.toUpperCase());
     } else if (department) {
-      filter.department = department;
+      items = items.filter(i => (i.department || '').toUpperCase() === String(department).toUpperCase());
     }
-    if (year) filter.auditYear = Number(year);
+    if (year) items = items.filter(i => i.auditYear === Number(year));
 
-    const skip = (page - 1) * limit;
-    const items = await ConsumableVerification.find(filter)
-      .sort({ verificationDate: -1 })
-      .skip(Number(skip))
-      .limit(Number(limit));
-    const total = await ConsumableVerification.countDocuments(filter);
+    const total = items.length;
+    const skip = (Number(page) - 1) * Number(limit);
+    const paginated = items.slice(skip, skip + Number(limit));
 
-    res.json({ ok: true, data: items, pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / limit) } });
+    res.json({ ok: true, data: paginated, pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / limit) || 1 } });
   } catch (error) {
     next(error);
   }
@@ -283,7 +269,7 @@ async function getConsumableVerifications(req, res, next) {
 
 async function getConsumableVerification(req, res, next) {
   try {
-    const item = await ConsumableVerification.findOne({ recordId: req.params.recordId });
+    const item = verificationsStore.consumableVerifications.find(i => i.recordId === req.params.recordId || i._id === req.params.recordId);
     if (!item) return res.status(404).json({ ok: false, error: "Consumable verification record not found" });
     res.json({ ok: true, data: item });
   } catch (error) {
@@ -303,20 +289,14 @@ async function createConsumableCondemnation(req, res, next) {
       }));
     }
 
-    const record = await ConsumableCondemnation.create({
+    const record = {
       ...payload,
+      _id: recordId,
       recordId,
-      status: payload.status || "Pending"
-    });
-
-    await recordAuditLog({
-      actor: (req.user && (req.user.email || req.user.name)) || payload.staffInCharge || "system",
-      role: (req.user && req.user.role) || "AuditOfficer",
-      action: "PROFORMA_4_CONSUMABLE_CONDEMNATION",
-      resourceType: "ConsumableCondemnation",
-      resourceId: recordId,
-      details: { department: payload.department, laboratory: payload.laboratory }
-    }).catch(() => {});
+      status: payload.status || "Pending",
+      createdAt: new Date().toISOString()
+    };
+    verificationsStore.consumableCondemnations.unshift(record);
 
     res.status(201).json({ ok: true, data: record });
   } catch (error) {
@@ -327,19 +307,17 @@ async function createConsumableCondemnation(req, res, next) {
 async function getConsumableCondemnations(req, res, next) {
   try {
     const { department, status, year, page = 1, limit = 20 } = req.query;
-    const filter = {};
-    if (department) filter.department = department;
-    if (status) filter.status = status;
-    if (year) filter.auditYear = Number(year);
+    let items = [...verificationsStore.consumableCondemnations];
 
-    const skip = (page - 1) * limit;
-    const items = await ConsumableCondemnation.find(filter)
-      .sort({ verificationDate: -1 })
-      .skip(Number(skip))
-      .limit(Number(limit));
-    const total = await ConsumableCondemnation.countDocuments(filter);
+    if (department) items = items.filter(i => (i.department || '').toUpperCase() === String(department).toUpperCase());
+    if (status) items = items.filter(i => i.status === status);
+    if (year) items = items.filter(i => i.auditYear === Number(year));
 
-    res.json({ ok: true, data: items, pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / limit) } });
+    const total = items.length;
+    const skip = (Number(page) - 1) * Number(limit);
+    const paginated = items.slice(skip, skip + Number(limit));
+
+    res.json({ ok: true, data: paginated, pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / limit) || 1 } });
   } catch (error) {
     next(error);
   }
@@ -347,7 +325,7 @@ async function getConsumableCondemnations(req, res, next) {
 
 async function getConsumableCondemnation(req, res, next) {
   try {
-    const item = await ConsumableCondemnation.findOne({ recordId: req.params.recordId });
+    const item = verificationsStore.consumableCondemnations.find(i => i.recordId === req.params.recordId || i._id === req.params.recordId);
     if (!item) return res.status(404).json({ ok: false, error: "Consumable condemnation record not found" });
     res.json({ ok: true, data: item });
   } catch (error) {
@@ -359,7 +337,7 @@ async function approveConsumableCondemnation(req, res, next) {
   try {
     const { recordId } = req.params;
     const { approvedBy } = req.body;
-    const record = await ConsumableCondemnation.findOne({ recordId });
+    const record = verificationsStore.consumableCondemnations.find(i => i.recordId === recordId || i._id === recordId);
     if (!record) return res.status(404).json({ ok: false, error: "Record not found" });
 
     if (record.status !== "Pending") {
@@ -368,8 +346,7 @@ async function approveConsumableCondemnation(req, res, next) {
 
     record.status = "Approved";
     record.approvedBy = approvedBy;
-    record.approvedAt = new Date();
-    await record.save();
+    record.approvedAt = new Date().toISOString();
 
     res.json({ ok: true, data: record });
   } catch (error) {
@@ -381,7 +358,7 @@ async function rejectConsumableCondemnation(req, res, next) {
   try {
     const { recordId } = req.params;
     const { rejectedBy } = req.body;
-    const record = await ConsumableCondemnation.findOne({ recordId });
+    const record = verificationsStore.consumableCondemnations.find(i => i.recordId === recordId || i._id === recordId);
     if (!record) return res.status(404).json({ ok: false, error: "Record not found" });
 
     if (record.status !== "Pending") {
@@ -390,8 +367,7 @@ async function rejectConsumableCondemnation(req, res, next) {
 
     record.status = "Rejected";
     record.rejectedBy = rejectedBy;
-    record.rejectedAt = new Date();
-    await record.save();
+    record.rejectedAt = new Date().toISOString();
 
     res.json({ ok: true, data: record });
   } catch (error) {

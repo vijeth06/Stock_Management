@@ -3,8 +3,6 @@ const express = require("express");
 const path = require("path");
 const helmet = require("helmet");
 const cors = require("cors");
-const { connectDatabase } = require("../backend/config/db");
-const User = require("../backend/models/User");
 const { authenticate, authorize } = require("../backend/middleware/auth");
 const { register, login } = require("../backend/controllers/authController");
 const { seedDemoAdmin } = require("../backend/services/authService");
@@ -18,41 +16,17 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "..", "client")));
 
 const PORT = Number(process.env.PORT || 3000);
-const DEFAULT_MONGO_URI = "mongodb://localhost:27017/assetmanagement";
-const MONGO_URI = process.env.MONGO_URI || DEFAULT_MONGO_URI;
-const FALLBACK_MONGO_URI = MONGO_URI.includes("mongodb://mongodb") ? DEFAULT_MONGO_URI : null;
 
-let databaseReady = false;
-let mongoConnection = null;
-
-const initDatabase = async () => {
+const initFabricLedger = async () => {
   try {
-    mongoConnection = await connectDatabase(MONGO_URI);
-    databaseReady = true;
-    console.log("MongoDB connected");
     await seedDemoAdmin();
-    return;
+    console.log("Hyperledger Fabric ledger storage initialized successfully.");
   } catch (error) {
-    console.warn(`Primary MongoDB unavailable: ${error.message}`);
+    console.warn(`Fabric ledger startup warning: ${error.message}`);
   }
-
-  if (FALLBACK_MONGO_URI) {
-    try {
-      console.warn(`Trying fallback MongoDB URI: ${FALLBACK_MONGO_URI}`);
-      mongoConnection = await connectDatabase(FALLBACK_MONGO_URI);
-      databaseReady = true;
-      console.log("MongoDB connected using fallback URI");
-      await seedDemoAdmin();
-      return;
-    } catch (fallbackError) {
-      console.warn(`Fallback MongoDB unavailable: ${fallbackError.message}`);
-    }
-  }
-
-  console.warn("Running in demo mode without database persistence");
 };
 
-initDatabase();
+initFabricLedger();
 
 function handleError(res, error) {
   const status = error.status || 500;
@@ -64,7 +38,7 @@ app.get("/health", async (req, res) => {
     res.json({
       status: "ok",
       platform: "Hyperledger Fabric",
-      databaseReady,
+      storage: "Hyperledger Fabric Ledger",
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -75,73 +49,8 @@ app.get("/health", async (req, res) => {
   }
 });
 
-app.post("/auth/register", async (req, res, next) => {
-  if (databaseReady) return register(req, res, next);
-  const { name, departmentName, department, password } = req.body;
-  if (!name || !password) {
-    return res.status(400).json({ ok: false, error: "User name and password are required" });
-  }
-  const emailInput = req.body.email || `${(name || 'user').toLowerCase().replace(/[^a-z0-9]/g, '')}@college.edu`;
-  const emailLower = emailInput.toLowerCase().trim();
-  const existing = (mockDb.pendingUsers || []).concat(mockDb.approvedUsers || []).find(u => u.email === emailLower || u.name.toLowerCase() === name.toLowerCase());
-  if (existing) {
-    return res.status(400).json({ ok: false, error: "User with this user name or email already exists" });
-  }
-
-  const newUser = {
-    _id: "usr-" + Date.now(),
-    name,
-    email: emailLower,
-    password,
-    role: "DepartmentUser",
-    department: (department || "IT").toUpperCase(),
-    departmentName: departmentName || department || "IT",
-    isApproved: false,
-    status: "PendingApproval",
-    createdAt: new Date().toISOString()
-  };
-
-  mockDb.pendingUsers.push(newUser);
-  return res.status(201).json({ ok: true, message: "Registration submitted successfully! Your account is pending Admin approval.", data: { user: newUser } });
-});
-
-app.post("/auth/login", async (req, res, next) => {
-  if (databaseReady) return login(req, res, next);
-  const { password } = req.body;
-  const input = (req.body.email || req.body.name || req.body.username || '').toLowerCase().trim();
-
-  const pending = (mockDb.pendingUsers || []).find(u => u.email === input || u.name.toLowerCase() === input);
-  if (pending) {
-    if (pending.status === "Rejected") {
-      return res.status(403).json({ ok: false, error: "Your registration request was rejected by the Admin." });
-    }
-    return res.status(403).json({ ok: false, error: "Your account is pending Admin approval. Please wait for an administrator to approve your registration." });
-  }
-
-  const approved = (mockDb.approvedUsers || []).find(u => u.email === input || u.name.toLowerCase() === input);
-  if (approved) {
-    const jwt = require("jsonwebtoken");
-    const token = jwt.sign(
-      { sub: approved._id, email: approved.email, role: approved.role, name: approved.name, department: approved.department },
-      process.env.JWT_SECRET || "change-me-in-development",
-      { expiresIn: "8h" }
-    );
-    return res.json({ ok: true, data: { user: approved, token } });
-  }
-
-  if (input === "admin@assetmgmt.local" || input === "admin") {
-    const jwt = require("jsonwebtoken");
-    const user = { id: "demo123", name: "Demo Admin", email: "admin@assetmgmt.local", role: "Administrator", isApproved: true };
-    const token = jwt.sign(
-      { sub: user.id, email: user.email, role: user.role, name: user.name },
-      process.env.JWT_SECRET || "change-me-in-development",
-      { expiresIn: "8h" }
-    );
-    return res.json({ ok: true, data: { user, token } });
-  }
-
-  return res.status(401).json({ ok: false, error: "Invalid credentials" });
-});
+app.post("/auth/register", register);
+app.post("/auth/login", login);
 
 app.post("/auth/gmail", async (req, res, next) => {
   const { email, name, department, departmentName } = req.body;
@@ -1139,20 +1048,14 @@ app.get(["/api/reports/:reportId/export", "/reports/:reportId/export"], authenti
     const reportId = req.params.reportId;
     let reportData = null;
 
-    if (databaseReady) {
-      const AuditReport = require("../backend/models/AuditReport");
-      const Asset = require("../backend/models/Asset");
-      const r = await AuditReport.findOne({ reportId });
-      if (r) {
-        const assetsList = await Asset.find({});
-        reportData = { ...r.toObject(), assetsList };
-      }
-    }
-
-    if (!reportData) {
-      const rep = mockDb.reports.find(r => r.reportId === reportId || r._id === reportId) || mockDb.reports[0];
-      reportData = { ...rep, assetsList: mockDb.assets };
-    }
+    const { generateYearlyReportOnFabric, getAllAssetsFromFabric } = require("../backend/services/fabricService");
+    const reportRes = await generateYearlyReportOnFabric(new Date().getFullYear());
+    const assetsRes = await getAllAssetsFromFabric();
+    reportData = {
+      reportId: reportId || `REP-${new Date().getFullYear()}`,
+      ...(reportRes.result || {}),
+      assetsList: assetsRes.assets || []
+    };
 
     if (format === "excel") {
       const buffer = await generateExcelBuffer(reportData);
@@ -1170,72 +1073,7 @@ app.get(["/api/reports/:reportId/export", "/reports/:reportId/export"], authenti
   }
 });
 
-app.use("/api", authenticate, async (req, res, next) => {
-  if (!databaseReady) {
-    if (req.path.includes("/export")) {
-      try {
-        const format = req.query.format || "pdf";
-        const pathParts = req.path.split("/");
-        const reportId = pathParts[2] || "REP-2025";
-        const rep = mockDb.reports.find(r => r.reportId === reportId || r._id === reportId) || mockDb.reports[0];
-        const reportData = { ...rep, assetsList: mockDb.assets };
-
-        if (format === "excel") {
-          const buffer = await generateExcelBuffer(reportData);
-          res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-          res.setHeader("Content-Disposition", `attachment; filename=${reportData.reportId}.xlsx`);
-          return res.send(buffer);
-        } else {
-          const buffer = await generatePdfBuffer(reportData);
-          res.setHeader("Content-Type", "application/pdf");
-          res.setHeader("Content-Disposition", `attachment; filename=${reportData.reportId}.pdf`);
-          return res.send(buffer);
-        }
-      } catch (exportErr) {
-        console.error("EXPORT ERROR STACK:", exportErr);
-        return res.status(500).json({ ok: false, error: exportErr.message, stack: exportErr.stack });
-      }
-    }
-    const payload = buildDemoApiResponse(req);
-    return res.status(200).json(payload);
-  }
-  return next();
-}, apiRoutes);
-
-app.get("/assets", async (req, res) => {
-  try {
-    const Asset = require("../backend/models/Asset");
-    if (!databaseReady) {
-      return res.json({ ok: true, data: [], message: "Database not available - demo mode" });
-    }
-    const filter = {};
-    if (req.query.assetId) filter.assetId = req.query.assetId;
-    if (req.query.department) filter.department = req.query.department;
-    if (req.query.category) filter.category = req.query.category;
-    if (req.query.status) filter.status = req.query.status;
-
-    const assets = await Asset.find(filter).sort({ createdAt: -1 }).limit(50);
-    res.json({ ok: true, data: assets });
-  } catch (error) {
-    handleError(res, error);
-  }
-});
-
-app.get("/assets/:assetId", async (req, res) => {
-  try {
-    const Asset = require("../backend/models/Asset");
-    if (!databaseReady) {
-      return res.status(404).json({ ok: false, error: "Database not available" });
-    }
-    const asset = await Asset.findOne({ assetId: req.params.assetId });
-    if (!asset) {
-      return res.status(404).json({ ok: false, error: "Asset not found" });
-    }
-    res.json({ ok: true, data: asset });
-  } catch (error) {
-    handleError(res, error);
-  }
-});
+app.use("/api", authenticate, apiRoutes);
 
 let server = null;
 
