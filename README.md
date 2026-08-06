@@ -23,7 +23,7 @@ A permissioned blockchain-based application for digitizing departmental asset ma
 - **Frontend**: HTML, CSS, JavaScript (Vanilla)
 - **Backend**: Node.js, Express.js, JWT, bcryptjs
 - **Blockchain**: Hyperledger Fabric v2.5, Go chaincode (Node.js SDK)
-- **Database**: MongoDB, Mongoose
+- **Ledger**: Hyperledger Fabric
 - **Reporting**: PDFKit (PDF), ExcelJS (Excel)
 
 ## New Business Modules
@@ -80,14 +80,6 @@ fabric-supply-chain/
 │   ├── app.js
 │   └── style.css
 ├── backend/             MongoDB models, controllers, services
-│   ├── models/
-│   │   ├── Department.js
-│   │   ├── Asset.js
-│   │   ├── MaintenanceRecord.js
-│   │   ├── Bill.js
-│   │   ├── CondemnationRecord.js
-│   │   ├── AuditReport.js
-│   │   └── User.js
 │   ├── controllers/
 │   │   ├── departmentController.js
 │   │   ├── assetController.js
@@ -227,8 +219,8 @@ The frontend provides:
                            │                      │
                            ▼                      ▼
                    ┌──────────────┐     ┌─────────────┐
-                   │   MongoDB    │     │   CouchDB   │
-                   │ (Metadata)   │     │ (Ledger)    │
+                   │   Fabric     │     │   CouchDB   │
+                   │ (Ledger)     │     │ (State DB)  │
                    └──────────────┘     └─────────────┘
 ```
 
@@ -259,7 +251,7 @@ The frontend provides:
 
 - If gateway fails to connect to Fabric, ensure network is running: `docker-compose -f docker-compose.yml up`
 - If crypto materials missing, regenerate: `cryptogen generate --config=network/crypto-config.yaml`
-- If MongoDB connection fails, check credentials in environment variables
+- If the gateway cannot reach Fabric, verify the network and chaincode are running
 
 ## Project Status
 

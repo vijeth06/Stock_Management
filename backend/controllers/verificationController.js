@@ -1,5 +1,15 @@
 const { recordAuditLog } = require("../services/auditService");
 const { checkDepartmentAccess } = require("../middleware/auth");
+const {
+  createEquipmentVerificationOnFabric,
+  getAllEquipmentVerificationsFromFabric,
+  createEquipmentCondemnationOnFabric,
+  getAllEquipmentCondemnationsFromFabric,
+  createConsumableVerificationOnFabric,
+  getAllConsumableVerificationsFromFabric,
+  createConsumableCondemnationOnFabric,
+  getAllConsumableCondemnationsFromFabric
+} = require("../services/fabricService");
 
 const verificationsStore = {
   equipmentVerifications: [],
@@ -55,9 +65,15 @@ async function createEquipmentVerification(req, res, next) {
       status: payload.status || "Completed",
       createdAt: new Date().toISOString()
     };
+
+    const fabricRes = await createEquipmentVerificationOnFabric(verification);
+    if (!fabricRes.success) {
+      return res.status(500).json({ ok: false, error: fabricRes.error || "Failed to store equipment verification on ledger" });
+    }
+
     verificationsStore.equipmentVerifications.unshift(verification);
 
-    res.status(201).json({ ok: true, data: verification });
+    res.status(201).json({ ok: true, data: verification, blockchain: fabricRes });
   } catch (error) {
     next(error);
   }
@@ -66,7 +82,8 @@ async function createEquipmentVerification(req, res, next) {
 async function getEquipmentVerifications(req, res, next) {
   try {
     const { department, year, page = 1, limit = 20 } = req.query;
-    let items = [...verificationsStore.equipmentVerifications];
+    const fabricRes = await getAllEquipmentVerificationsFromFabric();
+    let items = [...(fabricRes.records || []), ...verificationsStore.equipmentVerifications];
 
     if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
       items = items.filter(i => (i.department || '').toUpperCase() === req.user.department.toUpperCase());
@@ -119,9 +136,15 @@ async function createEquipmentCondemnation(req, res, next) {
       status: payload.status || "Pending",
       createdAt: new Date().toISOString()
     };
+
+    const fabricRes = await createEquipmentCondemnationOnFabric(record);
+    if (!fabricRes.success) {
+      return res.status(500).json({ ok: false, error: fabricRes.error || "Failed to store equipment condemnation on ledger" });
+    }
+
     verificationsStore.equipmentCondemnations.unshift(record);
 
-    res.status(201).json({ ok: true, data: record });
+    res.status(201).json({ ok: true, data: record, blockchain: fabricRes });
   } catch (error) {
     next(error);
   }
@@ -130,7 +153,8 @@ async function createEquipmentCondemnation(req, res, next) {
 async function getEquipmentCondemnations(req, res, next) {
   try {
     const { department, status, year, page = 1, limit = 20 } = req.query;
-    let items = [...verificationsStore.equipmentCondemnations];
+    const fabricRes = await getAllEquipmentCondemnationsFromFabric();
+    let items = [...(fabricRes.records || []), ...verificationsStore.equipmentCondemnations];
 
     if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
       items = items.filter(i => (i.department || '').toUpperCase() === req.user.department.toUpperCase());
@@ -237,9 +261,15 @@ async function createConsumableVerification(req, res, next) {
       status: payload.status || "Completed",
       createdAt: new Date().toISOString()
     };
+
+    const fabricRes = await createConsumableVerificationOnFabric(verification);
+    if (!fabricRes.success) {
+      return res.status(500).json({ ok: false, error: fabricRes.error || "Failed to store consumable verification on ledger" });
+    }
+
     verificationsStore.consumableVerifications.unshift(verification);
 
-    res.status(201).json({ ok: true, data: verification });
+    res.status(201).json({ ok: true, data: verification, blockchain: fabricRes });
   } catch (error) {
     next(error);
   }
@@ -248,7 +278,8 @@ async function createConsumableVerification(req, res, next) {
 async function getConsumableVerifications(req, res, next) {
   try {
     const { department, year, page = 1, limit = 20 } = req.query;
-    let items = [...verificationsStore.consumableVerifications];
+    const fabricRes = await getAllConsumableVerificationsFromFabric();
+    let items = [...(fabricRes.records || []), ...verificationsStore.consumableVerifications];
 
     if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
       items = items.filter(i => (i.department || '').toUpperCase() === req.user.department.toUpperCase());
@@ -296,9 +327,15 @@ async function createConsumableCondemnation(req, res, next) {
       status: payload.status || "Pending",
       createdAt: new Date().toISOString()
     };
+
+    const fabricRes = await createConsumableCondemnationOnFabric(record);
+    if (!fabricRes.success) {
+      return res.status(500).json({ ok: false, error: fabricRes.error || "Failed to store consumable condemnation on ledger" });
+    }
+
     verificationsStore.consumableCondemnations.unshift(record);
 
-    res.status(201).json({ ok: true, data: record });
+    res.status(201).json({ ok: true, data: record, blockchain: fabricRes });
   } catch (error) {
     next(error);
   }
@@ -307,7 +344,8 @@ async function createConsumableCondemnation(req, res, next) {
 async function getConsumableCondemnations(req, res, next) {
   try {
     const { department, status, year, page = 1, limit = 20 } = req.query;
-    let items = [...verificationsStore.consumableCondemnations];
+    const fabricRes = await getAllConsumableCondemnationsFromFabric();
+    let items = [...(fabricRes.records || []), ...verificationsStore.consumableCondemnations];
 
     if (department) items = items.filter(i => (i.department || '').toUpperCase() === String(department).toUpperCase());
     if (status) items = items.filter(i => i.status === status);

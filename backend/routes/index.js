@@ -7,9 +7,9 @@ const upload = multer({ dest: path.join(__dirname, "../../uploads/bills") });
 const { authenticate, authorize } = require("../middleware/auth");
 
 const departmentController = require("../controllers/departmentController");
-const assetController = require("../controllers/assetController");
+const assetController = require("../controllers/assetController.blockchain");
 const maintenanceController = require("../controllers/maintenanceController");
-const billController = require("../controllers/billController");
+const billController = require("../controllers/billController.blockchain");
 const condemnationController = require("../controllers/condemnationController");
 const verificationController = require("../controllers/verificationController");
 const reportController = require("../controllers/reportController");
@@ -87,7 +87,6 @@ router.get("/audit-logs", authorize(["Administrator", "AuditOfficer"]), async (r
 });
 
 const authController = require("../controllers/authController");
-router.post("/auth/gmail", authController.gmailAuth);
 router.get("/users/pending", authorize(["Administrator"]), authController.getPendingUsers);
 router.post("/users/:id/approve", authorize(["Administrator"]), authController.approveUser);
 router.post("/users/:id/reject", authorize(["Administrator"]), authController.rejectUser);

@@ -383,6 +383,55 @@ module.exports = {
         return { success: false, records: [], error: res.error };
     },
 
+    // VERIFICATION API
+    createEquipmentVerificationOnFabric: async function(payload) {
+        return await invokeChaincode("CreateEquipmentVerification", [JSON.stringify(payload)]);
+    },
+
+    getAllEquipmentVerificationsFromFabric: async function() {
+        const res = await invokeChaincode("GetAllEquipmentVerifications", [], true);
+        if (res.success) {
+            return { success: true, records: Array.isArray(res.result) ? res.result : [] };
+        }
+        return { success: false, records: [], error: res.error };
+    },
+
+    createEquipmentCondemnationOnFabric: async function(payload) {
+        return await invokeChaincode("CreateEquipmentCondemnation", [JSON.stringify(payload)]);
+    },
+
+    getAllEquipmentCondemnationsFromFabric: async function() {
+        const res = await invokeChaincode("GetAllEquipmentCondemnations", [], true);
+        if (res.success) {
+            return { success: true, records: Array.isArray(res.result) ? res.result : [] };
+        }
+        return { success: false, records: [], error: res.error };
+    },
+
+    createConsumableVerificationOnFabric: async function(payload) {
+        return await invokeChaincode("CreateConsumableVerification", [JSON.stringify(payload)]);
+    },
+
+    getAllConsumableVerificationsFromFabric: async function() {
+        const res = await invokeChaincode("GetAllConsumableVerifications", [], true);
+        if (res.success) {
+            return { success: true, records: Array.isArray(res.result) ? res.result : [] };
+        }
+        return { success: false, records: [], error: res.error };
+    },
+
+    createConsumableCondemnationOnFabric: async function(payload) {
+        return await invokeChaincode("CreateConsumableCondemnation", [JSON.stringify(payload)]);
+    },
+
+    getAllConsumableCondemnationsFromFabric: async function() {
+        const res = await invokeChaincode("GetAllConsumableCondemnations", [], true);
+        if (res.success) {
+            return { success: true, records: Array.isArray(res.result) ? res.result : [] };
+        }
+        return { success: false, records: [], error: res.error };
+    },
+
     // REPORT API
     generateYearlyReportOnFabric: async function(year) {
         const res = await invokeChaincode("GenerateYearlyReport", [year]);

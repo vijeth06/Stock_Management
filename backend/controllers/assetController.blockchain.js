@@ -3,16 +3,18 @@ const { createAssetOnFabric, updateAssetOnFabric, readAssetFromFabric, getAllAss
 async function createAsset(req, res, next) {
   try {
     const payload = req.body || {};
+    if (!payload.assetId || !payload.name) {
+      return res.status(400).json({ ok: false, error: 'assetId and name are required' });
+    }
+
     // Normalize department
     if (payload.department) payload.department = String(payload.department).trim().toUpperCase();
 
-    // Create asset on Fabric ledger (primary source)
     const fabricResult = await createAssetOnFabric(payload);
     if (!fabricResult || !fabricResult.success) {
       return res.status(500).json({ ok: false, error: 'Failed to create asset on Fabric', detail: fabricResult });
     }
 
-    // Return ledger-backed asset representation
     return res.status(201).json({ ok: true, data: { assetId: payload.assetId, blockchain: fabricResult } });
   } catch (err) {
     next(err);
@@ -140,6 +142,7 @@ module.exports = {
   getAsset,
   updateAsset,
   deleteAsset,
-  getAssetHistory
-  ,transferAsset,getTransfers
+  getAssetHistory,
+  transferAsset,
+  getTransfers
 };

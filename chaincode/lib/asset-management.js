@@ -353,6 +353,118 @@ class AssetManagementContract extends Contract {
     }
 
     // ==========================================
+    // VERIFICATION FUNCTIONS
+    // ==========================================
+
+    async CreateEquipmentVerification(ctx, payloadJson) {
+        const payload = JSON.parse(payloadJson);
+        const recordId = payload.recordId || `EQV-${Date.now()}`;
+        const record = {
+            ...payload,
+            _id: recordId,
+            recordId,
+            createdAt: new Date().toISOString()
+        };
+
+        await ctx.stub.putState(`EQV_${recordId}`, Buffer.from(JSON.stringify(record)));
+        return JSON.stringify(record);
+    }
+
+    async GetAllEquipmentVerifications(ctx) {
+        const iterator = await ctx.stub.getStateByRange('EQV_', 'EQV_\uffff');
+        const records = [];
+
+        for await (const res of iterator) {
+            if (res.value.toString().length > 0) {
+                const rec = JSON.parse(res.value.toString());
+                if (rec.recordId) records.push(rec);
+            }
+        }
+        return JSON.stringify(records);
+    }
+
+    async CreateEquipmentCondemnation(ctx, payloadJson) {
+        const payload = JSON.parse(payloadJson);
+        const recordId = payload.recordId || `EQC-${Date.now()}`;
+        const record = {
+            ...payload,
+            _id: recordId,
+            recordId,
+            createdAt: new Date().toISOString()
+        };
+
+        await ctx.stub.putState(`EQC_${recordId}`, Buffer.from(JSON.stringify(record)));
+        return JSON.stringify(record);
+    }
+
+    async GetAllEquipmentCondemnations(ctx) {
+        const iterator = await ctx.stub.getStateByRange('EQC_', 'EQC_\uffff');
+        const records = [];
+
+        for await (const res of iterator) {
+            if (res.value.toString().length > 0) {
+                const rec = JSON.parse(res.value.toString());
+                if (rec.recordId) records.push(rec);
+            }
+        }
+        return JSON.stringify(records);
+    }
+
+    async CreateConsumableVerification(ctx, payloadJson) {
+        const payload = JSON.parse(payloadJson);
+        const recordId = payload.recordId || `CNV-${Date.now()}`;
+        const record = {
+            ...payload,
+            _id: recordId,
+            recordId,
+            createdAt: new Date().toISOString()
+        };
+
+        await ctx.stub.putState(`CNV_${recordId}`, Buffer.from(JSON.stringify(record)));
+        return JSON.stringify(record);
+    }
+
+    async GetAllConsumableVerifications(ctx) {
+        const iterator = await ctx.stub.getStateByRange('CNV_', 'CNV_\uffff');
+        const records = [];
+
+        for await (const res of iterator) {
+            if (res.value.toString().length > 0) {
+                const rec = JSON.parse(res.value.toString());
+                if (rec.recordId) records.push(rec);
+            }
+        }
+        return JSON.stringify(records);
+    }
+
+    async CreateConsumableCondemnation(ctx, payloadJson) {
+        const payload = JSON.parse(payloadJson);
+        const recordId = payload.recordId || `CNC-${Date.now()}`;
+        const record = {
+            ...payload,
+            _id: recordId,
+            recordId,
+            createdAt: new Date().toISOString()
+        };
+
+        await ctx.stub.putState(`CNC_${recordId}`, Buffer.from(JSON.stringify(record)));
+        return JSON.stringify(record);
+    }
+
+    async GetAllConsumableCondemnations(ctx) {
+        const iterator = await ctx.stub.getStateByRange('CNC_', 'CNC_\uffff');
+        const records = [];
+
+        for await (const res of iterator) {
+            if (res.value.toString().length > 0) {
+                const rec = JSON.parse(res.value.toString());
+                if (rec.recordId) records.push(rec);
+            }
+        }
+        return JSON.stringify(records);
+    }
+
+    // ==========================================
     // CONDEMNATION FUNCTIONS
     // ==========================================
 

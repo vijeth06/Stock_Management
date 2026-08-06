@@ -1,25 +1,6 @@
 version: '3.8'
 
 services:
-  mongodb:
-    image: mongo:7
-    container_name: am-mongodb
-    restart: unless-stopped
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: password
-    healthcheck:
-      test: ["CMD", "mongosh", "--username", "admin", "--password", "password", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - fabric-network
-
   couchdb:
     image: couchdb:3.2
     container_name: am-couchdb
@@ -58,8 +39,7 @@ services:
       - "7050:7050"
     networks:
       - fabric-network
-    depends_on:
-      - mongodb
+    depends_on: []
 
   peer0.org1.example.com:
     image: hyperledger/fabric-peer:2.5
@@ -126,12 +106,10 @@ services:
       - "3000:3000"
     environment:
       PORT: 3000
-      MONGO_URI: mongodb://admin:password@mongodb:27017/assetmanagement?authSource=admin
       JWT_SECRET: change-me-in-production
       FABRIC_NETWORK_PATH: /app/network
       NODE_PATH: /app/node_modules:/app/gateway/node_modules
     depends_on:
-      - mongodb
       - couchdb
       - peer0.org1.example.com
       - orderer.example.com
@@ -152,7 +130,6 @@ services:
     entrypoint: /bin/bash
 
 volumes:
-  mongodb_data:
   couchdb_data:
 
 networks:
