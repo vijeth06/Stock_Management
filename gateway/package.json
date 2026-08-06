@@ -8,16 +8,19 @@
     "health": "node app.js"
   },
   "dependencies": {
+    "aws-sdk": "^2.1340.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
+    "departmental-asset-management-fabric": "file:..",
     "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
     "express": "^4.19.2",
+    "fabric-ca-client": "^2.0.0",
+    "fabric-network": "^2.0.0",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
-    "fabric-network": "^2.0.0",
-    "fabric-ca-client": "^2.0.0",
+    "multer": "^1.4.5-lts.1",
     "pdfkit": "^0.15.0",
-    "exceljs": "^4.4.0",
-    "multer": "^1.4.5-lts.1"
+    "prom-client": "^14.0.1"
   }
 }

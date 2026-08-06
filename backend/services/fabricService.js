@@ -1,95 +1,6 @@
 const { Gateway, Wallets } = require("fabric-network");
 const path = require("path");
 const fs = require("fs");
-const AssetManagementContract = require("../../chaincode/lib/asset-management");
-
-// Instantiate chaincode contract engine for local/fallback execution
-const contractEngine = new AssetManagementContract();
-
-// In-Memory Fabric Ledger Stub (World State & Transaction History)
-class FabricLedgerStub {
-    constructor() {
-        this.worldState = new Map();
-        this.history = new Map();
-    }
-
-    async putState(key, value) {
-        const valBuffer = Buffer.isBuffer(value) ? value : Buffer.from(value);
-        this.worldState.set(key, valBuffer);
-
-        if (!this.history.has(key)) {
-            this.history.set(key, []);
-        }
-        this.history.get(key).push({
-            timestamp: new Date().toISOString(),
-            isDelete: false,
-            value: valBuffer
-        });
-    }
-
-    async getState(key) {
-        return this.worldState.get(key) || null;
-    }
-
-    async delState(key) {
-        this.worldState.delete(key);
-        if (!this.history.has(key)) {
-            this.history.set(key, []);
-        }
-        this.history.get(key).push({
-            timestamp: new Date().toISOString(),
-            isDelete: true,
-            value: Buffer.from('')
-        });
-    }
-
-    async *getStateByRange(startKey, endKey) {
-        const keys = Array.from(this.worldState.keys()).sort();
-        for (const k of keys) {
-            if (startKey && k < startKey) continue;
-            if (endKey && endKey !== '\uffff' && k > endKey) continue;
-            yield {
-                key: k,
-                value: this.worldState.get(k)
-            };
-        }
-    }
-
-    async *getHistoryForKey(key) {
-        const items = this.history.get(key) || [];
-        for (const item of items) {
-            yield item;
-        }
-    }
-}
-
-const localLedgerStub = new FabricLedgerStub();
-const localCtx = { stub: localLedgerStub };
-
-// Initialize default ledger data in fallback state
-let isLedgerInitialized = false;
-async function ensureLocalLedgerInitialized() {
-    if (!isLedgerInitialized) {
-        try {
-            await contractEngine.InitLedger(localCtx);
-            isLedgerInitialized = true;
-        } catch (e) {
-            console.warn('Failed to init local ledger:', e.message);
-        }
-    }
-}
-ensureLocalLedgerInitialized();
-
-// Helper to execute chaincode function locally via ledger stub
-async function executeChaincodeLocal(fnName, ...args) {
-    await ensureLocalLedgerInitialized();
-    if (typeof contractEngine[fnName] !== 'function') {
-        throw new Error(`Chaincode method ${fnName} not found`);
-    }
-    const res = await contractEngine[fnName](localCtx, ...args);
-    return res !== undefined ? res : null;
-}
-
 const ccpPath = path.resolve(__dirname, "../../network/connections/connection-org1.json");
 
 function getCCP() {
@@ -98,6 +9,7 @@ function getCCP() {
         const ccpRaw = fs.readFileSync(ccpPath, "utf8");
         let ccp = JSON.parse(ccpRaw);
         const fabricHost = process.env.FABRIC_HOST || "localhost";
+        const ordererHost = process.env.FABRIC_ORDERER_HOST || (fabricHost === "peer0.org1.example.com" ? "orderer.example.com" : fabricHost);
         const peerPort = process.env.FABRIC_PEER_PORT || "7051";
         const ordererPort = process.env.FABRIC_ORDERER_PORT || "7050";
 
@@ -105,7 +17,7 @@ function getCCP() {
             const rawString = JSON.stringify(ccp);
             const updatedString = rawString
                 .replace(/localhost:7051/g, `${fabricHost}:${peerPort}`)
-                .replace(/localhost:7050/g, `${fabricHost}:${ordererPort}`);
+                .replace(/localhost:7050/g, `${ordererHost}:${ordererPort}`);
             ccp = JSON.parse(updatedString);
         }
         return ccp;
@@ -142,72 +54,61 @@ async function getGateway() {
     return gateway;
 }
 
-// Low-level helper to execute Fabric transactions (or fallback to local chaincode engine)
+// Helper to execute Fabric transactions via SDK (strictly no in-memory fallback)
 async function invokeChaincode(fnName, args = [], isQuery = false) {
-    const isSDKEnabled = process.env.ENABLE_FABRIC_SDK === "true";
-    let gateway;
-    if (isSDKEnabled) {
-            const maxRetries = Number(process.env.FABRIC_SDK_MAX_RETRIES || 3);
-            const baseMs = Number(process.env.FABRIC_SDK_RETRY_BASE_MS || 200);
-            let attempt = 0;
-            let lastErr = null;
-            const metrics = (() => { try { return require('./metricsService'); } catch (e) { return {}; } })();
-            try { if (metrics && metrics.fabricInvokeCounter) metrics.fabricInvokeCounter.inc(); } catch (e) {}
-            while (attempt <= maxRetries) {
-                try {
-                    gateway = await getGateway();
-                    if (gateway) {
-                        const network = await gateway.getNetwork("assets");
-                        const contract = network.getContract("asset-management");
-                        let result;
-                        let txId = `tx-${Date.now()}`;
+    const isSDKEnabled = process.env.ENABLE_FABRIC_SDK !== "false"; // default enabled
+    if (!isSDKEnabled) {
+        return { success: false, error: "Fabric SDK is disabled in environment" };
+    }
 
-                        if (isQuery) {
-                            result = await contract.evaluateTransaction(fnName, ...args.map(String));
-                        } else {
-                            const tx = contract.createTransaction(fnName);
-                            result = await tx.submit(...args.map(String));
-                            txId = tx.getTransactionId();
-                        }
+    const maxRetries = Number(process.env.FABRIC_SDK_MAX_RETRIES || 3);
+    const baseMs = Number(process.env.FABRIC_SDK_RETRY_BASE_MS || 200);
+    let attempt = 0;
+    let lastErr = null;
+    const metrics = (() => { try { return require('./metricsService'); } catch (e) { return {}; } })();
+    try { if (metrics && metrics.fabricInvokeCounter) metrics.fabricInvokeCounter.inc(); } catch (e) {}
 
-                        const rawStr = result ? result.toString() : '';
-                        let parsed = rawStr;
-                        try { parsed = JSON.parse(rawStr); } catch (e) {}
-                        return { success: true, transactionId: txId, result: parsed };
-                    }
-                } catch (err) {
-                    lastErr = err;
-                    try { if (metrics && metrics.fabricRetryCounter) metrics.fabricRetryCounter.inc(); } catch (e) {}
-                    const shouldRetry = attempt < maxRetries;
-                    const jitter = Math.floor(Math.random() * 100);
-                    const waitMs = baseMs * Math.pow(2, attempt) + jitter;
-                    console.warn(`fabricService.invokeChaincode attempt ${attempt} failed: ${err.message}. retry=${shouldRetry} wait=${waitMs}ms`);
-                    if (!shouldRetry) break;
-                    await new Promise(r => setTimeout(r, waitMs));
-                    attempt++;
-                    continue;
-                } finally {
-                    if (gateway) { try { gateway.disconnect(); } catch (e) {} }
+    while (attempt <= maxRetries) {
+        let gateway;
+        try {
+            gateway = await getGateway();
+            if (gateway) {
+                const network = await gateway.getNetwork("assets");
+                const contract = network.getContract("asset-management");
+                let result;
+                let txId = `tx-${Date.now()}`;
+
+                if (isQuery) {
+                    result = await contract.evaluateTransaction(fnName, ...args.map(String));
+                } else {
+                    const tx = contract.createTransaction(fnName);
+                    result = await tx.submit(...args.map(String));
+                    txId = tx.getTransactionId();
                 }
-                break;
+
+                const rawStr = result ? result.toString() : '';
+                let parsed = rawStr;
+                try { parsed = JSON.parse(rawStr); } catch (e) {}
+                return { success: true, transactionId: txId, result: parsed };
+            } else {
+                throw new Error("Unable to connect Hyperledger Fabric Gateway (wallet or connection profile missing)");
             }
-            if (lastErr) {
-                console.warn('All SDK attempts failed, falling back to local chaincode engine. Last error:', lastErr.message || lastErr);
-            }
+        } catch (err) {
+            lastErr = err;
+            try { if (metrics && metrics.fabricRetryCounter) metrics.fabricRetryCounter.inc(); } catch (e) {}
+            const shouldRetry = attempt < maxRetries;
+            const jitter = Math.floor(Math.random() * 100);
+            const waitMs = baseMs * Math.pow(2, attempt) + jitter;
+            console.warn(`fabricService.invokeChaincode attempt ${attempt} failed: ${err.message}. retry=${shouldRetry} wait=${waitMs}ms`);
+            if (!shouldRetry) break;
+            await new Promise(r => setTimeout(r, waitMs));
+            attempt++;
+        } finally {
+            if (gateway) { try { gateway.disconnect(); } catch (e) {} }
+        }
     }
 
-    try {
-        const rawRes = await executeChaincodeLocal(fnName, ...args.map(String));
-        let parsed = rawRes;
-        try { parsed = JSON.parse(rawRes); } catch (e) {}
-        return {
-            success: true,
-            transactionId: `tx-local-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-            result: parsed
-        };
-    } catch (localErr) {
-        return { success: false, error: localErr.message };
-    }
+    return { success: false, error: lastErr ? lastErr.message : "Fabric transaction execution failed" };
 }
 
 // Exported Fabric Ledger API Wrappers

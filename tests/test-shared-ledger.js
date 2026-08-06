@@ -83,7 +83,8 @@ async function runSharedLedgerTest() {
       "Server Room - Rack 4",
       "Dev A (Developer 1)",
       "2029-07-30",
-      "a3f5b72189cd"
+      "a3f5b72189cd",
+      "Active"
     );
 
     console.log(`✅ [Developer A] Asset created successfully! TxID: ${createTx.getTransactionId()}`);
@@ -113,9 +114,9 @@ async function runSharedLedgerTest() {
     // -------------------------------------------------------------------------
     // TEST STEP 3: Developer B updates asset status on the shared ledger
     // -------------------------------------------------------------------------
-    console.log(`▶ [Developer B] Updating asset status on shared ledger to 'Under Maintenance'...`);
+    console.log(`▶ [Developer B] Updating asset status on shared ledger to 'Maintenance'...`);
     const updateTxB = contractB.createTransaction("UpdateAsset");
-    await updateTxB.submit(assetId, "status", "Under Maintenance");
+    await updateTxB.submit(assetId, "status", "Maintenance");
     console.log(`✅ [Developer B] Asset updated! TxID: ${updateTxB.getTransactionId()}\n`);
 
     // -------------------------------------------------------------------------
@@ -128,8 +129,8 @@ async function runSharedLedgerTest() {
     console.log(`✅ [Developer A] Updated asset retrieved from shared ledger!`);
     console.log(`   New Status: ${parsedAssetA.status}`);
 
-    if (parsedAssetA.status !== "Under Maintenance") {
-      throw new Error(`State synchronization failure! Expected status 'Under Maintenance', got ${parsedAssetA.status}`);
+    if (parsedAssetA.status !== "Maintenance") {
+      throw new Error(`State synchronization failure! Expected status 'Maintenance', got ${parsedAssetA.status}`);
     }
 
     // -------------------------------------------------------------------------

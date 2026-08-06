@@ -27,6 +27,7 @@ gateway/uploads/
 uploads/
 data/
 mongo-data/
+minio-data/
 tmp/
 
 # ── OS ────────────────────────────────────────────────────────

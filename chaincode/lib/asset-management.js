@@ -1,3 +1,21 @@
+
+async function getAllResults(iterator) {
+    const allResults = [];
+    try {
+        let res = await iterator.next();
+        while (!res.done) {
+            if (res.value) {
+                allResults.push(res.value);
+            }
+            res = await iterator.next();
+        }
+    } finally {
+        if (iterator && typeof iterator.close === 'function') {
+            await iterator.close();
+        }
+    }
+    return allResults;
+}
 let Contract;
 try {
     Contract = require('fabric-contract-api').Contract;
@@ -68,7 +86,7 @@ class AssetManagementContract extends Contract {
         const idKey = `USER_ID_${userId}`;
 
         const userObj = {
-            _id: userId,
+            id: userId,
             userId,
             name,
             email: email.toLowerCase().trim(),
@@ -132,7 +150,8 @@ class AssetManagementContract extends Contract {
         const users = [];
         const seenEmails = new Set();
 
-        for await (const res of iterator) {
+        const res_items = await getAllResults(iterator);
+        for (const res of res_items) {
             if (res.key.startsWith('USER_ID_')) continue;
             if (res.value.toString().length > 0) {
                 const user = JSON.parse(res.value.toString());
@@ -153,7 +172,7 @@ class AssetManagementContract extends Contract {
         console.info(`=== CreateDepartment: Creating department ${code} ===`);
         const deptKey = `DEPT_${code.toUpperCase().trim()}`;
         const deptObj = {
-            _id: `dept-${Date.now()}`,
+            id: `dept-${Date.now()}`,
             code: code.toUpperCase().trim(),
             name,
             description,
@@ -198,7 +217,8 @@ class AssetManagementContract extends Contract {
         const iterator = await ctx.stub.getStateByRange('DEPT_', 'DEPT_\uffff');
         const depts = [];
 
-        for await (const res of iterator) {
+        const res_items = await getAllResults(iterator);
+        for (const res of res_items) {
             if (res.value.toString().length > 0) {
                 const dept = JSON.parse(res.value.toString());
                 if (dept.code) {
@@ -217,7 +237,7 @@ class AssetManagementContract extends Contract {
         console.info(`=== CreateBill: Recording bill ${billId} ===`);
         const billKey = `BILL_${billId}`;
         const billObj = {
-            _id: `bill-${Date.now()}`,
+            id: `bill-${Date.now()}`,
             billId,
             assetId,
             vendor: vendor || '',
@@ -264,7 +284,8 @@ class AssetManagementContract extends Contract {
         const iterator = await ctx.stub.getStateByRange('BILL_', 'BILL_\uffff');
         const bills = [];
 
-        for await (const res of iterator) {
+        const res_items = await getAllResults(iterator);
+        for (const res of res_items) {
             if (res.value.toString().length > 0) {
                 const bill = JSON.parse(res.value.toString());
                 if (bill.billId) {
@@ -315,7 +336,7 @@ class AssetManagementContract extends Contract {
         const recordId = `MNT-${Date.now()}`;
         
         const maintenanceRecord = {
-            _id: recordId,
+            id: recordId,
             recordId,
             assetId,
             technician,
@@ -344,7 +365,8 @@ class AssetManagementContract extends Contract {
         const iterator = await ctx.stub.getStateByRange('MNT_', 'MNT_\uffff');
         const records = [];
 
-        for await (const res of iterator) {
+        const res_items = await getAllResults(iterator);
+        for (const res of res_items) {
             if (res.value.toString().length > 0) {
                 const rec = JSON.parse(res.value.toString());
                 if (rec.recordId) records.push(rec);
@@ -362,7 +384,7 @@ class AssetManagementContract extends Contract {
         const recordId = payload.recordId || `EQV-${Date.now()}`;
         const record = {
             ...payload,
-            _id: recordId,
+            id: recordId,
             recordId,
             createdAt: new Date().toISOString()
         };
@@ -375,7 +397,8 @@ class AssetManagementContract extends Contract {
         const iterator = await ctx.stub.getStateByRange('EQV_', 'EQV_\uffff');
         const records = [];
 
-        for await (const res of iterator) {
+        const res_items = await getAllResults(iterator);
+        for (const res of res_items) {
             if (res.value.toString().length > 0) {
                 const rec = JSON.parse(res.value.toString());
                 if (rec.recordId) records.push(rec);
@@ -389,7 +412,7 @@ class AssetManagementContract extends Contract {
         const recordId = payload.recordId || `EQC-${Date.now()}`;
         const record = {
             ...payload,
-            _id: recordId,
+            id: recordId,
             recordId,
             createdAt: new Date().toISOString()
         };
@@ -402,7 +425,8 @@ class AssetManagementContract extends Contract {
         const iterator = await ctx.stub.getStateByRange('EQC_', 'EQC_\uffff');
         const records = [];
 
-        for await (const res of iterator) {
+        const res_items = await getAllResults(iterator);
+        for (const res of res_items) {
             if (res.value.toString().length > 0) {
                 const rec = JSON.parse(res.value.toString());
                 if (rec.recordId) records.push(rec);
@@ -416,7 +440,7 @@ class AssetManagementContract extends Contract {
         const recordId = payload.recordId || `CNV-${Date.now()}`;
         const record = {
             ...payload,
-            _id: recordId,
+            id: recordId,
             recordId,
             createdAt: new Date().toISOString()
         };
@@ -429,7 +453,8 @@ class AssetManagementContract extends Contract {
         const iterator = await ctx.stub.getStateByRange('CNV_', 'CNV_\uffff');
         const records = [];
 
-        for await (const res of iterator) {
+        const res_items = await getAllResults(iterator);
+        for (const res of res_items) {
             if (res.value.toString().length > 0) {
                 const rec = JSON.parse(res.value.toString());
                 if (rec.recordId) records.push(rec);
@@ -443,7 +468,7 @@ class AssetManagementContract extends Contract {
         const recordId = payload.recordId || `CNC-${Date.now()}`;
         const record = {
             ...payload,
-            _id: recordId,
+            id: recordId,
             recordId,
             createdAt: new Date().toISOString()
         };
@@ -456,7 +481,8 @@ class AssetManagementContract extends Contract {
         const iterator = await ctx.stub.getStateByRange('CNC_', 'CNC_\uffff');
         const records = [];
 
-        for await (const res of iterator) {
+        const res_items = await getAllResults(iterator);
+        for (const res of res_items) {
             if (res.value.toString().length > 0) {
                 const rec = JSON.parse(res.value.toString());
                 if (rec.recordId) records.push(rec);
@@ -485,7 +511,7 @@ class AssetManagementContract extends Contract {
 
         const recordId = `COND-${Date.now()}`;
         const condemnationRecord = {
-            _id: recordId,
+            id: recordId,
             recordId,
             assetId,
             reason,
@@ -561,7 +587,8 @@ class AssetManagementContract extends Contract {
         const iterator = await ctx.stub.getStateByRange('COND_', 'COND_\uffff');
         const records = [];
 
-        for await (const res of iterator) {
+        const res_items = await getAllResults(iterator);
+        for (const res of res_items) {
             if (res.value.toString().length > 0) {
                 const rec = JSON.parse(res.value.toString());
                 if (rec.recordId) records.push(rec);
@@ -583,7 +610,7 @@ class AssetManagementContract extends Contract {
         }
 
         const asset = {
-            _id: `asset-${Date.now()}`,
+            id: `asset-${Date.now()}`,
             assetId,
             department: (department || 'IT').toUpperCase(),
             category: category || 'General',
@@ -675,7 +702,8 @@ class AssetManagementContract extends Contract {
         const iterator = await ctx.stub.getHistoryForKey(assetId);
         const allChanges = [];
 
-        for await (const change of iterator) {
+        const change_items = await getAllResults(iterator);
+        for (const change of change_items) {
             allChanges.push({
                 timestamp: change.timestamp.toString(),
                 isDelete: change.isDelete,
@@ -716,7 +744,8 @@ class AssetManagementContract extends Contract {
         const iterator = await ctx.stub.getStateByRange('', '');
         const assets = [];
 
-        for await (const res of iterator) {
+        const res_items = await getAllResults(iterator);
+        for (const res of res_items) {
             if (res.value.toString().length > 0) {
                 // Exclude prefixed metadata keys
                 if (res.key.startsWith('USER_') || res.key.startsWith('DEPT_') || 

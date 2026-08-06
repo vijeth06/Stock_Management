@@ -20,13 +20,13 @@ Organizations:
     Policies:
       Readers:
         Type: Signature
-        Rule: "OR('Org1MSP.admin', 'Org1MSP.peer', 'Org1MSP.client')"
+        Rule: "OR('Org1MSP.admin', 'Org1MSP.peer', 'Org1MSP.client', 'Org1MSP.member')"
       Writers:
         Type: Signature
-        Rule: "OR('Org1MSP.admin', 'Org1MSP.client')"
+        Rule: "OR('Org1MSP.admin', 'Org1MSP.client', 'Org1MSP.member')"
       Admins:
         Type: Signature
-        Rule: "OR('Org1MSP.admin')"
+        Rule: "OR('Org1MSP.admin', 'Org1MSP.member')"
     AnchorPeers:
       - Host: peer0.org1.example.com
         Port: 7051
@@ -100,13 +100,13 @@ Profiles:
             Policies:
               Readers:
                 Type: Signature
-                Rule: "OR('Org1MSP.admin')"
+                Rule: "OR('Org1MSP.admin', 'Org1MSP.peer', 'Org1MSP.client', 'Org1MSP.member')"
               Writers:
                 Type: Signature
-                Rule: "OR('Org1MSP.admin')"
+                Rule: "OR('Org1MSP.admin', 'Org1MSP.client', 'Org1MSP.member')"
               Admins:
                 Type: Signature
-                Rule: "OR('Org1MSP.admin')"
+                Rule: "OR('Org1MSP.admin', 'Org1MSP.member')"
             AnchorPeers:
               - Host: peer0.org1.example.com
                 Port: 7051

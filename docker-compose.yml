@@ -101,6 +101,7 @@ services:
       - ./backend:/app/backend
       - ./network:/app/network
       - ./client:/app/client
+      - ./chaincode:/app/chaincode
       - ./node_modules:/app/node_modules
     ports:
       - "3000:3000"
@@ -113,7 +114,13 @@ services:
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
       FABRIC_NETWORK_PATH: /app/network
+      ENABLE_FABRIC_SDK: "true"
+      FABRIC_IDENTITY: "appUser"
+      FABRIC_HOST: "peer0.org1.example.com"
+      FABRIC_DISCOVERY_AS_LOCALHOST: "false"
       NODE_PATH: /app/node_modules:/app/gateway/node_modules
+    networks:
+      - fabric-network
     depends_on:
       - couchdb
       - peer0.org1.example.com
@@ -132,6 +139,8 @@ services:
     volumes:
       - ./scripts:/scripts
       - ./network:/etc/hyperledger/fabric
+    networks:
+      - fabric-network
     entrypoint: /bin/bash
 
   minio:
