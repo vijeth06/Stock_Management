@@ -4,6 +4,14 @@ const multer = require("multer");
 const router = express.Router();
 
 const upload = multer({ dest: path.join(__dirname, "../../uploads/bills") });
+// Conditional multer middleware: only apply when request is multipart/form-data
+function conditionalUpload(req, res, next) {
+  const ct = req.headers['content-type'] || '';
+  if (ct.indexOf('multipart/form-data') === 0) {
+    return upload.single('billDocument')(req, res, next);
+  }
+  return next();
+}
 const { authenticate, authorize } = require("../middleware/auth");
 
 const departmentController = require("../controllers/departmentController");
@@ -38,9 +46,11 @@ router.put("/maintenance/:recordId", authorize(["Administrator", "DepartmentUser
 
 router.get("/bills", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), billController.getBills);
 router.get("/bills/:billId", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), billController.getBill);
-router.post("/bills", authorize(["Administrator", "DepartmentUser"]), upload.single("billDocument"), billController.uploadBill);
+router.post("/bills", authorize(["Administrator", "DepartmentUser"]), conditionalUpload, billController.uploadBill);
 router.post("/bills/:billId/verify", authorize(["Administrator", "AuditOfficer"]), billController.verifyBill);
 router.put("/bills/:billId/payment", authorize(["Administrator", "DepartmentUser"]), billController.updatePaymentStatus);
+router.post("/bills/:billId/download-token", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), billController.generateBillDownloadToken);
+router.get("/bills/download", billController.downloadBillByToken);
 
 router.get("/condemnation", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), condemnationController.getCondemnationRecords);
 router.get("/condemnation/:recordId", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), condemnationController.getCondemnationRecord);
@@ -90,5 +100,7 @@ const authController = require("../controllers/authController");
 router.get("/users/pending", authorize(["Administrator"]), authController.getPendingUsers);
 router.post("/users/:id/approve", authorize(["Administrator"]), authController.approveUser);
 router.post("/users/:id/reject", authorize(["Administrator"]), authController.rejectUser);
+
+// Test endpoint removed: ledger writes should happen via standard `/api/bills` flow.
 
 module.exports = router;

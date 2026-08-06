@@ -1359,7 +1359,8 @@ function renderBills(bills) {
         <div class="muted">Invoice: ${escapeHtml(b.invoiceNumber)} | Asset: ${escapeHtml(b.assetId || 'N/A')}</div>
       </div>
       <div>
-        <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:11.5px;" onclick="verifyBillDirect('${escapeHtml(b.billId)}', '${escapeHtml(b.documentHash || '')}')">Verify</button>
+            <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:11.5px; margin-right:6px;" onclick="requestBillDownload('${escapeHtml(b.billId)}')">Download</button>
+            <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:11.5px;" onclick="verifyBillDirect('${escapeHtml(b.billId)}', '${escapeHtml(b.documentHash || '')}')">Verify</button>
       </div>
     </div>
   `).join('');
@@ -1401,6 +1402,19 @@ window.verifyBillDirect = async function(billId, hash) {
     loadBills();
   }
   showResult(res);
+};
+
+window.requestBillDownload = async function(billId) {
+  setLoading(`Requesting download token for ${billId}...`);
+  const res = await requestJson(`/api/bills/${encodeURIComponent(billId)}/download-token`, { method: 'POST' });
+  if (res.ok && res.data && res.data.token) {
+    const url = `/api/bills/download?token=${encodeURIComponent(res.data.token)}`;
+    window.open(url, '_blank');
+    showToast('Download opened in new tab', 'info');
+  } else {
+    showResult(res);
+  }
+  clearLoading();
 };
 
 // PROFORMA-I TO IV & AUDIT LOGS

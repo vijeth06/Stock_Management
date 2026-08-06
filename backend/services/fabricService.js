@@ -147,32 +147,53 @@ async function invokeChaincode(fnName, args = [], isQuery = false) {
     const isSDKEnabled = process.env.ENABLE_FABRIC_SDK === "true";
     let gateway;
     if (isSDKEnabled) {
-        try {
-            gateway = await getGateway();
-            if (gateway) {
-                const network = await gateway.getNetwork("assets");
-                const contract = network.getContract("asset-management");
-                let result;
-                let txId = `tx-${Date.now()}`;
+            const maxRetries = Number(process.env.FABRIC_SDK_MAX_RETRIES || 3);
+            const baseMs = Number(process.env.FABRIC_SDK_RETRY_BASE_MS || 200);
+            let attempt = 0;
+            let lastErr = null;
+            const metrics = (() => { try { return require('./metricsService'); } catch (e) { return {}; } })();
+            try { if (metrics && metrics.fabricInvokeCounter) metrics.fabricInvokeCounter.inc(); } catch (e) {}
+            while (attempt <= maxRetries) {
+                try {
+                    gateway = await getGateway();
+                    if (gateway) {
+                        const network = await gateway.getNetwork("assets");
+                        const contract = network.getContract("asset-management");
+                        let result;
+                        let txId = `tx-${Date.now()}`;
 
-                if (isQuery) {
-                    result = await contract.evaluateTransaction(fnName, ...args.map(String));
-                } else {
-                    const tx = contract.createTransaction(fnName);
-                    result = await tx.submit(...args.map(String));
-                    txId = tx.getTransactionId();
+                        if (isQuery) {
+                            result = await contract.evaluateTransaction(fnName, ...args.map(String));
+                        } else {
+                            const tx = contract.createTransaction(fnName);
+                            result = await tx.submit(...args.map(String));
+                            txId = tx.getTransactionId();
+                        }
+
+                        const rawStr = result ? result.toString() : '';
+                        let parsed = rawStr;
+                        try { parsed = JSON.parse(rawStr); } catch (e) {}
+                        return { success: true, transactionId: txId, result: parsed };
+                    }
+                } catch (err) {
+                    lastErr = err;
+                    try { if (metrics && metrics.fabricRetryCounter) metrics.fabricRetryCounter.inc(); } catch (e) {}
+                    const shouldRetry = attempt < maxRetries;
+                    const jitter = Math.floor(Math.random() * 100);
+                    const waitMs = baseMs * Math.pow(2, attempt) + jitter;
+                    console.warn(`fabricService.invokeChaincode attempt ${attempt} failed: ${err.message}. retry=${shouldRetry} wait=${waitMs}ms`);
+                    if (!shouldRetry) break;
+                    await new Promise(r => setTimeout(r, waitMs));
+                    attempt++;
+                    continue;
+                } finally {
+                    if (gateway) { try { gateway.disconnect(); } catch (e) {} }
                 }
-
-                const rawStr = result ? result.toString() : '';
-                let parsed = rawStr;
-                try { parsed = JSON.parse(rawStr); } catch (e) {}
-                return { success: true, transactionId: txId, result: parsed };
+                break;
             }
-        } catch (err) {
-            // Fallback to local chaincode engine
-        } finally {
-            if (gateway) { try { gateway.disconnect(); } catch (e) {} }
-        }
+            if (lastErr) {
+                console.warn('All SDK attempts failed, falling back to local chaincode engine. Last error:', lastErr.message || lastErr);
+            }
     }
 
     try {
@@ -310,15 +331,17 @@ module.exports = {
 
     // BILL API
     createBillOnFabric: async function(billData) {
-        return await invokeChaincode("CreateBill", [
+        const args = [
             billData.billId || `BILL-${Date.now()}`,
             billData.assetId || "",
             billData.vendor || "",
             billData.invoiceNumber || "",
             billData.amount || 0,
             billData.documentHash || billData.billHash || "",
-            billData.paymentStatus || "Paid"
-        ]);
+            billData.paymentStatus || "Paid",
+            billData.documentKey || ""
+        ];
+        return await invokeChaincode("CreateBill", args);
     },
 
     readBillFromFabric: async function(billId) {

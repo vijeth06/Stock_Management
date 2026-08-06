@@ -213,7 +213,7 @@ class AssetManagementContract extends Contract {
     // BILL MANAGEMENT FUNCTIONS
     // ==========================================
 
-    async CreateBill(ctx, billId, assetId, vendor, invoiceNumber, amount, documentHash, paymentStatus) {
+    async CreateBill(ctx, billId, assetId, vendor, invoiceNumber, amount, documentHash, paymentStatus, documentKey) {
         console.info(`=== CreateBill: Recording bill ${billId} ===`);
         const billKey = `BILL_${billId}`;
         const billObj = {
@@ -225,6 +225,7 @@ class AssetManagementContract extends Contract {
             amount: parseFloat(amount || 0),
             documentHash: documentHash || '',
             billHash: documentHash || '',
+            documentKey: documentKey || '',
             verified: true,
             paymentStatus: paymentStatus || 'Paid',
             createdAt: new Date().toISOString()

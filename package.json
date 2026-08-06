@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "scripts": {
     "gateway": "cd gateway && npm start",
+    "start:all": "docker-compose -f docker-compose.yml up -d && npm --prefix gateway start",
     "test": "node tests/api.test.js",
     "test:backend": "node tests/api.test.js",
     "test:api": "node tests/api.test.js",
@@ -21,6 +22,8 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.2.0",
+    "aws-sdk": "^2.1340.0",
+    "prom-client": "^14.0.1",
     "pdfkit": "^0.19.1",
     "node-fetch": "^2.7.0"
   }

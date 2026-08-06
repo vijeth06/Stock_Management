@@ -4,12 +4,21 @@ const path = require("path");
 const helmet = require("helmet");
 const cors = require("cors");
 const { authenticate } = require("../backend/middleware/auth");
-const { register, login, gmailAuth } = require("../backend/controllers/authController");
+const { register: authRegister, login, gmailAuth } = require("../backend/controllers/authController");
 const { seedDemoAdmin } = require("../backend/services/authService");
 const apiRoutes = require("../backend/routes");
 const { generatePdfBuffer, generateExcelBuffer } = require("../backend/services/reportExportService");
+const { register, fabricInvokeCounter, fabricRetryCounter } = require('../backend/services/metricsService');
 
 const app = express();
+app.get('/metrics', async (req, res) => {
+  try {
+    res.setHeader('Content-Type', register.contentType);
+    res.end(await register.metrics());
+  } catch (err) {
+    res.status(500).end(err.message);
+  }
+});
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
@@ -41,7 +50,7 @@ app.get("/health", async (req, res) => {
   }
 });
 
-app.post("/auth/register", register);
+app.post("/auth/register", authRegister);
 app.post("/auth/login", login);
 app.post("/auth/gmail", gmailAuth);
 app.get("/users/me", authenticate, (req, res) => {
@@ -116,3 +125,5 @@ const shutdown = () => {
 
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
+
+module.exports = { fabricInvokeCounter, fabricRetryCounter, register };
