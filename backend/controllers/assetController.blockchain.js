@@ -23,9 +23,21 @@ async function createAsset(req, res, next) {
 
 async function getAssets(req, res, next) {
   try {
-    const result = await getAllAssetsFromFabric();
+    const department = req.query.department;
+    let result = await getAllAssetsFromFabric();
     if (!result.success) return res.status(500).json({ ok: false, error: result.error });
-    res.json({ ok: true, data: result.assets });
+    
+    let assets = result.assets || [];
+    const reqUser = req.user;
+
+    if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department) {
+      const userDept = String(reqUser.department).toUpperCase();
+      assets = assets.filter(a => (a.department || "").toUpperCase() === userDept);
+    } else if (department) {
+      assets = assets.filter(a => (a.department || "").toUpperCase() === String(department).toUpperCase());
+    }
+
+    res.json({ ok: true, data: assets });
   } catch (err) {
     next(err);
   }

@@ -256,9 +256,12 @@ module.exports = {
     getAllBillsFromFabric: async function() {
         const res = await invokeChaincode("GetAllBills", [], true);
         if (res.success) {
-            return { success: true, bills: Array.isArray(res.result) ? res.result : [] };
+            const bills = Array.isArray(res.result) ? res.result : [];
+            const assetsRes = await invokeChaincode("GetAllAssets", [], true);
+            const assets = Array.isArray(assetsRes.result) ? assetsRes.result : [];
+            return { success: true, bills, assets };
         }
-        return { success: false, bills: [], error: res.error };
+        return { success: false, bills: [], assets: [], error: res.error };
     },
 
     verifyBillOnFabric: async function(billId, expectedHash) {
@@ -281,9 +284,12 @@ module.exports = {
     getAllMaintenanceRecordsFromFabric: async function() {
         const res = await invokeChaincode("GetAllMaintenanceRecords", [], true);
         if (res.success) {
-            return { success: true, records: Array.isArray(res.result) ? res.result : [] };
+            const records = Array.isArray(res.result) ? res.result : [];
+            const assetsRes = await invokeChaincode("GetAllAssets", [], true);
+            const assets = Array.isArray(assetsRes.result) ? assetsRes.result : [];
+            return { success: true, records, assets };
         }
-        return { success: false, records: [], error: res.error };
+        return { success: false, records: [], assets: [], error: res.error };
     },
 
     // CONDEMNATION API
@@ -302,9 +308,12 @@ module.exports = {
     getAllCondemnationRecordsFromFabric: async function() {
         const res = await invokeChaincode("GetAllCondemnationRecords", [], true);
         if (res.success) {
-            return { success: true, records: Array.isArray(res.result) ? res.result : [] };
+            const records = Array.isArray(res.result) ? res.result : [];
+            const assetsRes = await invokeChaincode("GetAllAssets", [], true);
+            const assets = Array.isArray(assetsRes.result) ? assetsRes.result : [];
+            return { success: true, records, assets };
         }
-        return { success: false, records: [], error: res.error };
+        return { success: false, records: [], assets: [], error: res.error };
     },
 
     // VERIFICATION API

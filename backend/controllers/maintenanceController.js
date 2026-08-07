@@ -2,7 +2,8 @@ const {
   addMaintenanceOnFabric,
   readAssetFromFabric,
   updateAssetOnFabric,
-  getAllMaintenanceRecordsFromFabric
+  getAllMaintenanceRecordsFromFabric,
+  getAllAssetsFromFabric
 } = require("../services/fabricService");
 
 async function createMaintenanceRecord(req, res, next) {
@@ -19,12 +20,20 @@ async function createMaintenanceRecord(req, res, next) {
       return res.status(400).json({ ok: false, error: `Cannot schedule maintenance for asset in '${asset.status}' state` });
     }
 
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const userDept = String(req.user.department).toUpperCase();
+      if (asset.department && asset.department.toUpperCase() !== userDept) {
+        return res.status(403).json({ ok: false, error: "Cannot create maintenance for another department's asset" });
+      }
+    }
+
     const mntRes = await addMaintenanceOnFabric(assetId, {
       technician: technician || "Technician",
       maintenanceDate: maintenanceDate || new Date().toISOString().split('T')[0],
       description: description || "Routine maintenance",
       cost: Number(cost || 0),
-      status: status || "Completed"
+      status: status || "Completed",
+      department: asset.department
     });
 
     if (!mntRes.success) {
@@ -43,7 +52,8 @@ async function createMaintenanceRecord(req, res, next) {
       description,
       cost,
       status: status || "Completed",
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      department: asset.department
     };
 
     res.status(201).json({
@@ -60,7 +70,19 @@ async function getMaintenanceRecords(req, res, next) {
   try {
     const { assetId, status, page = 1, limit = 50 } = req.query;
     const recordsRes = await getAllMaintenanceRecordsFromFabric();
+    const assetsRes = await getAllAssetsFromFabric();
     let records = recordsRes.records || [];
+    const assets = (assetsRes.success ? assetsRes.assets || [] : []);
+
+    const reqUser = req.user;
+    if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department) {
+      const userDept = String(reqUser.department).toUpperCase();
+      records = records.filter(r => {
+        const mntAssetId = r.assetId;
+        const recAsset = assets.find(a => a.assetId === mntAssetId);
+        return recAsset?.department?.toUpperCase() === userDept;
+      });
+    }
 
     if (assetId) {
       records = records.filter(r => r.assetId === assetId);

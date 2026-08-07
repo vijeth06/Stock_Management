@@ -132,6 +132,16 @@ async function getBills(req, res, next) {
     }
 
     let bills = billsRes.bills || [];
+    const reqUser = req.user;
+
+    if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department) {
+      const userDept = String(reqUser.department).toUpperCase();
+      bills = bills.filter(b => {
+        const billAssetId = b.assetId;
+        return billsRes.assets?.find(a => a.assetId === billAssetId)?.department?.toUpperCase() === userDept;
+      });
+    }
+
     if (assetId) bills = bills.filter(b => b.assetId === assetId);
     if (paymentStatus) bills = bills.filter(b => b.paymentStatus === paymentStatus);
 
