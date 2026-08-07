@@ -1,0 +1,165 @@
+version: '3.8'
+
+services:
+  couchdb:
+    image: couchdb:3.2
+    container_name: am-couchdb
+    restart: unless-stopped
+    ports:
+      - "5984:5984"
+    volumes:
+      - couchdb_data:/opt/couchdb/data
+    environment:
+      COUCHDB_USER: admin
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-couchdb_password}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5984"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fabric-network
+
+  orderer.example.com:
+    image: hyperledger/fabric-orderer:2.5
+    container_name: orderer.example.com
+    environment:
+      - FABRIC_CFG_PATH=/etc/hyperledger/fabric
+      - ORDERER_GENERAL_LOGLEVEL=INFO
+      - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
+      - ORDERER_GENERAL_BOOTSTRAPMETHOD=file
+      - ORDERER_GENERAL_BOOTSTRAPFILE=/network/channel-artifacts/genesis.block
+      - ORDERER_GENERAL_LOCALMSPID=OrdererMSP
+      - ORDERER_GENERAL_LOCALMSPDIR=/network/crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/msp
+      - ORDERER_GENERAL_TLS_ENABLED=false
+    command: orderer
+    volumes:
+      - ./network:/network
+    ports:
+      - "7050:7050"
+    networks:
+      - fabric-network
+    depends_on: []
+
+  peer0.org1.example.com:
+    image: hyperledger/fabric-peer:2.5
+    container_name: peer0.org1.example.com
+    environment:
+      - FABRIC_CFG_PATH=/etc/hyperledger/fabric
+      - CORE_VM_ENDPOINT=unix:///var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=fabric-network
+      - FABRIC_LOGGING_SPEC=INFO
+      - CORE_PEER_ID=peer0.org1.example.com
+      - CORE_PEER_ADDRESS=peer0.org1.example.com:7051
+      - CORE_PEER_LISTENADDRESS=0.0.0.0
+      - CORE_PEER_CHAINCODEADDRESS=peer0.org1.example.com:7052
+      - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:7052
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.org1.example.com:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.org1.example.com:7051
+      - CORE_PEER_LOCALMSPID=Org1MSP
+      - CORE_PEER_MSPCONFIGPATH=/network/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/msp
+      - CORE_PEER_TLS_ENABLED=false
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=am-couchdb:5984
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=${COUCHDB_PASSWORD:-couchdb_password}
+    command: peer node start
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./network:/network
+      - ./chaincode:/chaincode
+    ports:
+      - "7051:7051"
+    networks:
+      - fabric-network
+    depends_on:
+      - orderer.example.com
+
+  ca_org1:
+    image: hyperledger/fabric-ca:1.5
+    container_name: am-ca
+    environment:
+      - FABRIC_CA_HOME=/etc/hyperledger/fabric-ca
+      - FABRIC_CA_SERVER_CA_NAME=ca-org1
+      - FABRIC_CA_SERVER_PORT=7054
+    ports:
+      - "7054:7054"
+    volumes:
+      - ./network/crypto-config:/etc/hyperledger/fabric-ca
+    networks:
+      - fabric-network
+    depends_on:
+      - orderer.example.com
+
+  gateway:
+    image: node:20
+    container_name: am-gateway
+    restart: unless-stopped
+    working_dir: /app/gateway
+    volumes:
+      - ./gateway:/app/gateway
+      - ./backend:/app/backend
+      - ./network:/app/network
+      - ./client:/app/client
+      - ./chaincode:/app/chaincode
+      - ./node_modules:/app/node_modules
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - PORT=${PORT:-3000}
+      - JWT_SECRET=${JWT_SECRET:-production-secret-key-change-me}
+      - S3_BUCKET=minio-bucket
+      - S3_ENDPOINT=http://minio:9000
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - FABRIC_NETWORK_PATH=/app/network
+      - ENABLE_FABRIC_SDK=true
+      - FABRIC_IDENTITY=appUser
+      - FABRIC_HOST=peer0.org1.example.com
+      - NODE_PATH=/app/node_modules:/app/gateway/node_modules
+    networks:
+      - fabric-network
+    depends_on:
+      - couchdb
+      - peer0.org1.example.com
+      - orderer.example.com
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: sh -c "npm install && npm start"
+
+  fabric-tools:
+    image: hyperledger/fabric-tools:2.5
+    container_name: am-fabric-tools
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric
+    volumes:
+      - ./scripts:/scripts
+      - ./network:/etc/hyperledger/fabric
+    networks:
+      - fabric-network
+    entrypoint: /bin/bash
+
+  minio:
+    image: minio/minio:latest
+    container_name: am-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - ./minio-data:/data
+    ports:
+      - "9000:9000"
+    command: server /data
+    networks:
+      - fabric-network
+
+volumes:
+  couchdb_data:
+
+networks:
+  fabric-network:
+    name: fabric-network
