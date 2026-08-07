@@ -132,6 +132,7 @@ async function approveCondemnation(req, res, next) {
     const { recordId } = req.params;
     const recordsRes = await getAllCondemnationRecordsFromFabric();
     const records = recordsRes.records || [];
+    const assets = recordsRes.assets || [];
     const record = records.find(r => r.recordId === recordId || r._id === recordId);
 
     if (!record) {
@@ -140,6 +141,15 @@ async function approveCondemnation(req, res, next) {
 
     if (record.status !== "Pending" && record.status !== "Pending Approval") {
       return res.status(400).json({ ok: false, error: "Condemnation request is not pending" });
+    }
+
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const userDept = String(req.user.department).toUpperCase();
+      const condAssetId = record.assetId;
+      const recAsset = assets.find(a => a.assetId === condAssetId);
+      if (recAsset?.department?.toUpperCase() !== userDept) {
+        return res.status(403).json({ ok: false, error: "Access denied" });
+      }
     }
 
     const approver = req.body.approvedBy || (req.user && (req.user.email || req.user.name)) || "Administrator";
@@ -164,6 +174,7 @@ async function rejectCondemnation(req, res, next) {
     const { recordId } = req.params;
     const recordsRes = await getAllCondemnationRecordsFromFabric();
     const records = recordsRes.records || [];
+    const assets = recordsRes.assets || [];
     const record = records.find(r => r.recordId === recordId || r._id === recordId);
 
     if (!record) {
@@ -172,6 +183,15 @@ async function rejectCondemnation(req, res, next) {
 
     if (record.status !== "Pending" && record.status !== "Pending Approval") {
       return res.status(400).json({ ok: false, error: "Condemnation request is not pending" });
+    }
+
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const userDept = String(req.user.department).toUpperCase();
+      const condAssetId = record.assetId;
+      const recAsset = assets.find(a => a.assetId === condAssetId);
+      if (recAsset?.department?.toUpperCase() !== userDept) {
+        return res.status(403).json({ ok: false, error: "Access denied" });
+      }
     }
 
     const rejector = req.body.rejectedBy || (req.user && (req.user.email || req.user.name)) || "Administrator";

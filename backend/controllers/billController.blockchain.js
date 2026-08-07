@@ -5,7 +5,8 @@ const {
   createBillOnFabric,
   readBillFromFabric,
   getAllBillsFromFabric,
-  verifyBillOnFabric
+  verifyBillOnFabric,
+  readAssetFromFabric
 } = require('../services/fabricService');
 const { generateDownloadToken, validateDownloadToken } = require('../services/fileService');
 const { recordAuditLog } = require('../services/auditService');
@@ -15,24 +16,33 @@ async function uploadBill(req, res, next) {
   try {
     let { billId, assetId, vendor, invoiceNumber, amount, documentHash, paymentStatus } = req.body || {};
 
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const assetRes = await readAssetFromFabric(assetId);
+      if (assetRes.success && assetRes.asset && assetRes.asset.department) {
+        const userDept = String(req.user.department).toUpperCase();
+        const assetDept = String(assetRes.asset.department).toUpperCase();
+        if (assetDept !== userDept) {
+          return res.status(403).json({ ok: false, error: 'Cannot upload bill for another department\'s asset' });
+        }
+      }
+    }
+
     let storageRes = null;
     if (req.file) {
         const tmpPath = req.file.path;
         const destName = `${billId || `BILL-${Date.now()}`}-${req.file.filename}`;
         try {
-          storageRes = await uploadFile(tmpPath, destName);
-          // If local storage, compute hash from file; if S3, read file buffer and compute
-          let buf = null;
-          if (storageRes.storage === 'local') {
+            storageRes = await uploadFile(tmpPath, destName);
+            let buf = null;
+            if (storageRes.storage === 'local') {
             buf = fs.readFileSync(storageRes.key);
-          } else {
-            // For S3 we still compute hash from the uploaded temp file
+            } else {
             buf = fs.readFileSync(tmpPath);
-          }
-          documentHash = crypto.createHash('sha256').update(buf).digest('hex');
-          billId = billId || `BILL-${Date.now()}`;
+            }
+            documentHash = crypto.createHash('sha256').update(buf).digest('hex');
+            billId = billId || `BILL-${Date.now()}`;
         } finally {
-          try { fs.unlinkSync(tmpPath); } catch (e) {}
+            try { fs.unlinkSync(tmpPath); } catch (e) {}
         }
     }
 
@@ -59,7 +69,6 @@ async function uploadBill(req, res, next) {
       return res.status(500).json({ ok: false, error: 'Failed to record bill on ledger', detail: fabricResult });
     }
 
-    // Audit log
     try { await recordAuditLog({ actor: req.user && req.user.email, role: req.user && req.user.role, action: 'UPLOAD_BILL', resourceType: 'Bill', resourceId: billId, details: { assetId } }); } catch (e) {}
 
     res.status(201).json({ ok: true, data: billData, blockchain: fabricResult });
@@ -161,6 +170,14 @@ async function getBill(req, res, next) {
     const billRes = await readBillFromFabric(billId);
     if (!billRes.success || !billRes.bill) {
       return res.status(404).json({ ok: false, error: 'Bill not found' });
+    }
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const userDept = String(req.user.department).toUpperCase();
+      const billAssetId = billRes.bill.assetId;
+      const billAsset = billRes.assets?.find(a => a.assetId === billAssetId);
+      if (billAsset?.department?.toUpperCase() !== userDept) {
+        return res.status(403).json({ ok: false, error: 'Access denied' });
+      }
     }
     res.json({ ok: true, data: billRes.bill });
   } catch (err) {
