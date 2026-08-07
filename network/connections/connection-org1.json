@@ -14,25 +14,25 @@
   },
   "channels": {
     "assets": {
-      "orderers": ["orderer.example.com"],
+      "orderers": ["orderer"],
       "peers": {
         "peer0.org1.example.com": {}
       }
     }
   },
   "orderers": {
-    "orderer.example.com": {
-      "url": "grpc://localhost:7050",
+    "orderer": {
+      "url": "grpc://orderer.example.com:7050",
       "grpcOptions": {
-        "ssl-target-name-override": "orderer.example.com"
+        "ssl-target-name-override": "localhost"
       }
     }
   },
   "peers": {
     "peer0.org1.example.com": {
-      "url": "grpc://localhost:7051",
+      "url": "grpc://peer0.org1.example.com:7051",
       "grpcOptions": {
-        "ssl-target-name-override": "peer0.org1.example.com"
+        "ssl-target-name-override": "localhost"
       }
     }
   },
@@ -41,7 +41,14 @@
       "mspid": "Org1MSP",
       "peers": [
         "peer0.org1.example.com"
-      ]
+      ],
+      "certificateAuthor": {
+        "url": "http://localhost:7054",
+        "cacert": "/network/crypto-config/ca-cert.pem",
+        "httpOptions": {
+          "timeout": "300"
+        }
+      }
     }
   }
 }

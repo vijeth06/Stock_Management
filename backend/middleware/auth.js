@@ -40,6 +40,9 @@ function checkDepartmentAccess(user, targetDepartment) {
   if (user.role === "Administrator" || user.role === "AuditOfficer") {
     return true;
   }
+  if (user.department === "ALL" || user.department === "ALL DEPARTMENTS") {
+    return true;
+  }
   if (user.role === "DepartmentUser") {
     if (!user.department) return false;
     return user.department.toUpperCase() === (targetDepartment || "").toUpperCase();

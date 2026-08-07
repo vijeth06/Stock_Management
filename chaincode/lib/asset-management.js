@@ -233,13 +233,14 @@ class AssetManagementContract extends Contract {
     // BILL MANAGEMENT FUNCTIONS
     // ==========================================
 
-    async CreateBill(ctx, billId, assetId, vendor, invoiceNumber, amount, documentHash, paymentStatus, documentKey) {
+    async CreateBill(ctx, billId, assetId, department, vendor, invoiceNumber, amount, documentHash, paymentStatus, documentKey) {
         console.info(`=== CreateBill: Recording bill ${billId} ===`);
         const billKey = `BILL_${billId}`;
         const billObj = {
             id: `bill-${Date.now()}`,
             billId,
             assetId,
+            department: department || '',
             vendor: vendor || '',
             invoiceNumber: invoiceNumber || '',
             amount: parseFloat(amount || 0),
@@ -324,7 +325,7 @@ class AssetManagementContract extends Contract {
     // MAINTENANCE FUNCTIONS
     // ==========================================
 
-    async AddMaintenanceRecord(ctx, assetId, technician, maintenanceDate, description, cost, status) {
+    async AddMaintenanceRecord(ctx, assetId, technician, maintenanceDate, description, cost, status, department) {
         console.info(`=== AddMaintenanceRecord: Adding maintenance for asset ${assetId} ===`);
 
         const assetJSON = await ctx.stub.getState(assetId);
@@ -339,6 +340,7 @@ class AssetManagementContract extends Contract {
             id: recordId,
             recordId,
             assetId,
+            department: department || asset.department || '',
             technician,
             maintenanceDate,
             description,
@@ -495,7 +497,7 @@ class AssetManagementContract extends Contract {
     // CONDEMNATION FUNCTIONS
     // ==========================================
 
-    async RequestCondemnation(ctx, assetId, reason, requestedBy) {
+    async RequestCondemnation(ctx, assetId, reason, requestedBy, department) {
         console.info(`=== RequestCondemnation: Requesting condemnation for asset ${assetId} ===`);
 
         const assetJSON = await ctx.stub.getState(assetId);
@@ -514,6 +516,7 @@ class AssetManagementContract extends Contract {
             id: recordId,
             recordId,
             assetId,
+            department: department || asset.department || '',
             reason,
             requestedBy,
             status: 'Pending',

@@ -1,4 +1,12 @@
 const { createAssetOnFabric, updateAssetOnFabric, readAssetFromFabric, getAllAssetsFromFabric, getAssetHistoryFromFabric } = require('../services/fabricService');
+const { checkDepartmentAccess } = require('../middleware/auth');
+
+function getUserDepartment(req) {
+  if (!req.user) return null;
+  if (req.user.role === "Administrator" || req.user.department === "ALL") return null;
+  if (req.user.department) return String(req.user.department).trim().toUpperCase();
+  return null;
+}
 
 async function createAsset(req, res, next) {
   try {
@@ -7,8 +15,18 @@ async function createAsset(req, res, next) {
       return res.status(400).json({ ok: false, error: 'assetId and name are required' });
     }
 
-    // Normalize department
-    if (payload.department) payload.department = String(payload.department).trim().toUpperCase();
+    const userDept = getUserDepartment(req);
+
+    if (userDept) {
+      if (payload.department && String(payload.department).trim().toUpperCase() !== userDept) {
+        return res.status(403).json({ ok: false, error: 'Cannot create assets for another department' });
+      }
+      payload.department = userDept;
+    } else if (req.user && req.user.role === "Administrator") {
+      payload.department = payload.department ? String(payload.department).trim().toUpperCase() : "ALL";
+    } else if (payload.department) {
+      payload.department = String(payload.department).trim().toUpperCase();
+    }
 
     const fabricResult = await createAssetOnFabric(payload);
     if (!fabricResult || !fabricResult.success) {
@@ -48,6 +66,9 @@ async function getAsset(req, res, next) {
     const assetId = req.params.assetId;
     const result = await readAssetFromFabric(assetId);
     if (!result.success) return res.status(404).json({ ok: false, error: result.error || 'Asset not found on ledger' });
+    if (req.user && !checkDepartmentAccess(req.user, result.asset.department)) {
+      return res.status(403).json({ ok: false, error: 'Access denied to another department\'s asset' });
+    }
     res.json({ ok: true, data: result.asset });
   } catch (err) {
     next(err);
@@ -57,6 +78,21 @@ async function getAsset(req, res, next) {
 async function updateAsset(req, res, next) {
   try {
     const assetId = req.params.assetId;
+    const assetRes = await readAssetFromFabric(assetId);
+    if (!assetRes.success) return res.status(404).json({ ok: false, error: assetRes.error || 'Asset not found on ledger' });
+
+    const existing = assetRes.asset;
+    if (req.user && !checkDepartmentAccess(req.user, existing.department)) {
+      return res.status(403).json({ ok: false, error: 'Access denied to update another department\'s asset' });
+    }
+
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const userDept = String(req.user.department).toUpperCase();
+      if (updates.department && String(updates.department).trim().toUpperCase() !== userDept) {
+        return res.status(403).json({ ok: false, error: 'Cannot move asset to another department' });
+      }
+    }
+
     const updates = req.body || {};
 
     // Only allow safe fields to be updated on ledger
@@ -82,8 +118,17 @@ async function updateAsset(req, res, next) {
 
 async function deleteAsset(req, res, next) {
   try {
-    // In a blockchain-first setup, prefer marking asset as Disposed on ledger
     const assetId = req.params.assetId;
+    const assetRes = await readAssetFromFabric(assetId);
+    if (!assetRes.success || !assetRes.asset) {
+      return res.status(404).json({ ok: false, error: 'Asset not found on ledger' });
+    }
+    if (req.user && !checkDepartmentAccess(req.user, assetRes.asset.department)) {
+      return res.status(403).json({ ok: false, error: 'Access denied to delete another department\'s asset' });
+    }
+    if (req.user && req.user.role === "DepartmentUser" && !req.user.department) {
+      return res.status(403).json({ ok: false, error: 'Access denied' });
+    }
     const r = await updateAssetOnFabric(assetId, { field: 'status', newValue: 'Disposed' }).catch(e => ({ success: false, error: e.message }));
     if (!r || !r.success) return res.status(500).json({ ok: false, error: r.error || 'Failed to mark asset disposed on ledger' });
     res.json({ ok: true, data: { assetId, blockchain: r } });

@@ -1157,12 +1157,14 @@ function renderDepartments(departments) {
     if (scoped.length > 0) departments = scoped;
   }
 
-  if (!departments || departments.length === 0) {
+  const activeDepts = (departments || []).filter(d => d.isActive !== false);
+
+  if (!activeDepts || activeDepts.length === 0) {
     container.innerHTML = '<div class="empty-state">No departments found.</div>';
     return;
   }
 
-  container.innerHTML = departments.map(dept => {
+  container.innerHTML = activeDepts.map(dept => {
     const rawId = String(dept._id || dept.code);
     const safeId = rawId.replace(/[^a-zA-Z0-9_-]/g, '_');
     return `
@@ -1184,9 +1186,9 @@ function renderDepartments(departments) {
     summaryPanel.innerHTML = `
       <div style="padding:14px;">
         <h4 style="margin:0 0 8px;">Department Distribution Overview</h4>
-        <p style="margin:0; color:var(--gray-600); font-size:13px;">${departments.length} active departments registered in the asset ledger.</p>
+        <p style="margin:0; color:var(--gray-600); font-size:13px;">${activeDepts.length} active departments registered in the asset ledger.</p>
         <div style="margin-top:12px; display:flex; flex-direction:column; gap:6px;">
-          ${departments.map(d => `
+          ${activeDepts.map(d => `
             <div style="display:flex; justify-content:space-between; font-size:12px;">
               <span><strong>${escapeHtml(d.name)}</strong> (${escapeHtml(d.code)})</span>
               <span>Manager: ${escapeHtml(d.manager || 'N/A')}</span>

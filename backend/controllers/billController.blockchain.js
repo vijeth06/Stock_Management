@@ -16,10 +16,20 @@ async function uploadBill(req, res, next) {
   try {
     let { billId, assetId, vendor, invoiceNumber, amount, documentHash, paymentStatus } = req.body || {};
 
-    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
-      const assetRes = await readAssetFromFabric(assetId);
+    let billDepartment = null;
+    let userDept = null;
+
+    const assetRes = await readAssetFromFabric(assetId);
+    if (assetRes.success && assetRes.asset && assetRes.asset.department) {
+      billDepartment = assetRes.asset.department;
+    }
+
+    if (req.user && req.user.department) {
+      userDept = String(req.user.department).toUpperCase();
+    }
+
+    if (req.user && req.user.role === "DepartmentUser" && userDept) {
       if (assetRes.success && assetRes.asset && assetRes.asset.department) {
-        const userDept = String(req.user.department).toUpperCase();
         const assetDept = String(assetRes.asset.department).toUpperCase();
         if (assetDept !== userDept) {
           return res.status(403).json({ ok: false, error: 'Cannot upload bill for another department\'s asset' });
@@ -56,6 +66,7 @@ async function uploadBill(req, res, next) {
     const billData = {
       billId,
       assetId,
+      department: billDepartment,
       vendor: vendor || 'Vendor',
       invoiceNumber: invoiceNumber || `INV-${Date.now()}`,
       amount: Number(amount || 0),
@@ -83,11 +94,19 @@ async function generateBillDownloadToken(req, res, next) {
     const billRes = await readBillFromFabric(billId);
     if (!billRes.success || !billRes.bill) return res.status(404).json({ ok: false, error: 'Bill not found' });
 
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const userDept = String(req.user.department).toUpperCase();
+      if (billRes.bill.department) {
+        const billDept = String(billRes.bill.department).toUpperCase();
+        if (billDept !== userDept) {
+          return res.status(403).json({ ok: false, error: 'Access denied' });
+        }
+      }
+    }
+
     // If S3 is enabled, attempt to return a presigned S3 URL using stored naming convention.
     if (USE_S3) {
       // Read bill from ledger and use stored documentKey
-      const billRes = await readBillFromFabric(billId);
-      if (!billRes.success || !billRes.bill) return res.status(404).json({ ok: false, error: 'Bill not found' });
       const key = billRes.bill.documentKey || billRes.bill.key || null;
       if (!key) return res.status(404).json({ ok: false, error: 'Bill document key not found on ledger' });
 
@@ -145,10 +164,7 @@ async function getBills(req, res, next) {
 
     if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department) {
       const userDept = String(reqUser.department).toUpperCase();
-      bills = bills.filter(b => {
-        const billAssetId = b.assetId;
-        return billsRes.assets?.find(a => a.assetId === billAssetId)?.department?.toUpperCase() === userDept;
-      });
+      bills = bills.filter(b => (b.department || "").toUpperCase() === userDept);
     }
 
     if (assetId) bills = bills.filter(b => b.assetId === assetId);
@@ -173,9 +189,8 @@ async function getBill(req, res, next) {
     }
     if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
       const userDept = String(req.user.department).toUpperCase();
-      const billAssetId = billRes.bill.assetId;
-      const billAsset = billRes.assets?.find(a => a.assetId === billAssetId);
-      if (billAsset?.department?.toUpperCase() !== userDept) {
+      const billDept = String(billRes.bill.department || "").toUpperCase();
+      if (billDept && billDept !== userDept) {
         return res.status(403).json({ ok: false, error: 'Access denied' });
       }
     }
@@ -193,9 +208,14 @@ async function verifyBill(req, res, next) {
     }
 
     if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
-      const userDept = String(req.user.department).toUpperCase();
-      const billAssetId = assetId || billId;
-      return res.status(403).json({ ok: false, error: 'Access denied' });
+      const billRes = await readBillFromFabric(billId);
+      if (billRes.success && billRes.bill && billRes.bill.department) {
+        const userDept = String(req.user.department).toUpperCase();
+        const billDept = String(billRes.bill.department).toUpperCase();
+        if (billDept !== userDept) {
+          return res.status(403).json({ ok: false, error: 'Access denied' });
+        }
+      }
     }
 
     const fabricKey = assetId || billId;
@@ -221,10 +241,9 @@ async function updatePaymentStatus(req, res, next) {
 
     if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
       const userDept = String(req.user.department).toUpperCase();
-      const billAssetId = billRes.bill.assetId;
-      if (billRes.assets) {
-        const billAsset = billRes.assets.find(a => a.assetId === billAssetId);
-        if (billAsset?.department?.toUpperCase() !== userDept) {
+      if (billRes.bill.department) {
+        const billDept = String(billRes.bill.department).toUpperCase();
+        if (billDept !== userDept) {
           return res.status(403).json({ ok: false, error: 'Access denied' });
         }
       }

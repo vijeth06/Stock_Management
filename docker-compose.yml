@@ -110,13 +110,13 @@ services:
       JWT_SECRET: change-me-in-production
       FILE_TOKEN_SECRET: production-file-token-secret
       S3_BUCKET: minio-bucket
-      S3_ENDPOINT: http://minio:9000
+      S3_ENDPOINT: http://localhost:9000
       AWS_REGION: us-east-1
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
       FABRIC_NETWORK_PATH: /app/network
       ENABLE_FABRIC_SDK: "true"
-      FABRIC_IDENTITY: "appUser"
+      FABRIC_IDENTITY: "admin"
       FABRIC_HOST: "localhost"
       FABRIC_DISCOVERY_AS_LOCALHOST: "true"
       NODE_PATH: /app/node_modules:/app/gateway/node_modules

@@ -155,8 +155,8 @@ async function seedDemoAdmin() {
     email: emailLower,
     password: passwordHash,
     role: "Administrator",
-    department: "IT",
-    departmentName: "Information Technology",
+    department: "ALL",
+    departmentName: "All Departments",
     status: "Active",
     isApproved: true
   });

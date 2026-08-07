@@ -66,6 +66,23 @@ async function getDepartments(req, res, next) {
       });
     }
 
+    // Calculate asset counts for each department
+    try {
+      const assetsRes = await getAllAssetsFromFabric();
+      const assets = (assetsRes.success ? assetsRes.assets || [] : []);
+      const deptAssetCounts = {};
+      assets.forEach(a => {
+        const dept = (a.department || '').toUpperCase();
+        deptAssetCounts[dept] = (deptAssetCounts[dept] || 0) + 1;
+      });
+      departments = departments.map(d => ({
+        ...d,
+        assetCount: deptAssetCounts[(d.code || '').toUpperCase()] || deptAssetCounts[d.name?.toUpperCase()] || 0
+      }));
+    } catch (e) {
+      departments = departments.map(d => ({ ...d, assetCount: 0 }));
+    }
+
     res.json({
       ok: true,
       data: departments
@@ -75,12 +92,40 @@ async function getDepartments(req, res, next) {
   }
 }
 
+function findDepartmentById(departments, id) {
+  if (!id) return null;
+  const idStr = String(id);
+  const idUpper = idStr.toUpperCase();
+  // Try exact _id match first
+  let dept = departments.find(d => d._id === idStr || d.id === idStr);
+  if (dept) return dept;
+  // Try by code match
+  dept = departments.find(d => (d.code || '').toUpperCase() === idUpper);
+  return dept;
+}
+
+function getDeptsWithDefault() {
+  return getAllDepartmentsFromFabric().then(res => {
+    let depts = res.departments || [];
+    if (!depts.some(d => (d.code || '').toUpperCase() === 'IT')) {
+      depts.unshift({
+        _id: 'dept-it',
+        code: 'IT',
+        name: 'Information Technology',
+        description: 'IT Services & Asset Support',
+        manager: 'Admin',
+        isActive: true
+      });
+    }
+    return depts;
+  });
+}
+
 async function getDepartment(req, res, next) {
   try {
     const id = req.params.id;
-    const deptsRes = await getAllDepartmentsFromFabric();
-    const depts = deptsRes.departments || [];
-    const department = depts.find(d => d._id === id || (d.code || '').toUpperCase() === String(id).toUpperCase());
+    const depts = await getDeptsWithDefault();
+    const department = findDepartmentById(depts, id);
 
     if (!department) {
       return res.status(404).json({ ok: false, error: "Department not found" });
@@ -98,9 +143,8 @@ async function getDepartment(req, res, next) {
 async function updateDepartment(req, res, next) {
   try {
     const id = req.params.id;
-    const deptsRes = await getAllDepartmentsFromFabric();
-    const depts = deptsRes.departments || [];
-    const department = depts.find(d => d._id === id || (d.code || '').toUpperCase() === String(id).toUpperCase());
+    const depts = await getDeptsWithDefault();
+    const department = findDepartmentById(depts, id);
 
     if (!department) {
       return res.status(404).json({ ok: false, error: "Department not found" });
@@ -112,7 +156,18 @@ async function updateDepartment(req, res, next) {
       updatedAt: new Date().toISOString()
     };
 
-    await updateDepartmentOnFabric(department.code, updated);
+    // If the department is the default IT and doesn't exist on Fabric, create it
+    const existsRes = await readDepartmentFromFabric(department.code);
+    if (!existsRes.success || !existsRes.department) {
+      await createDepartmentOnFabric({
+        code: department.code,
+        name: updated.name || department.name,
+        description: updated.description || '',
+        manager: updated.manager || department.manager
+      });
+    } else {
+      await updateDepartmentOnFabric(department.code, updated);
+    }
     res.json({
       ok: true,
       data: updated
@@ -125,9 +180,8 @@ async function updateDepartment(req, res, next) {
 async function deleteDepartment(req, res, next) {
   try {
     const id = req.params.id;
-    const deptsRes = await getAllDepartmentsFromFabric();
-    const depts = deptsRes.departments || [];
-    const department = depts.find(d => d._id === id || (d.code || '').toUpperCase() === String(id).toUpperCase());
+    const depts = await getDeptsWithDefault();
+    const department = findDepartmentById(depts, id);
 
     if (!department) {
       return res.status(404).json({ ok: false, error: "Department not found" });
@@ -146,9 +200,8 @@ async function deleteDepartment(req, res, next) {
 async function getDepartmentSummary(req, res, next) {
   try {
     const id = req.params.id;
-    const deptsRes = await getAllDepartmentsFromFabric();
-    const depts = deptsRes.departments || [];
-    const department = depts.find(d => d._id === id || (d.code || '').toUpperCase() === String(id).toUpperCase());
+    const depts = await getDeptsWithDefault();
+    const department = findDepartmentById(depts, id);
 
     if (!department) {
       return res.status(404).json({ ok: false, error: "Department not found" });

@@ -28,8 +28,9 @@ async function requestCondemnation(req, res, next) {
       }
     }
 
+    const department = asset.department;
     const reqUser = requestedBy || (req.user && (req.user.email || req.user.name)) || "DepartmentUser";
-    const condRes = await requestCondemnationOnFabric(assetId, reason || "Asset obsolete/damaged", reqUser);
+    const condRes = await requestCondemnationOnFabric(assetId, reason || "Asset obsolete/damaged", reqUser, department);
 
     if (!condRes.success) {
       return res.status(500).json({ ok: false, error: condRes.error || "Failed to submit condemnation on ledger" });
@@ -38,6 +39,7 @@ async function requestCondemnation(req, res, next) {
     const record = condRes.result || {
       recordId: `COND-${Date.now()}`,
       assetId,
+      department,
       reason: reason || "Asset obsolete/damaged",
       requestedBy: reqUser,
       disposalMethod: disposalMethod || "Scrap",
@@ -67,6 +69,9 @@ async function getCondemnationRecords(req, res, next) {
     if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department) {
       const userDept = String(reqUser.department).toUpperCase();
       records = records.filter(r => {
+        if (r.department) {
+          return String(r.department).toUpperCase() === userDept;
+        }
         const condAssetId = r.assetId;
         const recAsset = assets.find(a => a.assetId === condAssetId);
         return recAsset?.department?.toUpperCase() === userDept;
@@ -111,10 +116,16 @@ async function getCondemnationRecord(req, res, next) {
 
     if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
       const userDept = String(req.user.department).toUpperCase();
-      const condAssetId = record.assetId;
-      const recAsset = assets.find(a => a.assetId === condAssetId);
-      if (recAsset?.department?.toUpperCase() !== userDept) {
-        return res.status(403).json({ ok: false, error: "Access denied" });
+      if (record.department) {
+        if (String(record.department).toUpperCase() !== userDept) {
+          return res.status(403).json({ ok: false, error: "Access denied" });
+        }
+      } else {
+        const condAssetId = record.assetId;
+        const recAsset = assets.find(a => a.assetId === condAssetId);
+        if (recAsset?.department?.toUpperCase() !== userDept) {
+          return res.status(403).json({ ok: false, error: "Access denied" });
+        }
       }
     }
 

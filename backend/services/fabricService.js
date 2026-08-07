@@ -235,6 +235,7 @@ module.exports = {
         const args = [
             billData.billId || `BILL-${Date.now()}`,
             billData.assetId || "",
+            billData.department || "",
             billData.vendor || "",
             billData.invoiceNumber || "",
             billData.amount || 0,
@@ -248,7 +249,10 @@ module.exports = {
     readBillFromFabric: async function(billId) {
         const res = await invokeChaincode("ReadBill", [billId], true);
         if (res.success) {
-            return { success: true, bill: res.result };
+            const bill = res.result;
+            const assetsRes = await invokeChaincode("GetAllAssets", [], true);
+            const assets = Array.isArray(assetsRes.result) ? assetsRes.result : [];
+            return { success: true, bill, assets };
         }
         return res;
     },
@@ -277,7 +281,8 @@ module.exports = {
             maintenanceData.maintenanceDate || new Date().toISOString().split('T')[0],
             maintenanceData.description || "",
             maintenanceData.cost || 0,
-            maintenanceData.status || "Completed"
+            maintenanceData.status || "Completed",
+            maintenanceData.department || ""
         ]);
     },
 
@@ -293,8 +298,8 @@ module.exports = {
     },
 
     // CONDEMNATION API
-    requestCondemnationOnFabric: async function(assetId, reason, requestedBy) {
-        return await invokeChaincode("RequestCondemnation", [assetId, reason || "", requestedBy || "User"]);
+    requestCondemnationOnFabric: async function(assetId, reason, requestedBy, department) {
+        return await invokeChaincode("RequestCondemnation", [assetId, reason || "", requestedBy || "User", department || ""]);
     },
 
     approveCondemnationOnFabric: async function(assetId, approvedBy) {

@@ -42,9 +42,13 @@ async function createAsset(req, res, next) {
       return res.status(409).json({ ok: false, error: "Asset ID already exists" });
     }
 
+    if (!department && req.user && req.user.role === "Administrator") {
+      department = "ALL";
+    }
+
     const assetData = {
       assetId,
-      department: department || (req.user && req.user.department ? req.user.department : "IT"),
+      department: department || (req.user && req.user.role === "Administrator" ? "ALL" : req.user.department || "IT"),
       category: category || "General",
       name,
       description: description || "",

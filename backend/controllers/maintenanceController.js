@@ -70,14 +70,16 @@ async function getMaintenanceRecords(req, res, next) {
   try {
     const { assetId, status, page = 1, limit = 50 } = req.query;
     const recordsRes = await getAllMaintenanceRecordsFromFabric();
-    const assetsRes = await getAllAssetsFromFabric();
     let records = recordsRes.records || [];
-    const assets = (assetsRes.success ? assetsRes.assets || [] : []);
+    const assets = (recordsRes.assets || []);
 
     const reqUser = req.user;
     if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department) {
       const userDept = String(reqUser.department).toUpperCase();
       records = records.filter(r => {
+        if (r.department) {
+          return String(r.department).toUpperCase() === userDept;
+        }
         const mntAssetId = r.assetId;
         const recAsset = assets.find(a => a.assetId === mntAssetId);
         return recAsset?.department?.toUpperCase() === userDept;
@@ -121,6 +123,13 @@ async function getMaintenanceRecord(req, res, next) {
       return res.status(404).json({ ok: false, error: "Maintenance record not found" });
     }
 
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const userDept = String(req.user.department).toUpperCase();
+      if (record.department && String(record.department).toUpperCase() !== userDept) {
+        return res.status(403).json({ ok: false, error: "Access denied" });
+      }
+    }
+
     res.json({
       ok: true,
       data: record
@@ -134,11 +143,19 @@ async function updateMaintenanceRecord(req, res, next) {
   try {
     const recordId = req.params.recordId;
     const recordsRes = await getAllMaintenanceRecordsFromFabric();
-    const records = recordsRes.records || [];
+    let records = recordsRes.records || [];
+    const assets = recordsRes.assets || [];
     const record = records.find(r => r.recordId === recordId || r._id === recordId);
 
     if (!record) {
       return res.status(404).json({ ok: false, error: "Maintenance record not found" });
+    }
+
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const userDept = String(req.user.department).toUpperCase();
+      if (record.department && String(record.department).toUpperCase() !== userDept) {
+        return res.status(403).json({ ok: false, error: "Access denied" });
+      }
     }
 
     const updated = {
@@ -166,6 +183,14 @@ async function getMaintenanceHistory(req, res, next) {
     const assetRes = await readAssetFromFabric(assetId);
     if (!assetRes.success || !assetRes.asset) {
       return res.status(404).json({ ok: false, error: "Asset not found" });
+    }
+
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const userDept = String(req.user.department).toUpperCase();
+      const assetDept = String(assetRes.asset.department).toUpperCase();
+      if (assetDept !== userDept) {
+        return res.status(403).json({ ok: false, error: "Access denied" });
+      }
     }
 
     const recordsRes = await getAllMaintenanceRecordsFromFabric();
