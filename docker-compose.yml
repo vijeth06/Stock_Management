@@ -108,6 +108,7 @@ services:
     environment:
       PORT: 3000
       JWT_SECRET: change-me-in-production
+      FILE_TOKEN_SECRET: production-file-token-secret
       S3_BUCKET: minio-bucket
       S3_ENDPOINT: http://minio:9000
       AWS_REGION: us-east-1
@@ -116,8 +117,8 @@ services:
       FABRIC_NETWORK_PATH: /app/network
       ENABLE_FABRIC_SDK: "true"
       FABRIC_IDENTITY: "appUser"
-      FABRIC_HOST: "peer0.org1.example.com"
-      FABRIC_DISCOVERY_AS_LOCALHOST: "false"
+      FABRIC_HOST: "localhost"
+      FABRIC_DISCOVERY_AS_LOCALHOST: "true"
       NODE_PATH: /app/node_modules:/app/gateway/node_modules
     networks:
       - fabric-network

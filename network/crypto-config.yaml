@@ -1,17 +1,33 @@
----
+# Copyright IBM Corp. All Rights Reserved.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 OrdererOrgs:
   - Name: Orderer
     Domain: example.com
-    EnableTLS: true
+    EnableNodeOUs: true
     Specs:
       - Hostname: orderer
+        SANS:
+          - localhost
 
 PeerOrgs:
   - Name: Org1
     Domain: org1.example.com
     EnableNodeOUs: true
-    EnableTLS: false
     Template:
       Count: 1
+      SANS:
+        - localhost
+    Users:
+      Count: 1
+
+  - Name: Org2
+    Domain: org2.example.com
+    EnableNodeOUs: true
+    Template:
+      Count: 1
+      SANS:
+        - localhost
     Users:
       Count: 1
