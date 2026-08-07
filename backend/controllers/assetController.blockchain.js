@@ -126,8 +126,9 @@ async function transferAsset(req, res, next) {
 
 async function getTransfers(req, res, next) {
   try {
-    // Return transfer-like events from asset histories for the given assetId query or all assets
     const assetId = req.query.assetId;
+    const reqUser = req.user;
+
     if (assetId) {
       const hist = await getAssetHistoryFromFabric(assetId);
       if (!hist.success) return res.status(500).json({ ok: false, error: hist.error });
@@ -139,10 +140,16 @@ async function getTransfers(req, res, next) {
       return res.json({ ok: true, data: transfers });
     }
 
-    // For all assets, fetch all assets and map to minimal transfer info (costly; optional)
     const all = await getAllAssetsFromFabric();
     if (!all.success) return res.status(500).json({ ok: false, error: all.error });
-    return res.json({ ok: true, data: all.assets });
+
+    let assets = all.assets || [];
+    if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department) {
+      const userDept = String(reqUser.department).toUpperCase();
+      assets = assets.filter(a => (a.department || "").toUpperCase() === userDept);
+    }
+
+    return res.json({ ok: true, data: assets });
   } catch (err) {
     next(err);
   }

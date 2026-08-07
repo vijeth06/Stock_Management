@@ -84,10 +84,25 @@ async function getDashboard(req, res, next) {
     const mntRes = await getAllMaintenanceRecordsFromFabric();
     const condRes = await getAllCondemnationRecordsFromFabric();
 
-    const assets = assetsRes.assets || [];
-    const bills = billsRes.bills || [];
-    const maintenances = mntRes.records || [];
-    const condemnations = condRes.records || [];
+    let assets = assetsRes.assets || [];
+    let bills = billsRes.bills || [];
+    let maintenances = mntRes.records || [];
+    let condemnations = condRes.records || [];
+
+    const reqUser = req.user;
+    if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department) {
+      const userDept = String(reqUser.department).toUpperCase();
+
+      assets = assets.filter(a => (a.department || "").toUpperCase() === userDept);
+      const billAssetIds = new Set(assets.map(a => a.assetId));
+      bills = bills.filter(b => billAssetIds.has(b.assetId));
+
+      const assetIds = new Set(assets.map(a => a.assetId));
+      maintenances = maintenances.filter(m => assetIds.has(m.assetId));
+
+      const condAssetIds = new Set(assets.map(a => a.assetId));
+      condemnations = condemnations.filter(c => condAssetIds.has(c.assetId));
+    }
 
     const statusCounts = {
       Active: 0,

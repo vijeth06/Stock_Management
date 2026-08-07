@@ -338,7 +338,14 @@ async function transferAsset(req, res, next) {
 async function getTransfers(req, res, next) {
   try {
     const assetsRes = await getAllAssetsFromFabric();
-    const assets = assetsRes.assets || [];
+    let assets = assetsRes.assets || [];
+
+    const reqUser = req.user;
+    if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department) {
+      const userDept = String(reqUser.department).toUpperCase();
+      assets = assets.filter(a => (a.department || "").toUpperCase() === userDept);
+    }
+
     const transfers = assets
       .filter(a => a.maintenanceRecords && a.maintenanceRecords.length > 0)
       .map(a => ({
