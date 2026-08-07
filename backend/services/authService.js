@@ -10,8 +10,8 @@ const {
 
 const JWT_SECRET = process.env.JWT_SECRET || "change-me-in-development";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "8h";
-const DEMO_ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@assetmgmt.local";
-const DEMO_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Admin@12345!";
+const DEMO_ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@kongu.edu";
+const DEMO_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Admin@123";
 const DEMO_ADMIN_NAME = process.env.ADMIN_NAME || "Demo Administrator";
 
 const ROLE_HIERARCHY = {

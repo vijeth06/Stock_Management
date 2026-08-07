@@ -135,8 +135,8 @@ http://localhost:3000
 ```
 
 ### Demo Credentials
-- **Email**: admin@assetmgmt.local
-- **Password**: Admin@12345!
+- **Email**: admin@kongu.edu
+- **Password**: Admin@123
 - **Role**: Administrator
 
 ## API Overview
