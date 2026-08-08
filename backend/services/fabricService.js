@@ -377,5 +377,65 @@ module.exports = {
             return { success: true, result: res.result };
         }
         return res;
+    },
+
+    // DEPARTMENT VALUATION API
+    getDepartmentValuationOnFabric: async function() {
+        const res = await invokeChaincode("GetDepartmentValuation", [], true);
+        if (res.success) {
+            return { success: true, valuation: res.result };
+        }
+        return res;
+    },
+
+    // ASSET LIFECYCLE API
+    getAssetLifecycleOnFabric: async function(assetId) {
+        const res = await invokeChaincode("AssetLifecycle", [assetId], true);
+        if (res.success) {
+            return { success: true, lifecycle: res.result };
+        }
+        return res;
+    },
+
+    getAssetAuditTrailOnFabric: async function(assetId) {
+        const res = await invokeChaincode("GetAuditTrail", [assetId], true);
+        if (res.success) {
+            return { success: true, auditTrail: res.result };
+        }
+        return res;
+    },
+
+    // BULK OPERATIONS API
+    bulkImportAssetsOnFabric: async function(assets) {
+        const res = await invokeChaincode("BulkImportAssets", [JSON.stringify(assets)]);
+        if (res.success) {
+            return { success: true, result: res.result };
+        }
+        return res;
+    },
+
+    bulkTransferAssetsOnFabric: async function(assetIds, toDepartment) {
+        const res = await invokeChaincode("BulkTransferAssets", [JSON.stringify(assetIds), toDepartment || "IT"]);
+        if (res.success) {
+            return { success: true, result: res.result };
+        }
+        return res;
+    },
+
+    // USER MANAGEMENT API (extended)
+    updateUserRoleOnFabric: async function(emailOrId, newRole, department) {
+        const res = await invokeChaincode("UpdateUserRole", [emailOrId, newRole, department || ""]);
+        if (res.success) {
+            return { success: true, user: res.result };
+        }
+        return res;
+    },
+
+    updateUserDepartmentOnFabric: async function(emailOrId, newDepartment) {
+        const res = await invokeChaincode("UpdateUserDepartment", [emailOrId, newDepartment || "IT"]);
+        if (res.success) {
+            return { success: true, user: res.result };
+        }
+        return res;
     }
 };

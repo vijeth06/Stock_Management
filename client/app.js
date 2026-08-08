@@ -22,6 +22,9 @@ const PAGE_TITLES = {
   reports: 'Reports',
   bills: 'Bills & Invoices',
   verification: 'Verification',
+  valuation: 'Department Valuation',
+  lifecycle: 'Asset Lifecycle',
+  users: 'User Management',
   login: 'Sign In'
 };
 
@@ -122,9 +125,15 @@ function navigateTo(page) {
   else if (page === 'transfers') loadTransfers();
   else if (page === 'financial') loadFinancials();
   else if (page === 'departments') loadDepartments();
-  else if (page === 'reports') loadReports();
-  else if (page === 'bills') loadBills();
-}
+   else if (page === 'reports') loadReports();
+   else if (page === 'bills') loadBills();
+   else if (page === 'valuation') loadValuation();
+   else if (page === 'lifecycle') {
+     document.getElementById('lifecycleEmpty').style.display = 'block';
+     document.getElementById('lifecycleContent').style.display = 'none';
+   }
+   else if (page === 'users') loadUsers();
+ }
 
 function showResult(data) {
   clearLoading();
@@ -2127,7 +2136,212 @@ document.getElementById('gmailAuthForm')?.addEventListener('submit', async (even
       localStorage.setItem('currentUser', JSON.stringify(currentUser));
       updateUserChip();
       showToast(response.message || `Welcome ${currentUser.name}! Authenticated via Gmail.`, 'success');
-      await loadDashboard();
+  await loadDashboard();
+})();
+
+// ==========================================
+// DEPARTMENT VALUATION
+// ==========================================
+async function loadValuation() {
+  setLoading('Loading department valuation...');
+  const res = await requestJson('/api/reports/department-valuation');
+  if (res.ok) {
+    renderValuationTable(res.data || {});
+  }
+  showResult(res);
+}
+
+function renderValuationTable(valuation) {
+  const tbody = document.getElementById('valuationTableBody');
+  const entries = Object.entries(valuation || {});
+  
+  if (entries.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No valuation data available</td></tr>';
+  } else {
+    tbody.innerHTML = entries.map(([key, dept]) => `
+      <tr>
+        <td><strong>${escapeHtml(dept.name || key)}</strong> (${escapeHtml(dept.code || key)})</td>
+        <td>${escapeHtml(dept.manager || 'Unassigned')}</td>
+        <td>${dept.totalAssets || 0}</td>
+        <td>₹${(dept.totalPurchaseValue || 0).toLocaleString('en-IN')}</td>
+        <td>₹${(dept.netBookValue || 0).toLocaleString('en-IN')}</td>
+        <td>${dept.activeAssets || 0}</td>
+        <td>${dept.maintenanceAssets || 0}</td>
+        <td>${dept.condemnedAssets || 0}</td>
+        <td>${dept.disposedAssets || 0}</td>
+      </tr>
+    `).join('');
+  }
+
+  const totalValue = entries.reduce((sum, [, d]) => sum + (d.totalPurchaseValue || 0), 0);
+  const totalActive = entries.reduce((sum, [, d]) => sum + (d.activeAssets || 0), 0);
+  document.getElementById('valuationTotalValue').textContent = '₹' + totalValue.toLocaleString('en-IN');
+  document.getElementById('valuationActiveCount').textContent = totalActive;
+}
+
+function exportValuationExcel() {
+  const res = requestJson('/api/reports/department-valuation').then(r => {
+    if (r.ok && r.data) {
+      const csv = [['Department', 'Manager', 'Total Assets', 'Purchase Value', 'Net Book Value', 'Active', 'Maintenance', 'Condemned', 'Disposed']];
+      Object.entries(r.data).forEach(([key, d]) => {
+        csv.push([d.name || key, d.manager || '', d.totalAssets || 0, d.totalPurchaseValue || 0, d.netBookValue || 0, d.activeAssets || 0, d.maintenanceAssets || 0, d.condemnedAssets || 0, d.disposedAssets || 0]);
+      });
+      const csvContent = csv.map(row => row.map(String).join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `department-valuation-${new Date().getFullYear()}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Valuation exported to CSV', 'success');
+    } else {
+      showToast('Failed to export valuation', 'error');
+    }
+  });
+}
+
+// ==========================================
+// ASSET LIFECYCLE
+// ==========================================
+async function loadAssetLifecycle() {
+  const assetId = document.getElementById('lifecycleAssetId').value.trim();
+  if (!assetId) {
+    showToast('Please enter an Asset ID', 'error');
+    return;
+  }
+
+  setLoading('Loading asset lifecycle...');
+  const res = await requestJson(`/api/assets/${encodeURIComponent(assetId)}/lifecycle`);
+  
+  if (res.ok && res.data) {
+    const lifecycleData = res.data;
+    document.getElementById('lifecycleEmpty').style.display = 'none';
+    document.getElementById('lifecycleContent').style.display = 'block';
+
+    const asset = lifecycleData.asset;
+    if (asset) {
+      document.getElementById('lifecycleAssetName').textContent = asset.name || assetId;
+      document.getElementById('lifecycleAssetIdVal').textContent = asset.assetId || assetId;
+      document.getElementById('lifecycleAssetDept').textContent = asset.department || 'N/A';
+      document.getElementById('lifecycleAssetStatus').textContent = asset.status || 'N/A';
+      document.getElementById('lifecycleAssetCategory').textContent = asset.category || 'N/A';
+      document.getElementById('lifecyclePurchaseDate').textContent = asset.purchaseDate || 'N/A';
+      document.getElementById('lifecyclePurchaseValue').textContent = asset.purchaseValue ? '₹' + Number(asset.purchaseValue).toLocaleString('en-IN') : 'N/A';
+      document.getElementById('lifecycleLocation').textContent = asset.location || 'N/A';
+      document.getElementById('lifecycleOwner').textContent = asset.owner || 'N/A';
+    }
+
+    const timeline = lifecycleData.lifecycle || [];
+    const timelineContainer = document.getElementById('lifecycleTimeline');
+
+    if (timeline.length === 0) {
+      timelineContainer.innerHTML = '<div class="empty-state">No lifecycle events found</div>';
+    } else {
+      timelineContainer.innerHTML = timeline.map(event => `
+        <div class="lifecycle-timeline-item">
+          <div class="timeline-dot ${event.event === 'CREATED' || event.event === 'STATUS_CHANGE' ? 'green' : event.event === 'TRANSFER' ? 'blue' : event.event === 'MAINTENANCE' ? 'orange' : event.event === 'CONDEMNATION_REQUESTED' ? 'red' : 'gray'}">
+            ${event.event.charAt(0)}
+          </div>
+          <div class="timeline-content">
+            <div class="timeline-event">${escapeHtml(event.event || 'EVENT')}</div>
+            <div class="timeline-details">${escapeHtml(event.details || '')}</div>
+            <div class="timeline-date">${new Date(event.timestamp).toLocaleString()}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+  } else {
+    showResult(res);
+  }
+}
+
+// ==========================================
+// USER MANAGEMENT
+// ==========================================
+async function loadUsers() {
+  setLoading('Loading users...');
+  const res = await requestJson('/api/users/pending');
+  if (res.ok && Array.isArray(res.data)) {
+    renderUsersTable(res.data);
+  } else {
+    // If no pending users endpoint, try getting all users
+    const allRes = await requestJson('/users/me');
+    if (allRes.ok) {
+      renderUsersTable([]);
+    }
+    showResult(res);
+  }
+}
+
+function renderUsersTable(users) {
+  const tbody = document.getElementById('usersTableBody');
+  
+  if (!users || users.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No pending user requests. All requests processed.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = users.map(u => `
+    <tr>
+      <td><strong>${escapeHtml(u.name || 'Unknown')}</strong></td>
+      <td>${escapeHtml(u.email)}</td>
+      <td>
+        <span class="status-pill ${u.role === 'Administrator' ? 'ok' : u.role === 'AuditOfficer' ? 'blue' : 'neutral'}">
+          ${escapeHtml(u.role || 'DepartmentUser')}
+        </span>
+      </td>
+      <td>${escapeHtml(u.department || 'IT')}</td>
+      <td>
+        <span class="status-pill ${u.isApproved ? 'ok' : u.status === 'Rejected' ? 'red' : 'neutral'}">
+          ${u.isApproved ? 'Approved' : (u.status === 'Rejected' ? 'Rejected' : 'Pending')}
+        </span>
+      </td>
+      <td>${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'Recent'}</td>
+      <td>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="openEditUserModal('${escapeHtml(u.email)}', '${escapeHtml(u._id || u.userId || u.email)}', '${escapeHtml(u.role)}', '${escapeHtml(u.department)}', '${escapeHtml(u.status)}', ${u.isApproved})">
+          Edit
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+window.openEditUserModal = function(email, userId, role, department, status, isApproved) {
+  document.getElementById('editUserId').value = email;
+  document.getElementById('editUserRole').value = role || 'DepartmentUser';
+  
+  const deptSelect = document.getElementById('editUserDepartment');
+  deptSelect.value = department === 'ALL' || department === 'ALL DEPARTMENTS' ? 'ALL' : (department || 'IT');
+  
+  document.getElementById('editUserStatus').innerHTML = `<strong class="status-pill ${isApproved ? 'ok' : status === 'Rejected' ? 'red' : 'neutral'}">${isApproved ? 'Approved' : status}</strong>`;
+  
+  openModal('editUserModal');
+};
+
+window.saveUserChanges = async function() {
+  const userId = document.getElementById('editUserId').value;
+  const role = document.getElementById('editUserRole').value;
+  const department = document.getElementById('editUserDepartment').value;
+  
+  const res = await requestJson(`/api/users/${encodeURIComponent(userId)}/role`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role, department })
+  });
+  
+  if (res.ok) {
+    showToast(`User updated successfully to role: ${role}`, 'success');
+    closeModal('editUserModal');
+    loadUsers();
+  } else {
+    showResult(res);
+  }
+};
+
+function refreshUsers() {
+  loadUsers();
+}
     } else {
       showToast(response.message || 'Gmail registration submitted! Awaiting Admin approval.', 'success');
       document.getElementById('showSignInTab')?.click();

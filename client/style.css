@@ -488,6 +488,34 @@ button, input, select, textarea { font: inherit; }
 
 .btn-link:hover { text-decoration: underline; }
 
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 11.5px;
+}
+
+.btn-outline {
+  background: var(--white);
+  color: var(--blue-700);
+  border-color: var(--blue-700);
+}
+
+.btn-outline:hover {
+  background: var(--blue-50);
+}
+
+.search-box {
+  display: flex;
+  gap: 8px;
+}
+
+.search-box input {
+  padding: 6px 12px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius);
+  font-size: 13px;
+  width: 200px;
+}
+
 /* Department filter tabs for assets page */
 #assetDeptFilterTabs .tab-btn {
   background: var(--white);
@@ -1940,6 +1968,146 @@ button, input, select, textarea { font: inherit; }
   background: #2563eb;
   color: #ffffff;
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
+}
+
+/* Timeline styles for asset lifecycle */
+.timeline {
+  position: relative;
+  padding: 20px 0;
+}
+
+.lifecycle-timeline-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.timeline-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  color: white;
+  min-width: 32px;
+}
+
+.timeline-dot.green { background: var(--green-500, #10b981); }
+.timeline-dot.blue { background: var(--blue-500, #3b82f6); }
+.timeline-dot.orange { background: #f59e0b; }
+.timeline-dot.red { background: var(--red-500, #ef4444); }
+.timeline-dot.gray { background: var(--gray-400); }
+
+.timeline-content {
+  flex: 1;
+}
+
+.timeline-event {
+  font-weight: 600;
+  color: var(--gray-900);
+  font-size: 14px;
+}
+
+.timeline-details {
+  color: var(--gray-600);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.timeline-date {
+  color: var(--gray-500);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+/* Card styles */
+.card {
+  background: var(--white);
+  border-radius: 12px;
+  border: 1px solid var(--gray-200);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.card-header {
+  padding: 12px 16px;
+  background: var(--gray-50);
+  border-bottom: 1px solid var(--gray-200);
+  font-weight: 600;
+}
+
+.card-body {
+  padding: 16px;
+}
+
+/* Form styles for modal */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-700);
+  margin-bottom: 4px;
+}
+
+.form-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  background: var(--white);
+  font-size: 14px;
+}
+
+/* Status pills */
+.status-pill.ok { background: rgba(16, 185, 129, 0.1); color: #065f46; }
+.status-pill.red { background: rgba(239, 68, 68, 0.1); color: #991b1b; }
+.status-pill.neutral { background: rgba(100, 116, 139, 0.1); color: #374151; }
+.status-pill.blue { background: rgba(59, 130, 246, 0.1); color: #1e40af; }
+.status-pill.green { background: rgba(16, 185, 129, 0.1); color: #065f46; }
+
+/* Grid layout */
+.grid {
+  display: grid;
+  gap: 16px;
+}
+
+/* Stat cards for valuation page */
+.stat-card {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--gray-900);
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--gray-500);
+  margin-top: 4px;
+}
 }
 
 

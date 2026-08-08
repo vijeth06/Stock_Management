@@ -3,7 +3,8 @@ const {
   getAllAssetsFromFabric,
   getAllBillsFromFabric,
   getAllMaintenanceRecordsFromFabric,
-  getAllCondemnationRecordsFromFabric
+  getAllCondemnationRecordsFromFabric,
+  getDepartmentValuationOnFabric
 } = require("../services/fabricService");
 const { generatePdfBuffer, generateExcelBuffer } = require("../services/reportExportService");
 
@@ -237,5 +238,33 @@ module.exports = {
   getDashboard,
   exportReport,
   getAnnualSummary,
-  getFinancialReport
+  getFinancialReport,
+  getDepartmentValuation
 };
+
+async function getDepartmentValuation(req, res, next) {
+  try {
+    const valuationRes = await getDepartmentValuationOnFabric();
+    if (!valuationRes.success) {
+      return res.status(500).json({ ok: false, error: valuationRes.error });
+    }
+
+    const reqUser = req.user;
+    let valuation = valuationRes.valuation || {};
+
+    if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department) {
+      const userDept = String(reqUser.department).toUpperCase();
+      const filtered = {};
+      for (const [key, val] of Object.entries(valuation)) {
+        if (String(val.code || key).toUpperCase() === userDept) {
+          filtered[key] = val;
+        }
+      }
+      valuation = filtered;
+    }
+
+    res.json({ ok: true, data: valuation });
+  } catch (err) {
+    next(err);
+  }
+}

@@ -1,4 +1,4 @@
-const { createAssetOnFabric, updateAssetOnFabric, readAssetFromFabric, getAllAssetsFromFabric, getAssetHistoryFromFabric } = require('../services/fabricService');
+const { createAssetOnFabric, updateAssetOnFabric, readAssetFromFabric, getAllAssetsFromFabric, getAssetHistoryFromFabric, getAssetLifecycleOnFabric, getAssetAuditTrailOnFabric, bulkImportAssetsOnFabric, bulkTransferAssetsOnFabric } = require('../services/fabricService');
 const { checkDepartmentAccess } = require('../middleware/auth');
 
 function getUserDepartment(req) {
@@ -307,7 +307,112 @@ async function getTransfers(req, res, next) {
       assets = assets.filter(a => (a.department || "").toUpperCase() === userDept);
     }
 
-    return res.json({ ok: true, data: assets });
+     return res.json({ ok: true, data: assets });
+   } catch (err) {
+     next(err);
+   }
+}
+
+async function getAssetLifecycle(req, res, next) {
+  try {
+    const assetId = req.params.assetId;
+    const assetRes = await readAssetFromFabric(assetId);
+    if (!assetRes.success || !assetRes.asset) {
+      return res.status(404).json({ ok: false, error: 'Asset not found on ledger' });
+    }
+    if (req.user && !checkDepartmentAccess(req.user, assetRes.asset.department)) {
+      return res.status(403).json({ ok: false, error: 'Access denied' });
+    }
+
+    const lifecycleRes = await getAssetLifecycleOnFabric(assetId);
+    if (!lifecycleRes.success) {
+      return res.status(500).json({ ok: false, error: lifecycleRes.error });
+    }
+
+    res.json({ ok: true, data: lifecycleRes.lifecycle });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getAssetAuditTrail(req, res, next) {
+  try {
+    const assetId = req.params.assetId;
+    const assetRes = await readAssetFromFabric(assetId);
+    if (!assetRes.success || !assetRes.asset) {
+      return res.status(404).json({ ok: false, error: 'Asset not found on ledger' });
+    }
+    if (req.user && !checkDepartmentAccess(req.user, assetRes.asset.department)) {
+      return res.status(403).json({ ok: false, error: 'Access denied' });
+    }
+
+    const auditRes = await getAssetAuditTrailOnFabric(assetId);
+    if (!auditRes.success) {
+      return res.status(500).json({ ok: false, error: auditRes.error });
+    }
+
+    res.json({ ok: true, data: auditRes.auditTrail });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function bulkImportAssets(req, res, next) {
+  try {
+    const { assets } = req.body || {};
+    if (!Array.isArray(assets) || assets.length === 0) {
+      return res.status(400).json({ ok: false, error: 'assets array is required' });
+    }
+
+    const result = await bulkImportAssetsOnFabric(assets);
+    if (!result.success) {
+      return res.status(500).json({ ok: false, error: result.error });
+    }
+
+    res.status(201).json({
+      ok: true,
+      data: result.result
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function bulkTransferAssets(req, res, next) {
+  try {
+    const { assetIds, toDepartment } = req.body || {};
+    if (!Array.isArray(assetIds) || assetIds.length === 0) {
+      return res.status(400).json({ ok: false, error: 'assetIds array is required' });
+    }
+    if (!toDepartment) {
+      return res.status(400).json({ ok: false, error: 'toDepartment is required' });
+    }
+
+    const normalizedDept = String(toDepartment).trim().toUpperCase();
+
+    // For DepartmentUser, verify all assets belong to their department
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const userDept = String(req.user.department).toUpperCase();
+      const allRes = await getAllAssetsFromFabric();
+      const assets = allRes.assets || [];
+      const userAssetIds = new Set(assets
+        .filter(a => (a.department || "").toUpperCase() === userDept)
+        .map(a => a.assetId)
+      );
+
+      for (const id of assetIds) {
+        if (!userAssetIds.has(id)) {
+          return res.status(403).json({ ok: false, error: `Cannot transfer asset ${id}: not in your department` });
+        }
+      }
+    }
+
+    const result = await bulkTransferAssetsOnFabric(assetIds, normalizedDept);
+    if (!result.success) {
+      return res.status(500).json({ ok: false, error: result.error });
+    }
+
+    res.json({ ok: true, data: result.result });
   } catch (err) {
     next(err);
   }
@@ -321,5 +426,9 @@ module.exports = {
   deleteAsset,
   getAssetHistory,
   transferAsset,
-  getTransfers
+  getTransfers,
+  getAssetLifecycle,
+  getAssetAuditTrail,
+  bulkImportAssets,
+  bulkTransferAssets
 };

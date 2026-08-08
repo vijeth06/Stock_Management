@@ -101,6 +101,21 @@ router.get("/users/pending", authorize(["Administrator"]), authController.getPen
 router.post("/users/:id/approve", authorize(["Administrator"]), authController.approveUser);
 router.post("/users/:id/reject", authorize(["Administrator"]), authController.rejectUser);
 
+// Extended user management
+router.put("/users/:id/role", authorize(["Administrator"]), authController.updateUserRole);
+router.put("/users/:id/department", authorize(["Administrator"]), authController.updateUserDepartment);
+
+// Department valuation report
+router.get("/reports/department-valuation", authorize(["Administrator", "AuditOfficer"]), reportController.getDepartmentValuation);
+
+// Asset lifecycle tracking
+router.get("/assets/:assetId/lifecycle", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), assetController.getAssetLifecycle);
+router.get("/assets/:assetId/audit-trail", authorize(["Administrator", "AuditOfficer"]), assetController.getAssetAuditTrail);
+
+// Bulk operations
+router.post("/assets/bulk-import", authorize(["Administrator"]), assetController.bulkImportAssets);
+router.post("/assets/bulk-transfer", authorize(["Administrator", "DepartmentUser"]), assetController.bulkTransferAssets);
+
 // Test endpoint removed: ledger writes should happen via standard `/api/bills` flow.
 
 module.exports = router;

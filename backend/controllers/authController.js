@@ -3,7 +3,9 @@ const {
   getAllUsersFromFabric,
   readUserFromFabric,
   updateUserOnFabric,
-  createUserOnFabric
+  createUserOnFabric,
+  updateUserRoleOnFabric,
+  updateUserDepartmentOnFabric
 } = require("../services/fabricService");
 
 async function register(req, res, next) {
@@ -147,4 +149,57 @@ async function gmailAuth(req, res, next) {
   }
 }
 
-module.exports = { register, login, getPendingUsers, approveUser, rejectUser, gmailAuth };
+async function updateUserRole(req, res, next) {
+  try {
+    const userId = req.params.id;
+    const { role, department } = req.body || {};
+
+    if (!role) {
+      return res.status(400).json({ ok: false, error: 'role is required' });
+    }
+
+    const validRoles = ['Administrator', 'DepartmentUser', 'AuditOfficer'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ ok: false, error: `Invalid role. Must be one of: ${validRoles.join(', ')}` });
+    }
+
+    const updateRes = await updateUserRoleOnFabric(userId, role, department || undefined);
+    if (!updateRes.success) {
+      return res.status(500).json({ ok: false, error: updateRes.error || 'Failed to update user role' });
+    }
+
+    try { await recordAuditLog({ actor: req.user && req.user.email, role: req.user && req.user.role, action: 'UPDATE_USER_ROLE', resourceType: 'User', resourceId: userId, details: { role, department } }); } catch (e) {}
+
+    res.json({ ok: true, data: updateRes.user, message: `User role updated to ${role}` });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+}
+
+async function updateUserDepartment(req, res, next) {
+  try {
+    const userId = req.params.id;
+    const { department } = req.body || {};
+
+    if (!department) {
+      return res.status(400).json({ ok: false, error: 'department is required' });
+    }
+
+    const normalizedDept = String(department).trim().toUpperCase();
+
+    const updateRes = await updateUserDepartmentOnFabric(userId, normalizedDept);
+    if (!updateRes.success) {
+      return res.status(500).json({ ok: false, error: updateRes.error || 'Failed to update user department' });
+    }
+
+    try { await recordAuditLog({ actor: req.user && req.user.email, role: req.user && req.user.role, action: 'UPDATE_USER_DEPARTMENT', resourceType: 'User', resourceId: userId, details: { department: normalizedDept } }); } catch (e) {}
+
+    res.json({ ok: true, data: updateRes.user, message: `User department updated to ${normalizedDept}` });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+}
+
+const { recordAuditLog } = require("../services/auditService");
+
+module.exports = { register, login, getPendingUsers, approveUser, rejectUser, gmailAuth, updateUserRole, updateUserDepartment };

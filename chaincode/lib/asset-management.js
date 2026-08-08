@@ -810,6 +810,403 @@ class AssetManagementContract extends Contract {
 
         return JSON.stringify(report);
     }
+
+    // ==========================================
+    // DEPARTMENT VALUATION REPORT
+    // ==========================================
+
+    async GetDepartmentValuation(ctx) {
+        console.info('=== GetDepartmentValuation: Generating department valuation report ===');
+
+        const allAssetsStr = await this.GetAllAssets(ctx);
+        const assets = JSON.parse(allAssetsStr || '[]');
+        const allDeptsStr = await this.GetAllDepartments(ctx);
+        const departments = JSON.parse(allDeptsStr || '[]');
+
+        const deptSummary = {};
+
+        departments.forEach(dept => {
+            const code = dept.code || dept.name;
+            const deptAssets = assets.filter(a => (a.department || '').toUpperCase() === (code || '').toUpperCase());
+            deptSummary[code] = {
+                code: dept.code,
+                name: dept.name,
+                isActive: dept.isActive !== false,
+                manager: dept.manager || '',
+                totalAssets: deptAssets.length,
+                totalPurchaseValue: deptAssets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0),
+                netBookValue: deptAssets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0) * 0.7,
+                activeAssets: deptAssets.filter(a => a.status === 'Active').length,
+                maintenanceAssets: deptAssets.filter(a => a.status === 'Maintenance').length,
+                condemnedAssets: deptAssets.filter(a => a.status === 'Condemned').length,
+                disposedAssets: deptAssets.filter(a => a.status === 'Disposed' || a.status === 'Retired').length
+            };
+        });
+
+        return JSON.stringify(deptSummary);
+    }
+
+    // ==========================================
+    // ASSET LIFECYCLE TRACKING
+    // ==========================================
+
+    async AssetLifecycle(ctx, assetId) {
+        console.info(`=== AssetLifecycle: Getting lifecycle for asset ${assetId} ===`);
+
+        const assetJSON = await ctx.stub.getState(assetId);
+        if (!assetJSON || assetJSON.length === 0) {
+            throw new Error(`Asset ${assetId} does not exist`);
+        }
+
+        const asset = JSON.parse(assetJSON.toString());
+
+        const lifecycle = [];
+
+        // Creation event
+        if (asset.createdAt) {
+            lifecycle.push({
+                event: 'CREATED',
+                timestamp: asset.createdAt,
+                status: asset.status || 'Active',
+                department: asset.department || '',
+                user: asset.owner || '',
+                details: `Asset created with purchase value ${asset.purchaseValue || 0}`
+            });
+        }
+
+        // Maintenance events from embedded records
+        (asset.maintenanceRecords || []).forEach((m, idx) => {
+            lifecycle.push({
+                event: 'MAINTENANCE',
+                timestamp: m.createdAt || m.maintenanceDate || asset.createdAt,
+                status: m.status || 'Completed',
+                department: asset.department || '',
+                user: m.technician || '',
+                details: m.description || 'Maintenance performed'
+            });
+        });
+
+        // Condemnation record
+        if (asset.condemnationRecord) {
+            lifecycle.push({
+                event: 'CONDEMNATION_REQUESTED',
+                timestamp: asset.condemnationRecord.requestedAt || asset.createdAt,
+                status: asset.condemnationRecord.status || 'Pending',
+                department: asset.department || '',
+                user: asset.condemnationRecord.requestedBy || '',
+                details: asset.condemnationRecord.reason || ''
+            });
+            if (asset.condemnationRecord.approvedAt) {
+                lifecycle.push({
+                    event: 'CONDEMNATION_APPROVED',
+                    timestamp: asset.condemnationRecord.approvedAt,
+                    status: 'Approved',
+                    department: asset.department || '',
+                    user: asset.condemnationRecord.approvedBy || '',
+                    details: `Condemnation approved by ${asset.condemnationRecord.approvedBy || 'Admin'}`
+                });
+            }
+            if (asset.condemnationRecord.rejectedAt) {
+                lifecycle.push({
+                    event: 'CONDEMNATION_REJECTED',
+                    timestamp: asset.condemnationRecord.rejectedAt,
+                    status: 'Rejected',
+                    department: asset.department || '',
+                    user: asset.condemnationRecord.rejectedBy || '',
+                    details: `Condemnation rejected`
+                });
+            }
+        }
+
+        // History-based events (from ledger history - transfers, status changes)
+        const historyIterator = await ctx.stub.getHistoryForKey(assetId);
+        const historyItems = [];
+        let res = await historyIterator.next();
+        while (!res.done) {
+            if (res.value && res.value.value.toString()) {
+                historyItems.push(res.value);
+            }
+            res = await historyIterator.next();
+        }
+        await historyIterator.close();
+
+        let lastDept = null;
+        let lastStatus = null;
+
+        for (let i = 0; i < historyItems.length; i++) {
+            const item = historyItems[i];
+            let ts;
+            if (item.timestamp && typeof item.timestamp.toISOString === 'function') {
+                ts = item.timestamp.toISOString();
+            } else {
+                try {
+                    const val = JSON.parse(item.value.toString());
+                    ts = val.updatedAt || val.createdAt || new Date().toISOString();
+                } catch (e) {
+                    ts = new Date().toISOString();
+                }
+            }
+
+            try {
+                const val = JSON.parse(item.value.toString());
+
+                // Detect department change (transfer)
+                if (val.department && val.department !== lastDept && lastDept !== null) {
+                    lifecycle.push({
+                        event: 'TRANSFER',
+                        timestamp: ts,
+                        status: val.status || 'Active',
+                        department: val.department,
+                        user: val.owner || '',
+                        details: `Asset transferred from ${lastDept} to ${val.department}`
+                    });
+                }
+
+                // Detect status change
+                if (val.status && val.status !== lastStatus && lastStatus !== null) {
+                    const significantStatuses = ['Active', 'Maintenance', 'Condemned', 'Disposed', 'Condemnation Requested'];
+                    if (significantStatuses.includes(val.status)) {
+                        lifecycle.push({
+                            event: 'STATUS_CHANGE',
+                            timestamp: ts,
+                            status: val.status,
+                            department: val.department || '',
+                            user: val.owner || '',
+                            details: `Status changed from ${lastStatus} to ${val.status}`
+                        });
+                    }
+                }
+
+                if (val.department) lastDept = val.department;
+                if (val.status) lastStatus = val.status;
+            } catch (e) {}
+        }
+
+        // Sort by timestamp
+        lifecycle.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+        return JSON.stringify({
+            assetId,
+            asset: {
+                assetId: asset.assetId,
+                name: asset.name,
+                department: asset.department,
+                category: asset.category,
+                purchaseValue: asset.purchaseValue,
+                purchaseDate: asset.purchaseDate,
+                warrantyExpiry: asset.warrantyExpiry,
+                location: asset.location,
+                owner: asset.owner,
+                status: asset.status
+            },
+            lifecycle
+        });
+    }
+
+    // ==========================================
+    // BULK ASSET OPERATIONS
+    // ==========================================
+
+    async BulkImportAssets(ctx, assetsJson) {
+        console.info('=== BulkImportAssets: Importing multiple assets ===');
+
+        const assets = JSON.parse(assetsJson);
+        if (!Array.isArray(assets)) {
+            throw new Error('Assets must be an array');
+        }
+
+        const results = [];
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const asset of assets) {
+            try {
+                const assetId = asset.assetId;
+                if (!assetId) {
+                    results.push({ success: false, error: 'Asset missing assetId', asset });
+                    errorCount++;
+                    continue;
+                }
+
+                const exists = await this.AssetExists(ctx, assetId);
+                if (exists) {
+                    results.push({ success: false, assetId, error: 'Asset already exists' });
+                    errorCount++;
+                    continue;
+                }
+
+                const assetObj = {
+                    id: `asset-${Date.now()}-${successCount}`,
+                    assetId,
+                    department: (asset.department || 'IT').toUpperCase(),
+                    category: asset.category || 'General',
+                    name: asset.name || '',
+                    purchaseDate: asset.purchaseDate || new Date().toISOString().split('T')[0],
+                    purchaseValue: parseFloat(asset.purchaseValue || 0),
+                    status: asset.status || 'Active',
+                    location: asset.location || 'Default Location',
+                    owner: asset.owner || 'Unassigned',
+                    warrantyExpiry: asset.warrantyExpiry || '',
+                    billHash: asset.billHash || '',
+                    maintenanceRecords: [],
+                    maintenanceCount: 0,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+
+                await ctx.stub.putState(assetId, Buffer.from(JSON.stringify(assetObj)));
+                results.push({ success: true, assetId, asset: assetObj });
+                successCount++;
+            } catch (e) {
+                results.push({ success: false, error: e.message, assetId: asset.assetId });
+                errorCount++;
+            }
+        }
+
+        return JSON.stringify({
+            imported: successCount,
+            failed: errorCount,
+            total: assets.length,
+            results
+        });
+    }
+
+    async BulkTransferAssets(ctx, assetIdsJson, toDepartment) {
+        console.info(`=== BulkTransferAssets: Transferring assets to ${toDepartment} ===`);
+
+        const assetIds = JSON.parse(assetIdsJson);
+        const dept = (toDepartment || 'IT').toUpperCase();
+        const results = [];
+
+        for (const assetId of assetIds) {
+            try {
+                const assetJSON = await ctx.stub.getState(assetId);
+                if (!assetJSON || assetJSON.length === 0) {
+                    results.push({ assetId, success: false, error: 'Asset not found' });
+                    continue;
+                }
+
+                const asset = JSON.parse(assetJSON.toString());
+                if (['Condemned', 'Disposed', 'Retired'].includes(asset.status)) {
+                    results.push({ assetId, success: false, error: `Cannot transfer asset in ${asset.status} state` });
+                    continue;
+                }
+
+                asset.department = dept;
+                asset.updatedAt = new Date().toISOString();
+                await ctx.stub.putState(assetId, Buffer.from(JSON.stringify(asset)));
+                results.push({ assetId, success: true, fromDepartment: asset.department, toDepartment: dept });
+            } catch (e) {
+                results.push({ assetId, success: false, error: e.message });
+            }
+        }
+
+        return JSON.stringify({
+            updated: results.filter(r => r.success).length,
+            failed: results.filter(r => !r.success).length,
+            total: assetIds.length,
+            results
+        });
+    }
+
+    // ==========================================
+    // AUDIT TRAIL
+    // ==========================================
+
+    async GetAuditTrail(ctx, assetId) {
+        console.info(`=== GetAuditTrail: Getting audit trail for ${assetId} ===`);
+
+        const iterator = await ctx.stub.getHistoryForKey(assetId);
+        const allEvents = [];
+
+        let res = await iterator.next();
+        while (!res.done) {
+            if (res.value && res.value.value.toString()) {
+                let ts;
+                if (res.value.timestamp && typeof res.value.timestamp.toISOString === 'function') {
+                    ts = res.value.timestamp.toISOString();
+                } else {
+                    try {
+                        const val = JSON.parse(res.value.value.toString());
+                        ts = val.updatedAt || val.createdAt || new Date().toISOString();
+                    } catch (e) {
+                        ts = new Date().toISOString();
+                    }
+                }
+
+                let parsedValue = null;
+                let eventName = 'UPDATE';
+                try {
+                    parsedValue = JSON.parse(res.value.value.toString());
+                } catch (e) {
+                    parsedValue = res.value.value.toString();
+                }
+
+                if (res.value.isDelete) {
+                    eventName = 'DELETE';
+                } else {
+                    eventName = allEvents.length === 0 ? 'CREATE' : 'UPDATE';
+                }
+
+                allEvents.push({
+                    eventId: res.value.txId || `event-${allEvents.length}`,
+                    eventType: eventName,
+                    timestamp: ts,
+                    txId: res.value.txId,
+                    isDelete: res.value.isDelete,
+                    value: parsedValue
+                });
+            }
+            res = await iterator.next();
+        }
+        await iterator.close();
+
+        return JSON.stringify({
+            assetId,
+            events: allEvents
+        });
+    }
+
+    // ==========================================
+    // USER MANAGEMENT (extended)
+    // ==========================================
+
+    async UpdateUserRole(ctx, emailOrId, newRole, department) {
+        console.info(`=== UpdateUserRole: Setting role ${newRole} for user ${emailOrId} ===`);
+
+        const existingStr = await this.ReadUser(ctx, emailOrId);
+        const user = JSON.parse(existingStr);
+        user.role = newRole;
+        if (department) {
+            user.department = String(department).toUpperCase().trim();
+        }
+        user.updatedAt = new Date().toISOString();
+
+        const jsonStr = JSON.stringify(user);
+        const emailKey = `USER_${user.email.toLowerCase().trim()}`;
+        const idKey = `USER_ID_${user._id || user.userId}`;
+        await ctx.stub.putState(emailKey, Buffer.from(jsonStr));
+        await ctx.stub.putState(idKey, Buffer.from(jsonStr));
+
+        return jsonStr;
+    }
+
+    async UpdateUserDepartment(ctx, emailOrId, newDepartment) {
+        console.info(`=== UpdateUserDepartment: Setting department ${newDepartment} for user ${emailOrId} ===`);
+
+        const existingStr = await this.ReadUser(ctx, emailOrId);
+        const user = JSON.parse(existingStr);
+        user.department = String(newDepartment || user.department || 'IT').toUpperCase().trim();
+        user.updatedAt = new Date().toISOString();
+
+        const jsonStr = JSON.stringify(user);
+        const emailKey = `USER_${user.email.toLowerCase().trim()}`;
+        const idKey = `USER_ID_${user._id || user.userId}`;
+        await ctx.stub.putState(emailKey, Buffer.from(jsonStr));
+        await ctx.stub.putState(idKey, Buffer.from(jsonStr));
+
+        return jsonStr;
+    }
 }
 
 module.exports = AssetManagementContract;
