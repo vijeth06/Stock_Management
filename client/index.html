@@ -143,17 +143,6 @@
               <p class="banner-subtitle">Campus Stock & Departmental Asset Ledger</p>
             </div>
           </div>
-          <div class="banner-right">
-            <span class="academic-year-badge">🎓 AY 2025–2026</span>
-            <div class="dept-quick-pills">
-              <span class="dept-pill active">CSE</span>
-              <span class="dept-pill">ECE</span>
-              <span class="dept-pill">ME</span>
-              <span class="dept-pill">CE</span>
-              <span class="dept-pill">CHE</span>
-              <span class="dept-pill">LIB</span>
-            </div>
-          </div>
         </div>
 
         <!-- DASHBOARD -->
@@ -380,6 +369,12 @@
             <div class="page-actions">
               <button type="button" class="btn btn-secondary" id="refreshAssetsBtn">Refresh</button>
               <button type="button" class="btn btn-primary" id="addAssetBtn">Add Asset</button>
+            </div>
+
+            <div style="margin-bottom:16px;">
+              <div class="tabs" id="assetDeptFilterTabs" style="display:flex; gap:6px; flex-wrap:wrap;">
+                <button type="button" class="tab-btn active" data-dept="ALL">All Departments</button>
+              </div>
             </div>
           </div>
 
@@ -834,15 +829,9 @@
         </div>
         <div class="form-field">
           <label>Destination Academic Department</label>
-          <select name="toDepartment" required>
-            <option value="CSE">Computer Science & Engg (CSE)</option>
-            <option value="ECE">Electronics & Comm. (ECE)</option>
-            <option value="ME">Mechanical Engg & Workshop (ME)</option>
-            <option value="CE">Civil & Structural Engg (CE)</option>
-            <option value="CHE">Chemistry & Chemical Labs (CHE)</option>
-            <option value="LIB">Central University Library (LIB)</option>
-            <option value="ADM">Academic Admin & Exams (ADM)</option>
-          </select>
+           <select name="toDepartment" id="transferToDept" required>
+             <option value="">Loading departments...</option>
+           </select>
         </div>
         <div class="form-field">
           <label>New Campus Location / Room</label>

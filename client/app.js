@@ -505,22 +505,63 @@ function renderRecentAlerts(counts) {
 async function loadAssets() {
   setLoading('Loading asset registry...');
   const res = await requestJson('/api/assets');
+  let assets = [];
   if (res.ok) {
-    renderAssetList(res.data || []);
+    assets = res.data || [];
   }
   showResult(res);
+
+  // Store for re-rendering on filter change without re-fetch
+  window.allAssetsCache = assets;
+
+  // Populate department filter tabs
+  const deptsRes = await requestJson('/api/departments');
+  const tabsContainer = document.getElementById('assetDeptFilterTabs');
+  if (tabsContainer && deptsRes.ok && deptsRes.data) {
+    const blockchainDepts = deptsRes.data.filter(d => !d.isDefault && d.isActive !== false);
+    let tabsHtml = '<button type="button" class="tab-btn active" data-dept="ALL">All Departments</button>';
+    blockchainDepts.forEach(d => {
+      tabsHtml += `<button type="button" class="tab-btn" data-dept="${escapeHtml(d.code)}">${escapeHtml(d.name)} (${escapeHtml(d.code)})</button>`;
+    });
+    tabsContainer.innerHTML = tabsHtml;
+
+    // Add click handlers
+    tabsContainer.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        tabsContainer.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        const filterDept = this.getAttribute('data-dept');
+        applyAssetFilter(assets, filterDept);
+      });
+    });
+  }
+
+  // Apply default filter (ALL)
+  currentAssetFilter = 'ALL';
+  const activeTab = tabsContainer?.querySelector('.tab-btn.active');
+  if (activeTab) {
+    applyAssetFilter(assets, activeTab.getAttribute('data-dept'));
+  } else {
+    renderAssetList(assets, 'ALL');
+  }
 }
 
-function renderAssetList(assets) {
+function renderAssetList(assets, filterDept) {
+  filterDept = filterDept || 'ALL';
   const container = document.getElementById('assetDisplay');
   if (!container) return;
 
-  if (!assets || assets.length === 0) {
-    container.innerHTML = '<div class="empty-state">No registered assets found.</div>';
+  let displayAssets = assets || [];
+  if (filterDept && filterDept !== 'ALL') {
+    displayAssets = displayAssets.filter(a => (a.department || '').toUpperCase() === String(filterDept).toUpperCase());
+  }
+
+  if (!displayAssets || displayAssets.length === 0) {
+    container.innerHTML = `<div class="empty-state">No assets found for ${filterDept === 'ALL' ? 'All Departments' : filterDept}.</div>`;
     return;
   }
 
-  container.innerHTML = assets.map(asset => {
+  container.innerHTML = displayAssets.map(asset => {
     const rawAssetId = String(asset.assetId || asset._id);
     const safeAssetId = rawAssetId.replace(/[^a-zA-Z0-9_-]/g, '_');
     return `
@@ -549,6 +590,16 @@ function renderAssetList(assets) {
     </div>
   `;
   }).join('');
+}
+
+// Global variables for asset filtering
+let currentAssets = [];
+let currentAssetFilter = 'ALL';
+
+function applyAssetFilter(assets, filterDept) {
+  currentAssets = assets || window.allAssetsCache || [];
+  currentAssetFilter = filterDept || 'ALL';
+  renderAssetList(currentAssets, currentAssetFilter);
 }
 
 window.showAssetHistory = async function(assetId) {
@@ -607,11 +658,12 @@ window.openEditAsset = async function(assetId) {
     document.getElementById('editAssetStatusInput').value = a.status || 'Active';
     document.getElementById('editAssetCategoryInput').value = a.category || 'Hardware';
 
-    // Populate department select options
+    // Populate department select options - only show departments registered in blockchain
     const deptsRes = await requestJson('/api/departments');
     const deptSelect = document.getElementById('editAssetDeptInput');
     if (deptSelect && deptsRes.ok && deptsRes.data) {
-      deptSelect.innerHTML = deptsRes.data.map(d => `<option value="${escapeHtml(d.code || d.name)}" ${d.code === a.department || d.name === a.department ? 'selected' : ''}>${escapeHtml(d.name)} (${escapeHtml(d.code)})</option>`).join('');
+      const blockchainDepts = deptsRes.data.filter(d => !d.isDefault && d.isActive !== false);
+      deptSelect.innerHTML = blockchainDepts.map(d => `<option value="${escapeHtml(d.code || d.name)}" ${d.code === a.department || d.name === a.department ? 'selected' : ''}>${escapeHtml(d.name)} (${escapeHtml(d.code)})</option>`).join('');
     }
 
     openModal('editAssetModal');
@@ -685,17 +737,26 @@ window.showQrBadge = function(assetId) {
   });
 };
 
-window.openQuickTransfer = function(assetId) {
+window.openQuickTransfer = async function(assetId) {
   const input = document.querySelector('#transferAssetForm input[name="assetId"]');
   if (input) input.value = assetId;
+  // Populate department dropdown
+  const deptsRes = await requestJson('/api/departments');
+  const deptSelect = document.getElementById('transferToDept');
+  if (deptSelect && deptsRes.ok && deptsRes.data) {
+    const blockchainDepts = deptsRes.data.filter(d => !d.isDefault && d.isActive !== false);
+    deptSelect.innerHTML = blockchainDepts.map(d => `<option value="${escapeHtml(d.code || d.name)}">${escapeHtml(d.name)} (${escapeHtml(d.code)})</option>`).join('');
+  }
   openModal('transferAssetModal');
 };
 
 document.getElementById('addAssetBtn')?.addEventListener('click', async () => {
+  // Populate department select options - only show departments registered in blockchain
   const deptsRes = await requestJson('/api/departments');
   const deptSelect = document.querySelector('#addAssetForm select[name="department"]');
   if (deptSelect && deptsRes.ok && deptsRes.data && deptsRes.data.length > 0) {
-    deptSelect.innerHTML = deptsRes.data.map(d => `<option value="${escapeHtml(d.code || d.name)}">${escapeHtml(d.name)} (${escapeHtml(d.code)})</option>`).join('');
+    const blockchainDepts = deptsRes.data.filter(d => !d.isDefault && d.isActive !== false);
+    deptSelect.innerHTML = blockchainDepts.map(d => `<option value="${escapeHtml(d.code || d.name)}">${escapeHtml(d.name)} (${escapeHtml(d.code)})</option>`).join('');
   }
   openModal('addAssetModal');
 });
@@ -983,7 +1044,13 @@ function renderTransfers(transfers) {
   `).join('');
 }
 
-document.getElementById('openTransferModalBtn')?.addEventListener('click', () => {
+document.getElementById('openTransferModalBtn')?.addEventListener('click', async () => {
+  const deptsRes = await requestJson('/api/departments');
+  const deptSelect = document.getElementById('transferToDept');
+  if (deptSelect && deptsRes.ok && deptsRes.data) {
+    const blockchainDepts = deptsRes.data.filter(d => !d.isDefault && d.isActive !== false);
+    deptSelect.innerHTML = blockchainDepts.map(d => `<option value="${escapeHtml(d.code || d.name)}">${escapeHtml(d.name)} (${escapeHtml(d.code)})</option>`).join('');
+  }
   openModal('transferAssetModal');
 });
 
@@ -1860,6 +1927,12 @@ document.getElementById('alertsRefreshBtn')?.addEventListener('click', async () 
 
 document.getElementById('refreshAssetsBtn')?.addEventListener('click', async () => {
   await loadAssets();
+  // Re-apply current filter
+  const activeTab = document.querySelector('#assetDeptFilterTabs .tab-btn.active');
+  if (activeTab) {
+    const filterDept = activeTab.getAttribute('data-dept');
+    applyAssetFilter(window.allAssetsCache || [], filterDept);
+  }
   showToast('Asset registry refreshed', 'info');
 });
 

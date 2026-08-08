@@ -140,9 +140,66 @@ async function deleteAsset(req, res, next) {
 async function getAssetHistory(req, res, next) {
   try {
     const assetId = req.params.assetId;
-    const result = await getAssetHistoryFromFabric(assetId);
-    if (!result.success) return res.status(500).json({ ok: false, error: result.error });
-    res.json({ ok: true, data: { assetId, timeline: result.history } });
+    const fabricRes = await readAssetFromFabric(assetId);
+    if (!fabricRes.success || !fabricRes.asset) {
+      return res.status(404).json({ ok: false, error: 'Asset not found on ledger' });
+    }
+
+    const asset = fabricRes.asset;
+    const historyRes = await getAssetHistoryFromFabric(assetId);
+
+    const timeline = [];
+    if (asset.createdAt) {
+      timeline.push({
+        event: 'Asset Created',
+        date: asset.createdAt,
+        details: `Asset ${asset.assetId} registered in ${asset.department}`
+      });
+    }
+
+    if (historyRes.success && Array.isArray(historyRes.history)) {
+      historyRes.history.forEach((item, idx) => {
+        try {
+          const val = JSON.parse(item.value);
+          let dateStr = item.timestamp;
+          if (typeof dateStr !== 'string' || dateStr === '[object Object]') {
+            // Fabric timestamp is a protobuf Timestamp object - use index ordering
+            dateStr = val.updatedAt || val.createdAt || new Date().toISOString();
+          }
+          timeline.push({
+            event: item.isDelete ? 'Asset Ledger Deleted' : 'Asset Ledger Update',
+            date: dateStr,
+            details: `Ledger Status: ${val.status || 'Updated'}, Department: ${val.department || 'N/A'}`
+          });
+        } catch (e) {}
+      });
+    }
+
+    (asset.maintenanceRecords || []).forEach(record => {
+      timeline.push({
+        event: 'Maintenance',
+        date: record.maintenanceDate || record.createdAt,
+        details: `${record.description} by ${record.technician} (${record.status})`
+      });
+    });
+
+    if (asset.condemnationRecord) {
+      timeline.push({
+        event: 'Condemnation Request',
+        date: asset.condemnationRecord.requestedAt || asset.updatedAt,
+        details: `Condemnation ${asset.condemnationRecord.status} by ${asset.condemnationRecord.requestedBy}`
+      });
+    }
+
+    timeline.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    res.json({
+      ok: true,
+      data: {
+        asset,
+        timeline
+      }
+    });
   } catch (err) {
     next(err);
   }
@@ -150,11 +207,35 @@ async function getAssetHistory(req, res, next) {
 
 async function transferAsset(req, res, next) {
   try {
-    const { assetId, toDepartment, newLocation } = req.body || {};
+    const { assetId, toDepartment, newLocation, fromDepartment } = req.body || {};
     if (!assetId || !toDepartment) return res.status(400).json({ ok: false, error: 'assetId and toDepartment required' });
     const dept = String(toDepartment).trim().toUpperCase();
 
+    // Check access to the asset
+    const assetRes = await readAssetFromFabric(assetId);
+    if (!assetRes.success || !assetRes.asset) {
+      return res.status(404).json({ ok: false, error: 'Asset not found on ledger' });
+    }
+    if (req.user && !checkDepartmentAccess(req.user, assetRes.asset.department)) {
+      return res.status(403).json({ ok: false, error: 'Access denied to transfer this asset' });
+    }
+
     const results = [];
+    const transferRecords = [];
+    const fromDept = String(fromDepartment || assetRes.asset.department || 'UNKNOWN').toUpperCase();
+
+    // Record transfer only if department changes
+    if (dept !== fromDept) {
+      transferRecords.push({
+        transferId: `XFR-${Date.now()}`,
+        assetId,
+        fromDepartment: fromDept,
+        toDepartment: dept,
+        reason: req.body.reason || 'Department transfer',
+        createdAt: new Date().toISOString()
+      });
+    }
+
     const dRes = await updateAssetOnFabric(assetId, { field: 'department', newValue: dept }).catch(e => ({ success: false, error: e.message }));
     results.push({ field: 'department', result: dRes });
 
@@ -163,7 +244,7 @@ async function transferAsset(req, res, next) {
       results.push({ field: 'location', result: lRes });
     }
 
-    res.json({ ok: true, data: { assetId, results } });
+    res.json({ ok: true, data: { assetId, results, transfers: transferRecords } });
   } catch (err) {
     next(err);
   }
@@ -175,13 +256,45 @@ async function getTransfers(req, res, next) {
     const reqUser = req.user;
 
     if (assetId) {
+      // Check asset access first
+      const assetRes = await readAssetFromFabric(assetId);
+      if (!assetRes.success || !assetRes.asset) {
+        return res.status(404).json({ ok: false, error: 'Asset not found' });
+      }
+      if (req.user && !checkDepartmentAccess(req.user, assetRes.asset.department)) {
+        return res.status(403).json({ ok: false, error: 'Access denied' });
+      }
+
       const hist = await getAssetHistoryFromFabric(assetId);
       if (!hist.success) return res.status(500).json({ ok: false, error: hist.error });
-      const transfers = (hist.history || []).filter(h => {
+      
+      // Parse history to find actual department changes (transfers)
+      const transfers = [];
+      const history = hist.history || [];
+      let lastDept = null;
+      
+      for (let i = 0; i < history.length; i++) {
         try {
-          return JSON.stringify(h).toLowerCase().includes('department') || JSON.stringify(h).toLowerCase().includes('transfer');
-        } catch (e) { return false; }
-      });
+          const val = JSON.parse(history[i].value);
+          const currentDept = val.department;
+          if (currentDept && currentDept !== lastDept) {
+            if (lastDept !== null) {
+              transfers.push({
+                transferId: `XFR-${i}-${history[i].txId || ''}`,
+                assetId,
+                fromDepartment: lastDept,
+                toDepartment: currentDept,
+                timestamp: typeof history[i].timestamp === 'string' && history[i].timestamp !== '[object Object]' 
+                  ? history[i].timestamp 
+                  : (val.updatedAt || val.createdAt || new Date().toISOString()),
+                reason: 'Department transfer'
+              });
+            }
+            lastDept = currentDept;
+          }
+        } catch (e) {}
+      }
+      
       return res.json({ ok: true, data: transfers });
     }
 

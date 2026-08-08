@@ -707,8 +707,16 @@ class AssetManagementContract extends Contract {
 
         const change_items = await getAllResults(iterator);
         for (const change of change_items) {
+            let ts = change.timestamp;
+            if (ts && typeof ts.toISOString === 'function') {
+                ts = ts.toISOString();
+            } else if (ts && typeof ts.toString === 'function') {
+                ts = ts.toString();
+            } else {
+                ts = String(ts);
+            }
             allChanges.push({
-                timestamp: change.timestamp.toString(),
+                timestamp: ts,
                 isDelete: change.isDelete,
                 value: change.value.toString('utf8')
             });

@@ -49,21 +49,31 @@ async function createDepartment(req, res, next) {
   }
 }
 
+const DEFAULT_DEPARTMENTS = [
+  { code: 'IT', name: 'Information Technology', description: 'IT Services & Asset Support', manager: 'Admin' },
+  { code: 'CSE', name: 'Computer Science & Engineering', description: 'Computer Lab & CSE Assets', manager: 'HOD' },
+  { code: 'ECE', name: 'Electronics & Communication Engineering', description: 'ECE Lab & Electronics Assets', manager: 'HOD' },
+  { code: 'ME', name: 'Mechanical Engineering', description: 'Workshop & ME Assets', manager: 'HOD' },
+  { code: 'CE', name: 'Civil Engineering', description: 'Civil Lab & Survey Instruments', manager: 'HOD' },
+  { code: 'CHE', name: 'Chemical Engineering', description: 'Chemistry Lab & Instruments', manager: 'HOD' },
+  { code: 'LIB', name: 'Library', description: 'Library Books & Digital Resources', manager: 'Librarian' }
+];
+
 async function getDepartments(req, res, next) {
   try {
     const deptsRes = await getAllDepartmentsFromFabric();
     let departments = deptsRes.departments || [];
 
-    // Always ensure default IT department exists
-    if (!departments.some(d => (d.code || '').toUpperCase() === 'IT')) {
-      departments.unshift({
-        _id: 'dept-it',
-        code: 'IT',
-        name: 'Information Technology',
-        description: 'IT Services & Asset Support',
-        manager: 'Admin',
-        isActive: true
-      });
+    // Ensure all default departments exist
+    for (const defaultDept of DEFAULT_DEPARTMENTS) {
+      if (!departments.some(d => (d.code || '').toUpperCase() === defaultDept.code)) {
+        departments.push({
+          _id: `dept-${defaultDept.code.toLowerCase()}`,
+          ...defaultDept,
+          isActive: true,
+          isDefault: true
+        });
+      }
     }
 
     // Calculate asset counts for each department
@@ -77,7 +87,7 @@ async function getDepartments(req, res, next) {
       });
       departments = departments.map(d => ({
         ...d,
-        assetCount: deptAssetCounts[(d.code || '').toUpperCase()] || deptAssetCounts[d.name?.toUpperCase()] || 0
+        assetCount: deptAssetCounts[(d.code || '').toUpperCase()] || 0
       }));
     } catch (e) {
       departments = departments.map(d => ({ ...d, assetCount: 0 }));
@@ -107,15 +117,15 @@ function findDepartmentById(departments, id) {
 function getDeptsWithDefault() {
   return getAllDepartmentsFromFabric().then(res => {
     let depts = res.departments || [];
-    if (!depts.some(d => (d.code || '').toUpperCase() === 'IT')) {
-      depts.unshift({
-        _id: 'dept-it',
-        code: 'IT',
-        name: 'Information Technology',
-        description: 'IT Services & Asset Support',
-        manager: 'Admin',
-        isActive: true
-      });
+    for (const defaultDept of DEFAULT_DEPARTMENTS) {
+      if (!depts.some(d => (d.code || '').toUpperCase() === defaultDept.code)) {
+        depts.push({
+          _id: `dept-${defaultDept.code.toLowerCase()}`,
+          ...defaultDept,
+          isActive: true,
+          isDefault: true
+        });
+      }
     }
     return depts;
   });

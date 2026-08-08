@@ -107,7 +107,7 @@ services:
       - "3000:3000"
     environment:
       PORT: 3000
-      JWT_SECRET: change-me-in-production
+      JWT_SECRET: campus-track-secret-key-2025
       FILE_TOKEN_SECRET: production-file-token-secret
       S3_BUCKET: minio-bucket
       S3_ENDPOINT: http://localhost:9000
@@ -117,7 +117,7 @@ services:
       FABRIC_NETWORK_PATH: /app/network
       ENABLE_FABRIC_SDK: "true"
       FABRIC_IDENTITY: "admin"
-      FABRIC_HOST: "localhost"
+      FABRIC_HOST: "peer0.org1.example.com"
       FABRIC_DISCOVERY_AS_LOCALHOST: "true"
       NODE_PATH: /app/node_modules:/app/gateway/node_modules
     networks:
@@ -131,7 +131,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    command: sh -c "npm install && npm start"
+    command: sh -c "npm install --omit=dev && npm start"
 
   fabric-tools:
     image: hyperledger/fabric-tools:2.5

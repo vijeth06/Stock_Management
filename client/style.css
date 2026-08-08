@@ -488,6 +488,35 @@ button, input, select, textarea { font: inherit; }
 
 .btn-link:hover { text-decoration: underline; }
 
+/* Department filter tabs for assets page */
+#assetDeptFilterTabs .tab-btn {
+  background: var(--white);
+  color: var(--gray-700);
+  border: 1px solid var(--gray-300);
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition: all var(--transition);
+}
+
+#assetDeptFilterTabs .tab-btn:hover {
+  background: var(--gray-50);
+  border-color: var(--gray-400);
+}
+
+#assetDeptFilterTabs .tab-btn.active {
+  background: var(--blue-600);
+  color: var(--white);
+  border-color: var(--blue-600);
+}
+
+#assetDeptFilterTabs .tab-btn.active:hover {
+  background: var(--blue-700);
+  border-color: var(--blue-700);
+}
+
 /* ── Panels ─────────────────────────────────────────────────── */
 
 .panel {
