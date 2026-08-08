@@ -104,7 +104,14 @@ async function getEquipmentVerifications(req, res, next) {
 
 async function getEquipmentVerification(req, res, next) {
   try {
-    const item = verificationsStore.equipmentVerifications.find(i => i.recordId === req.params.recordId || i._id === req.params.recordId);
+    const { getAllEquipmentVerificationsFromFabric } = require("../services/fabricService");
+    const recordId = req.params.recordId;
+    const fabricRes = await getAllEquipmentVerificationsFromFabric();
+    let items = fabricRes.records || [];
+    let item = items.find(i => i.recordId === recordId || i._id === recordId);
+    if (!item) {
+      item = verificationsStore.equipmentVerifications.find(i => i.recordId === recordId || i._id === recordId);
+    }
     if (!item) return res.status(404).json({ ok: false, error: "Equipment verification record not found" });
     if (req.user && !checkDepartmentAccess(req.user, item.department)) {
       return res.status(403).json({ ok: false, error: "Access denied to another department's verification" });
@@ -176,7 +183,14 @@ async function getEquipmentCondemnations(req, res, next) {
 
 async function getEquipmentCondemnation(req, res, next) {
   try {
-    const item = verificationsStore.equipmentCondemnations.find(i => i.recordId === req.params.recordId || i._id === req.params.recordId);
+    const { getAllEquipmentCondemnationsFromFabric } = require("../services/fabricService");
+    const recordId = req.params.recordId;
+    const fabricRes = await getAllEquipmentCondemnationsFromFabric();
+    let items = fabricRes.records || [];
+    let item = items.find(i => i.recordId === recordId || i._id === recordId);
+    if (!item) {
+      item = verificationsStore.equipmentCondemnations.find(i => i.recordId === recordId || i._id === recordId);
+    }
     if (!item) return res.status(404).json({ ok: false, error: "Equipment condemnation record not found" });
     if (req.user && !checkDepartmentAccess(req.user, item.department)) {
       return res.status(403).json({ ok: false, error: "Access denied to another department's condemnation record" });
@@ -191,7 +205,13 @@ async function approveEquipmentCondemnation(req, res, next) {
   try {
     const { recordId } = req.params;
     const { approvedBy } = req.body;
-    const record = verificationsStore.equipmentCondemnations.find(i => i.recordId === recordId || i._id === recordId);
+    
+    const { getAllEquipmentCondemnationsFromFabric } = require("../services/fabricService");
+    const fabricRes = await getAllEquipmentCondemnationsFromFabric();
+    let record = (fabricRes.records || []).find(i => i.recordId === recordId || i._id === recordId);
+    if (!record) {
+      record = verificationsStore.equipmentCondemnations.find(i => i.recordId === recordId || i._id === recordId);
+    }
     if (!record) return res.status(404).json({ ok: false, error: "Record not found" });
 
     if (record.status !== "Pending") {
@@ -201,6 +221,14 @@ async function approveEquipmentCondemnation(req, res, next) {
     record.status = "Approved";
     record.approvedBy = approvedBy;
     record.approvedAt = new Date().toISOString();
+
+    // Update in-memory store
+    const memRecord = verificationsStore.equipmentCondemnations.find(i => i.recordId === recordId || i._id === recordId);
+    if (memRecord) {
+      memRecord.status = record.status;
+      memRecord.approvedBy = record.approvedBy;
+      memRecord.approvedAt = record.approvedAt;
+    }
 
     res.json({ ok: true, data: record });
   } catch (error) {
@@ -212,7 +240,13 @@ async function rejectEquipmentCondemnation(req, res, next) {
   try {
     const { recordId } = req.params;
     const { rejectedBy } = req.body;
-    const record = verificationsStore.equipmentCondemnations.find(i => i.recordId === recordId || i._id === recordId);
+    
+    const { getAllEquipmentCondemnationsFromFabric } = require("../services/fabricService");
+    const fabricRes = await getAllEquipmentCondemnationsFromFabric();
+    let record = (fabricRes.records || []).find(i => i.recordId === recordId || i._id === recordId);
+    if (!record) {
+      record = verificationsStore.equipmentCondemnations.find(i => i.recordId === recordId || i._id === recordId);
+    }
     if (!record) return res.status(404).json({ ok: false, error: "Record not found" });
 
     if (record.status !== "Pending") {
@@ -222,6 +256,14 @@ async function rejectEquipmentCondemnation(req, res, next) {
     record.status = "Rejected";
     record.rejectedBy = rejectedBy;
     record.rejectedAt = new Date().toISOString();
+
+    // Update in-memory store
+    const memRecord = verificationsStore.equipmentCondemnations.find(i => i.recordId === recordId || i._id === recordId);
+    if (memRecord) {
+      memRecord.status = record.status;
+      memRecord.rejectedBy = record.rejectedBy;
+      memRecord.rejectedAt = record.rejectedAt;
+    }
 
     res.json({ ok: true, data: record });
   } catch (error) {
@@ -300,7 +342,14 @@ async function getConsumableVerifications(req, res, next) {
 
 async function getConsumableVerification(req, res, next) {
   try {
-    const item = verificationsStore.consumableVerifications.find(i => i.recordId === req.params.recordId || i._id === req.params.recordId);
+    const { getAllConsumableVerificationsFromFabric } = require("../services/fabricService");
+    const recordId = req.params.recordId;
+    const fabricRes = await getAllConsumableVerificationsFromFabric();
+    let items = fabricRes.records || [];
+    let item = items.find(i => i.recordId === recordId || i._id === recordId);
+    if (!item) {
+      item = verificationsStore.consumableVerifications.find(i => i.recordId === recordId || i._id === recordId);
+    }
     if (!item) return res.status(404).json({ ok: false, error: "Consumable verification record not found" });
     res.json({ ok: true, data: item });
   } catch (error) {
@@ -363,7 +412,14 @@ async function getConsumableCondemnations(req, res, next) {
 
 async function getConsumableCondemnation(req, res, next) {
   try {
-    const item = verificationsStore.consumableCondemnations.find(i => i.recordId === req.params.recordId || i._id === req.params.recordId);
+    const { getAllConsumableCondemnationsFromFabric } = require("../services/fabricService");
+    const recordId = req.params.recordId;
+    const fabricRes = await getAllConsumableCondemnationsFromFabric();
+    let items = fabricRes.records || [];
+    let item = items.find(i => i.recordId === recordId || i._id === recordId);
+    if (!item) {
+      item = verificationsStore.consumableCondemnations.find(i => i.recordId === recordId || i._id === recordId);
+    }
     if (!item) return res.status(404).json({ ok: false, error: "Consumable condemnation record not found" });
     res.json({ ok: true, data: item });
   } catch (error) {
@@ -375,7 +431,13 @@ async function approveConsumableCondemnation(req, res, next) {
   try {
     const { recordId } = req.params;
     const { approvedBy } = req.body;
-    const record = verificationsStore.consumableCondemnations.find(i => i.recordId === recordId || i._id === recordId);
+    
+    const { getAllConsumableCondemnationsFromFabric } = require("../services/fabricService");
+    const fabricRes = await getAllConsumableCondemnationsFromFabric();
+    let record = (fabricRes.records || []).find(i => i.recordId === recordId || i._id === recordId);
+    if (!record) {
+      record = verificationsStore.consumableCondemnations.find(i => i.recordId === recordId || i._id === recordId);
+    }
     if (!record) return res.status(404).json({ ok: false, error: "Record not found" });
 
     if (record.status !== "Pending") {
@@ -385,6 +447,13 @@ async function approveConsumableCondemnation(req, res, next) {
     record.status = "Approved";
     record.approvedBy = approvedBy;
     record.approvedAt = new Date().toISOString();
+
+    const memRecord = verificationsStore.consumableCondemnations.find(i => i.recordId === recordId || i._id === recordId);
+    if (memRecord) {
+      memRecord.status = record.status;
+      memRecord.approvedBy = record.approvedBy;
+      memRecord.approvedAt = record.approvedAt;
+    }
 
     res.json({ ok: true, data: record });
   } catch (error) {
@@ -396,7 +465,13 @@ async function rejectConsumableCondemnation(req, res, next) {
   try {
     const { recordId } = req.params;
     const { rejectedBy } = req.body;
-    const record = verificationsStore.consumableCondemnations.find(i => i.recordId === recordId || i._id === recordId);
+    
+    const { getAllConsumableCondemnationsFromFabric } = require("../services/fabricService");
+    const fabricRes = await getAllConsumableCondemnationsFromFabric();
+    let record = (fabricRes.records || []).find(i => i.recordId === recordId || i._id === recordId);
+    if (!record) {
+      record = verificationsStore.consumableCondemnations.find(i => i.recordId === recordId || i._id === recordId);
+    }
     if (!record) return res.status(404).json({ ok: false, error: "Record not found" });
 
     if (record.status !== "Pending") {
@@ -406,6 +481,13 @@ async function rejectConsumableCondemnation(req, res, next) {
     record.status = "Rejected";
     record.rejectedBy = rejectedBy;
     record.rejectedAt = new Date().toISOString();
+
+    const memRecord = verificationsStore.consumableCondemnations.find(i => i.recordId === recordId || i._id === recordId);
+    if (memRecord) {
+      memRecord.status = record.status;
+      memRecord.rejectedBy = record.rejectedBy;
+      memRecord.rejectedAt = record.rejectedAt;
+    }
 
     res.json({ ok: true, data: record });
   } catch (error) {

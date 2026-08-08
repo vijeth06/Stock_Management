@@ -61,7 +61,7 @@ async function uploadBill(req, res, next) {
     }
 
     billId = billId || `BILL-${Date.now()}`;
-    const providedDocumentKey = (req.body && req.body.documentKey) || req.query && req.query.documentKey || req.get && req.get('X-Document-Key');
+    const providedDocumentKey = (req.body && req.body.documentKey) || (req.query && req.query && req.query.documentKey) || (req.get && req.get('X-Document-Key'));
 
     const billData = {
       billId,

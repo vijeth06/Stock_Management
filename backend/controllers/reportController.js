@@ -137,7 +137,7 @@ async function getDashboard(req, res, next) {
         verifiedBills: bills.filter(b => b.verified).length,
         totalMaintenances: maintenances.length,
         totalCondemnationRequests: condemnations.length,
-        totalTransfers: assets.filter(a => a.department !== 'ALL' && a.department !== a.owner).length
+        totalTransfers: 0
       },
       analytics: {
         assetStatus: statusCounts,

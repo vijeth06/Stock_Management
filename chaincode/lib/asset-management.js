@@ -650,7 +650,7 @@ class AssetManagementContract extends Contract {
     async UpdateAsset(ctx, assetId, field, newValue) {
         console.info(`=== UpdateAsset: Updating ${field} for asset ${assetId} ===`);
 
-        const allowedFields = ["status", "location", "owner", "billHash", "department", "warrantyExpiry", "category", "name", "purchaseValue"];
+        const allowedFields = ["status", "location", "owner", "billHash", "department", "warrantyExpiry", "category", "name", "description", "purchaseValue"];
         if (!allowedFields.includes(field)) {
             throw new Error(`Field ${field} cannot be updated on the ledger`);
         }
@@ -759,9 +759,11 @@ class AssetManagementContract extends Contract {
         for (const res of res_items) {
             if (res.value.toString().length > 0) {
                 // Exclude prefixed metadata keys
-                if (res.key.startsWith('USER_') || res.key.startsWith('DEPT_') || 
-                    res.key.startsWith('BILL_') || res.key.startsWith('MNT_') || 
-                    res.key.startsWith('COND_')) {
+                if (res.key.startsWith('USER_') || res.key.startsWith('DEPT_') ||
+                    res.key.startsWith('BILL_') || res.key.startsWith('MNT_') ||
+                    res.key.startsWith('COND_') || res.key.startsWith('EQV_') ||
+                    res.key.startsWith('EQC_') || res.key.startsWith('CNV_') ||
+                    res.key.startsWith('CNC_')) {
                     continue;
                 }
 

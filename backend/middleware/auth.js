@@ -6,6 +6,9 @@ function authenticate(req, res, next) {
   if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'change-me-in-development')) {
     return res.status(500).json({ ok: false, error: 'Server misconfiguration: JWT_SECRET must be set in production' });
   }
+  if (!secret || secret === 'change-me-in-development') {
+    console.warn('JWT_SECRET not configured properly. Using default (insecure).');
+  }
   const header = req.headers.authorization || req.headers.Authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : (req.query && req.query.token ? req.query.token : null);
 

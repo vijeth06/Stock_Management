@@ -5,7 +5,7 @@ function registerHealthRoutes(app, context) {
       const blockchainState = await context.getBlockchainState();
       const data = {
         status: "ok",
-        platform: "ethereum",
+        platform: "Hyperledger Fabric",
         ...blockchainState,
         databaseReady: mongoState.ready,
       };

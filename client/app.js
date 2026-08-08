@@ -206,7 +206,7 @@ function updateUserChip() {
     let academicRoleTitle = 'HOD / Central Administrator';
     if (currentUser.role === 'DepartmentUser') {
       academicRoleTitle = `Lab In-Charge (${currentUser.department || 'CSE'})`;
-    } else if (currentUser.role === 'Auditor') {
+    } else if (currentUser.role === 'AuditOfficer') {
       academicRoleTitle = 'University Audit Officer';
     } else if (currentUser.role) {
       academicRoleTitle = currentUser.role;
