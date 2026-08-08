@@ -86,14 +86,14 @@ async function updateAsset(req, res, next) {
       return res.status(403).json({ ok: false, error: 'Access denied to update another department\'s asset' });
     }
 
+    const updates = req.body || {};
+
     if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
       const userDept = String(req.user.department).toUpperCase();
       if (updates.department && String(updates.department).trim().toUpperCase() !== userDept) {
         return res.status(403).json({ ok: false, error: 'Cannot move asset to another department' });
       }
     }
-
-    const updates = req.body || {};
 
     // Only allow safe fields to be updated on ledger
     const allowed = ["status", "department", "location", "owner", "billHash", "name", "description", "category"];
