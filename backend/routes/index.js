@@ -81,6 +81,7 @@ router.get("/transfers", authorize(["Administrator", "DepartmentUser", "AuditOff
 router.get("/reports/financial", authorize(["Administrator", "AuditOfficer"]), reportController.getFinancialReport);
 router.get("/dashboard", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.getDashboard);
 router.get("/reports", authorize(["Administrator", "AuditOfficer"]), reportController.getReports);
+router.get("/reports/department-valuation", authorize(["Administrator", "AuditOfficer"]), reportController.getDepartmentValuation);
 router.get("/reports/:reportId/export", authorize(["Administrator", "AuditOfficer"]), reportController.exportReport);
 router.get("/reports/:reportId", authorize(["Administrator", "AuditOfficer"]), reportController.getReport);
 router.post("/reports", authorize(["Administrator", "AuditOfficer"]), reportController.generateYearlyReport);
@@ -104,9 +105,6 @@ router.post("/users/:id/reject", authorize(["Administrator"]), authController.re
 // Extended user management
 router.put("/users/:id/role", authorize(["Administrator"]), authController.updateUserRole);
 router.put("/users/:id/department", authorize(["Administrator"]), authController.updateUserDepartment);
-
-// Department valuation report
-router.get("/reports/department-valuation", authorize(["Administrator", "AuditOfficer"]), reportController.getDepartmentValuation);
 
 // Asset lifecycle tracking
 router.get("/assets/:assetId/lifecycle", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), assetController.getAssetLifecycle);

@@ -197,6 +197,7 @@ button, input, select, textarea { font: inherit; }
 
 .chip-dot.online { background: var(--green-500); box-shadow: 0 0 0 3px rgba(34,197,94,0.2); }
 .chip-dot.offline { background: var(--red-500); box-shadow: 0 0 0 3px rgba(239,68,68,0.2); }
+.chip-dot.warning { background: var(--amber-500); box-shadow: 0 0 0 3px rgba(245,158,11,0.2); }
 
 .main-area {
   flex: 1;

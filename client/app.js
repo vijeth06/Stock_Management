@@ -181,17 +181,25 @@ async function requestJson(url, options = {}) {
 }
 
 async function checkHealth() {
-  const health = await requestJson('/health');
-  if (health.status === 'ok') {
-    statusBadge.textContent = 'Online';
-    statusBadge.className = 'status-pill ok';
-    sidebarChainLabel.textContent = 'Hyperledger Fabric';
-    sidebarChainDot.className = 'chip-dot online';
-  } else {
-    statusBadge.textContent = health.error || 'Disconnected';
-    statusBadge.className = 'status-pill error';
-    sidebarChainLabel.textContent = 'Offline';
-    sidebarChainDot.className = 'chip-dot offline';
+  try {
+    const health = await requestJson('/health');
+    if (health.status === 'ok' || health.ok === true || (health.data && health.data.status === 'ok')) {
+      statusBadge.textContent = 'Online';
+      statusBadge.className = 'status-pill ok';
+      sidebarChainLabel.textContent = 'Hyperledger Fabric';
+      sidebarChainDot.className = 'chip-dot online';
+    } else {
+      statusBadge.textContent = health.error || health.message || 'Disconnected';
+      statusBadge.className = 'status-pill error';
+      sidebarChainLabel.textContent = 'Offline';
+      sidebarChainDot.className = 'chip-dot offline';
+    }
+  } catch (e) {
+    console.warn('Health check failed:', e.message || e);
+    statusBadge.textContent = 'Checking connection…';
+    statusBadge.className = 'status-pill neutral';
+    sidebarChainLabel.textContent = 'Hyperledger Fabric (connecting…)';
+    sidebarChainDot.className = 'chip-dot warning';
   }
 }
 
@@ -2128,16 +2136,27 @@ document.getElementById('gmailAuthForm')?.addEventListener('submit', async (even
   const modal = document.getElementById('gmailModal');
   if (modal) modal.classList.add('hidden');
 
-  if (response.ok) {
-    if (response.data?.token && response.data?.user) {
-      authToken = response.data.token;
-      currentUser = response.data.user;
-      localStorage.setItem('authToken', authToken);
-      localStorage.setItem('currentUser', JSON.stringify(currentUser));
-      updateUserChip();
-      showToast(response.message || `Welcome ${currentUser.name}! Authenticated via Gmail.`, 'success');
-  await loadDashboard();
-})();
+    if (response.ok) {
+      if (response.data?.token && response.data?.user) {
+        authToken = response.data.token;
+        currentUser = response.data.user;
+        localStorage.setItem('authToken', authToken);
+        localStorage.setItem('currentUser', JSON.stringify(currentUser));
+        updateUserChip();
+        showToast(response.message || `Welcome ${currentUser.name}! Authenticated via Gmail.`, 'success');
+        await loadDashboard();
+      } else {
+        showToast(response.message || 'Gmail registration submitted! Awaiting Admin approval.', 'success');
+        document.getElementById('showSignInTab')?.click();
+      }
+    } else {
+      showToast(response.error || 'Gmail authentication failed', 'error');
+    }
+    showResult(response);
+  });
+
+
+
 
 // ==========================================
 // DEPARTMENT VALUATION
@@ -2342,15 +2361,7 @@ window.saveUserChanges = async function() {
 function refreshUsers() {
   loadUsers();
 }
-    } else {
-      showToast(response.message || 'Gmail registration submitted! Awaiting Admin approval.', 'success');
-      document.getElementById('showSignInTab')?.click();
-    }
-  } else {
-    showToast(response.error || 'Gmail authentication failed', 'error');
-  }
-  showResult(response);
-});
+
 
 // ── QUICK COLLEGE LAB ASSET PRESETS ────────────────────────────
 const COLLEGE_ASSET_PRESETS = {
