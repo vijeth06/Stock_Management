@@ -3,6 +3,14 @@
    Light, professional B2B SaaS aesthetic
    ═══════════════════════════════════════════════════════════════ */
 
+* {
+  box-sizing: border-box;
+}
+
+html {
+  overflow-x: hidden;
+}
+
 .hidden {
   display: none !important;
 }
@@ -383,6 +391,16 @@ button, input, select, textarea { font: inherit; }
   color: var(--gray-500);
   font-style: italic;
 }
+
+.table-container {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid var(--gray-200);
+  background: white;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.main-area {
   flex: 1;
   margin-left: var(--sidebar-w);
   display: flex;
@@ -1538,6 +1556,7 @@ button, input, select, textarea { font: inherit; }
   .content-grid-3 { grid-template-columns: 1fr 1fr; }
   .span-2 { grid-column: span 1; }
   .session-meta { grid-template-columns: repeat(2, 1fr); }
+  .page-content { padding: 20px 20px 36px; }
 }
 
 @media (max-width: 960px) {
@@ -1550,6 +1569,8 @@ button, input, select, textarea { font: inherit; }
   }
 
   .main-area { margin-left: 0; }
+
+  .page-content { padding: 16px 16px 32px; }
 
   .menu-toggle { display: flex; }
 
