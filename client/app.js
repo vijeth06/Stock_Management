@@ -2175,30 +2175,66 @@ async function loadValuation() {
 
 function renderValuationTable(valuation) {
   const tbody = document.getElementById('valuationTableBody');
-  const entries = Object.entries(valuation || {});
+  const entries = Object.entries(valuation || {}).filter(([_, d]) => typeof d === 'object');
+  
+  // Update report info
+  if (valuation.reportId) {
+    const reportIdEl = document.getElementById('valuationReportId');
+    if (reportIdEl) reportIdEl.textContent = valuation.reportId;
+  }
+  const generatedAtEl = document.getElementById('valuationGeneratedAt');
+  if (generatedAtEl) generatedAtEl.textContent = valuation.generatedAt ? new Date(valuation.generatedAt).toLocaleString() : 'N/A';
   
   if (entries.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No valuation data available</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No valuation data available</td></tr>';
   } else {
-    tbody.innerHTML = entries.map(([key, dept]) => `
+    window.allValuationData = entries;
+    tbody.innerHTML = entries.map(([key, dept]) => {
+      const nbv = dept.netBookValue || 0;
+      const pw = dept.totalPurchaseValue || 0;
+      const depreciation = pw > 0 ? ((pw - nbv) / pw * 100) : 0;
+      
+      return `
       <tr>
-        <td><strong>${escapeHtml(dept.name || key)}</strong> (${escapeHtml(dept.code || key)})</td>
+        <td><span class="status-pill ${dept.isActive ? 'ok' : 'neutral'}">${dept.isActive ? '✓' : '✗'}</span></td>
+        <td><strong>${escapeHtml(dept.name || key)}</strong><br><small class="muted">${escapeHtml(dept.code || key)}</small></td>
         <td>${escapeHtml(dept.manager || 'Unassigned')}</td>
         <td>${dept.totalAssets || 0}</td>
-        <td>₹${(dept.totalPurchaseValue || 0).toLocaleString('en-IN')}</td>
-        <td>₹${(dept.netBookValue || 0).toLocaleString('en-IN')}</td>
+        <td>₹${(pw).toLocaleString('en-IN')}</td>
+        <td>₹${(nbv).toLocaleString('en-IN')}</td>
+        <td><span class="muted">${depreciation.toFixed(0)}%</span></td>
         <td>${dept.activeAssets || 0}</td>
         <td>${dept.maintenanceAssets || 0}</td>
-        <td>${dept.condemnedAssets || 0}</td>
         <td>${dept.disposedAssets || 0}</td>
       </tr>
-    `).join('');
+      `;
+    }).join('');
   }
 
   const totalValue = entries.reduce((sum, [, d]) => sum + (d.totalPurchaseValue || 0), 0);
   const totalActive = entries.reduce((sum, [, d]) => sum + (d.activeAssets || 0), 0);
+  const totalNBV = entries.reduce((sum, [, d]) => sum + (d.netBookValue || 0), 0);
   document.getElementById('valuationTotalValue').textContent = '₹' + totalValue.toLocaleString('en-IN');
   document.getElementById('valuationActiveCount').textContent = totalActive;
+  document.getElementById('valuationNetBookValue').textContent = '₹' + totalNBV.toLocaleString('en-IN');
+}
+
+async function refreshValuation() {
+  await loadValuation();
+  showToast('Valuation refreshed', 'info');
+}
+
+function filterValuationTable() {
+  const search = document.getElementById('valuationSearchBox');
+  const term = (search?.value || '').toLowerCase();
+  const tbody = document.getElementById('valuationTableBody');
+  if (!tbody) return;
+  
+  const rows = tbody.querySelectorAll('tr');
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    row.style.display = text.includes(term) ? '' : 'none';
+  });
 }
 
 function exportValuationExcel() {
@@ -2206,7 +2242,9 @@ function exportValuationExcel() {
     if (r.ok && r.data) {
       const csv = [['Department', 'Manager', 'Total Assets', 'Purchase Value', 'Net Book Value', 'Active', 'Maintenance', 'Condemned', 'Disposed']];
       Object.entries(r.data).forEach(([key, d]) => {
-        csv.push([d.name || key, d.manager || '', d.totalAssets || 0, d.totalPurchaseValue || 0, d.netBookValue || 0, d.activeAssets || 0, d.maintenanceAssets || 0, d.condemnedAssets || 0, d.disposedAssets || 0]);
+        if (typeof d === 'object') {
+          csv.push([d.name || key, d.manager || '', d.totalAssets || 0, d.totalPurchaseValue || 0, d.netBookValue || 0, d.activeAssets || 0, d.maintenanceAssets || 0, d.condemnedAssets || 0, d.disposedAssets || 0]);
+        }
       });
       const csvContent = csv.map(row => row.map(String).join(',')).join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -2365,24 +2403,42 @@ async function loadDepartmentsForSelect() {
 
 function renderUsersTable(users, mode, deptFilter) {
   const tbody = document.getElementById('usersTableBody');
+  const countLabel = document.getElementById('usersCountLabel');
   const emptyMsg = mode === 'pending' 
     ? 'No pending user requests. All requests processed.'
     : mode === 'active' 
       ? 'No active users found.'
       : `No users found for department: ${deptFilter || 'ALL'}`;
   
+  if (countLabel) countLabel.textContent = `${users.length} user${users.length !== 1 ? 's' : ''} shown`;
+  
   if (!users || users.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty-state">${emptyMsg}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="empty-state">${emptyMsg}</td></tr>`;
     return;
   }
+
+  // Store for search filtering
+  window.allUsersData = users;
 
   tbody.innerHTML = users.map(u => {
     const showActions = mode === 'pending' || mode === 'active' || mode === 'department';
     const statusClass = u.isApproved ? 'ok' : u.status === 'Rejected' ? 'red' : 'neutral';
     const statusText = u.isApproved ? 'Active' : (u.status === 'Rejected' ? 'Rejected' : 'Pending');
+    const roleIcon = u.role === 'Administrator' ? '👑' : u.role === 'AuditOfficer' ? '🔍' : '👤';
+    
+    let actionButtons = '';
+    if (mode === 'pending') {
+      actionButtons = `
+        <button type="button" class="btn btn-sm btn-primary" onclick="approveUser('${escapeHtml(u.email)}')">Approve</button>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="rejectUser('${escapeHtml(u.email)}')">Reject</button>
+      `;
+    } else {
+      actionButtons = `<button type="button" class="btn btn-sm btn-secondary" onclick="openEditUserModal('${escapeHtml(u.email)}', '${escapeHtml(u._id || u.userId || u.email)}', '${escapeHtml(u.role)}', '${escapeHtml(u.department)}', '${escapeHtml(u.status)}', ${u.isApproved})">Edit</button>`;
+    }
     
     return `
     <tr>
+      <td><div class="avatar">${roleIcon}</div></td>
       <td><strong>${escapeHtml(u.name || 'Unknown')}</strong></td>
       <td>${escapeHtml(u.email)}</td>
       <td>
@@ -2395,14 +2451,56 @@ function renderUsersTable(users, mode, deptFilter) {
         <span class="status-pill ${statusClass}">${statusText}</span>
       </td>
       <td>${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'Recent'}</td>
-      <td>${u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'Never'}</td>
-      <td>
-        ${showActions ? `<button type="button" class="btn btn-sm btn-secondary" onclick="openEditUserModal('${escapeHtml(u.email)}', '${escapeHtml(u._id || u.userId || u.email)}', '${escapeHtml(u.role)}', '${escapeHtml(u.department)}', '${escapeHtml(u.status)}', ${u.isApproved})">Edit</button>` : ''}
-      </td>
+      <td>${u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleTimeString() : 'Never'}</td>
+      <td style="white-space:nowrap;">${actionButtons}</td>
     </tr>
   `.trim();
   }).join('');
 }
+
+window.approveUser = async function(email) {
+  const res = await requestJson(`/api/users/${encodeURIComponent(email)}/approve`, { method: 'POST' });
+  if (res.ok) {
+    showToast(`User ${email} approved`, 'success');
+    loadUsers();
+  } else {
+    showToast('Approval failed: ' + res.error, 'error');
+  }
+};
+
+window.rejectUser = async function(email) {
+  const res = await requestJson(`/api/users/${encodeURIComponent(email)}/reject`, { method: 'POST' });
+  if (res.ok) {
+    showToast(`User ${email} rejected`, 'success');
+    loadUsers();
+  } else {
+    showToast('Rejection failed: ' + res.error, 'error');
+  }
+};
+
+window.refreshUsers = async function() {
+  loadUsers();
+  showToast('User list refreshed', 'info');
+};
+
+window.clearUserSearch = function() {
+  const search = document.getElementById('userSearchBox');
+  if (search) search.value = '';
+  renderUsersTable(window.allUsersData || [], currentUserTab, currentUserDeptFilter);
+};
+
+window.filterUsersTable = function() {
+  const search = document.getElementById('userSearchBox');
+  const term = (search?.value || '').toLowerCase();
+  const tbody = document.getElementById('usersTableBody');
+  if (!tbody) return;
+  
+  const rows = tbody.querySelectorAll('tr');
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    row.style.display = text.includes(term) ? '' : 'none';
+  });
+};
 
 window.openEditUserModal = function(email, userId, role, department, status, isApproved) {
   document.getElementById('editUserId').value = email;

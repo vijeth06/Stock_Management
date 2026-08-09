@@ -604,13 +604,33 @@
                 <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor"><path d="M3 3a1 1 0 011-1h6a1 1 0 010 2H4v2h12V4a1 1 0 011-1h2v4a2 2 0 01-2 2H6a2 2 0 00-2 2v4a2 2 0 002 2h8a2 2 0 002-2v-4h2a2 2 0 002-2V8a2 2 0 00-2-2h-2V4a3 3 0 00-3-3H4a3 3 0 00-3 3v4a3 3 0 003 3h6a1 1 0 110 2H4a1 1 0 01-1-1V4a1 1 0 011-1z"/></svg>
                 Export Excel
               </button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="refreshValuation()">
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom:16px;">
+            <div style="padding:12px 16px; display:flex; justify-content:space-between; align-items:center;">
+              <div style="display:flex; gap:16px;">
+                <div>
+                  <span class="muted" style="font-size:11px;">Report ID</span>
+                  <strong id="valuationReportId">N/A</strong>
+                </div>
+                <div>
+                  <span class="muted" style="font-size:11px;">Generated</span>
+                  <strong id="valuationGeneratedAt">N/A</strong>
+                </div>
+              </div>
+              <input type="text" id="valuationSearchBox" placeholder="Search departments..." style="padding:4px 8px; font-size:13px; border:1px solid var(--gray-300); border-radius:4px;" onkeyup="filterValuationTable()" />
             </div>
           </div>
 
           <div class="table-container">
-            <table class="asset-table" id="valuationTable">
+            <table class="asset-table valuation-table">
               <thead>
                 <tr>
+                  <th></th>
                   <th>Department</th>
                   <th>Manager</th>
                   <th>Total Assets</th>
@@ -623,7 +643,7 @@
                 </tr>
               </thead>
               <tbody id="valuationTableBody">
-                <tr><td colspan="9" class="empty-state">Loading valuation data...</td></tr>
+                <tr><td colspan="10" class="empty-state">Loading valuation data...</td></tr>
               </tbody>
             </table>
           </div>
@@ -636,6 +656,10 @@
             <div class="stat-card">
               <div class="stat-value" id="valuationActiveCount">0</div>
               <div class="stat-label">Active Assets</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="valuationNetBookValue">0</div>
+              <div class="stat-label">Total Net Book Value</div>
             </div>
           </div>
         </section>
@@ -695,32 +719,52 @@
               <button type="button" class="btn btn-outline" onclick="refreshUsers()">
                 Refresh
               </button>
+              <button type="button" class="btn btn-secondary" id="exportUsersBtn" onclick="exportUsersList()">
+                Export CSV
+              </button>
             </div>
           </div>
 
-          <div class="tab-bar" id="userTabButtons">
-            <button type="button" class="tab-btn active" data-tab="pending" onclick="switchUserTab('pending')">Pending Approvals</button>
-            <button type="button" class="tab-btn" data-tab="active" onclick="switchUserTab('active')">Active Users</button>
-            <button type="button" class="tab-btn" data-tab="department" onclick="switchUserTab('department')">Department Users</button>
-            <div id="deptUserControls" style="display:none; align-items:center; gap:8px; margin-left:auto;">
-              <select onchange="setDepartmentFilter(this.value)" style="padding:4px 8px; border:1px solid var(--gray-300); border-radius:4px; font-size:13px;">
-                <option value="ALL">All Departments</option>
-                <option value="CSE">CSE</option>
-                <option value="ECE">ECE</option>
-                <option value="IT">IT</option>
-                <option value="ME">ME</option>
-                <option value="CE">CE</option>
-                <option value="CHE">CHE</option>
-                <option value="LIB">LIB</option>
-              </select>
-              <span class="muted" id="currentDeptFilter">All Departments</span>
+          <div class="card" style="margin-bottom:16px;">
+            <div class="tab-bar" id="userTabButtons">
+              <button type="button" class="tab-btn active" data-tab="pending" onclick="switchUserTab('pending')">
+                <span class="tab-icon">⏳</span> Pending Approvals
+              </button>
+              <button type="button" class="tab-btn" data-tab="active" onclick="switchUserTab('active')">
+                <span class="tab-icon">✓</span> Active Users
+              </button>
+              <button type="button" class="tab-btn" data-tab="department" onclick="switchUserTab('department')">
+                <span class="tab-icon">🏢</span> Department Users
+              </button>
+              <div id="deptUserControls" style="display:none; align-items:center; gap:8px; margin-left:auto;">
+                <select onchange="setDepartmentFilter(this.value)" class="form-select" style="max-width:200px;">
+                  <option value="ALL">All Departments</option>
+                  <option value="CSE">CSE</option>
+                  <option value="ECE">ECE</option>
+                  <option value="IT">IT</option>
+                  <option value="ME">ME</option>
+                  <option value="CE">CE</option>
+                  <option value="CHE">CHE</option>
+                  <option value="LIB">LIB</option>
+                </select>
+                <span class="muted" id="currentDeptFilter">All Departments</span>
+              </div>
+            </div>
+
+            <div style="padding:12px 16px; border-bottom:1px solid var(--gray-200); display:flex; justify-content:space-between; align-items:center;">
+              <span class="muted" id="usersCountLabel">Loading users...</span>
+              <div style="display:flex; gap:8px;">
+                <input type="text" id="userSearchBox" placeholder="Search users..." style="padding:4px 8px; font-size:13px; border:1px solid var(--gray-300); border-radius:4px;" onkeyup="filterUsersTable()" />
+                <button type="button" class="btn btn-sm btn-outline" onclick="clearUserSearch()">Clear</button>
+              </div>
             </div>
           </div>
 
           <div class="table-container">
-            <table class="asset-table">
+            <table class="asset-table users-table">
               <thead>
                 <tr>
+                  <th style="width:40px;"></th>
                   <th>Name</th>
                   <th>Email</th>
                   <th>Role</th>
@@ -728,11 +772,11 @@
                   <th>Status</th>
                   <th>Created</th>
                   <th>Last Login</th>
-                  <th>Actions</th>
+                  <th style="width:80px;">Actions</th>
                 </tr>
               </thead>
               <tbody id="usersTableBody">
-                <tr><td colspan="8" class="empty-state">Loading users...</td></tr>
+                <tr><td colspan="9" class="empty-state">Loading users...</td></tr>
               </tbody>
             </table>
           </div>
