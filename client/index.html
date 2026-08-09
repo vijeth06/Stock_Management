@@ -698,6 +698,25 @@
             </div>
           </div>
 
+          <div class="tab-bar" id="userTabButtons">
+            <button type="button" class="tab-btn active" data-tab="pending" onclick="switchUserTab('pending')">Pending Approvals</button>
+            <button type="button" class="tab-btn" data-tab="active" onclick="switchUserTab('active')">Active Users</button>
+            <button type="button" class="tab-btn" data-tab="department" onclick="switchUserTab('department')">Department Users</button>
+            <div id="deptUserControls" style="display:none; align-items:center; gap:8px; margin-left:auto;">
+              <select onchange="setDepartmentFilter(this.value)" style="padding:4px 8px; border:1px solid var(--gray-300); border-radius:4px; font-size:13px;">
+                <option value="ALL">All Departments</option>
+                <option value="CSE">CSE</option>
+                <option value="ECE">ECE</option>
+                <option value="IT">IT</option>
+                <option value="ME">ME</option>
+                <option value="CE">CE</option>
+                <option value="CHE">CHE</option>
+                <option value="LIB">LIB</option>
+              </select>
+              <span class="muted" id="currentDeptFilter">All Departments</span>
+            </div>
+          </div>
+
           <div class="table-container">
             <table class="asset-table">
               <thead>
@@ -708,11 +727,12 @@
                   <th>Department</th>
                   <th>Status</th>
                   <th>Created</th>
+                  <th>Last Login</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="usersTableBody">
-                <tr><td colspan="7" class="empty-state">Loading users...</td></tr>
+                <tr><td colspan="8" class="empty-state">Loading users...</td></tr>
               </tbody>
             </table>
           </div>

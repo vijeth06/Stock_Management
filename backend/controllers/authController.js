@@ -202,4 +202,33 @@ async function updateUserDepartment(req, res, next) {
 
 const { recordAuditLog } = require("../services/auditService");
 
-module.exports = { register, login, getPendingUsers, approveUser, rejectUser, gmailAuth, updateUserRole, updateUserDepartment };
+async function getActiveUsers(req, res, next) {
+  try {
+    const usersRes = await getAllUsersFromFabric();
+    const users = usersRes.users || [];
+    const activeUsers = users.filter(u => u.isApproved && u.status !== "Rejected");
+    res.json({ ok: true, data: activeUsers });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+}
+
+async function getDepartmentUsers(req, res, next) {
+  try {
+    const department = (req.params.department || req.query.department || "").toUpperCase();
+    const usersRes = await getAllUsersFromFabric();
+    const users = usersRes.users || [];
+    const deptUsers = users.filter(u => {
+      const userDept = String(u.department || "").toUpperCase();
+      return (userDept === department || userDept === "ALL") && u.isApproved && u.status !== "Rejected";
+    });
+    res.json({ ok: true, data: deptUsers, department: department || "ALL" });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+}
+
+module.exports = {
+  register, login, getPendingUsers, getActiveUsers, getDepartmentUsers,
+  approveUser, rejectUser, gmailAuth, updateUserRole, updateUserDepartment
+};

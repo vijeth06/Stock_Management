@@ -125,14 +125,17 @@ function navigateTo(page) {
   else if (page === 'transfers') loadTransfers();
   else if (page === 'financial') loadFinancials();
   else if (page === 'departments') loadDepartments();
-   else if (page === 'reports') loadReports();
-   else if (page === 'bills') loadBills();
-   else if (page === 'valuation') loadValuation();
-   else if (page === 'lifecycle') {
-     document.getElementById('lifecycleEmpty').style.display = 'block';
-     document.getElementById('lifecycleContent').style.display = 'none';
-   }
-   else if (page === 'users') loadUsers();
+  else if (page === 'reports') loadReports();
+  else if (page === 'bills') loadBills();
+  else if (page === 'valuation') loadValuation();
+  else if (page === 'lifecycle') {
+    document.getElementById('lifecycleEmpty').style.display = 'block';
+    document.getElementById('lifecycleContent').style.display = 'none';
+  }
+  else if (page === 'users') {
+    loadDepartmentsForSelect();
+    loadUsers();
+  }
  }
 
 function showResult(data) {
@@ -2278,30 +2281,107 @@ async function loadAssetLifecycle() {
 // ==========================================
 // USER MANAGEMENT
 // ==========================================
+const USER_TABS = {
+  pending: 'Pending Approvals',
+  active: 'Active Users',
+  department: 'Department Users'
+};
+
+let currentUserTab = 'pending';
+let currentUserDeptFilter = 'ALL';
+
 async function loadUsers() {
-  setLoading('Loading users...');
+  if (currentUserTab === 'pending') {
+    await loadPendingUsers();
+  } else if (currentUserTab === 'active') {
+    await loadActiveUsers();
+  } else if (currentUserTab === 'department') {
+    await loadDepartmentUsers();
+  }
+}
+
+async function loadPendingUsers() {
+  setLoading('Loading pending users...');
   const res = await requestJson('/api/users/pending');
   if (res.ok && Array.isArray(res.data)) {
-    renderUsersTable(res.data);
+    renderUsersTable(res.data, 'pending');
   } else {
-    // If no pending users endpoint, try getting all users
-    const allRes = await requestJson('/users/me');
-    if (allRes.ok) {
-      renderUsersTable([]);
-    }
+    renderUsersTable([], 'pending');
     showResult(res);
   }
 }
 
-function renderUsersTable(users) {
+async function loadActiveUsers() {
+  setLoading('Loading active users...');
+  const res = await requestJson('/api/users');
+  if (res.ok && Array.isArray(res.data)) {
+    renderUsersTable(res.data, 'active');
+  } else {
+    renderUsersTable([], 'active');
+    showResult(res);
+  }
+}
+
+async function loadDepartmentUsers() {
+  setLoading(`Loading users for department: ${currentUserDeptFilter}...`);
+  const res = await requestJson(`/api/users/department/${encodeURIComponent(currentUserDeptFilter)}`);
+  if (res.ok && Array.isArray(res.data)) {
+    renderUsersTable(res.data, 'department', currentUserDeptFilter);
+  } else {
+    renderUsersTable([], 'department', currentUserDeptFilter);
+    showResult(res);
+  }
+}
+
+function switchUserTab(tab) {
+  currentUserTab = tab;
+  const tabs = document.querySelectorAll('#userTabButtons .tab-btn');
+  tabs.forEach(t => t.classList.toggle('active', t.getAttribute('data-tab') === tab));
+  
+  const deptControls = document.getElementById('deptUserControls');
+  if (deptControls) deptControls.style.display = tab === 'department' ? 'flex' : 'none';
+  
+  loadUsers();
+}
+
+window.switchUserTab = switchUserTab;
+window.setDepartmentFilter = function(dept) {
+  currentUserDeptFilter = dept;
+  const label = document.getElementById('currentDeptFilter');
+  if (label) label.textContent = dept === 'ALL' ? 'All Departments' : dept;
+  if (currentUserTab === 'department') loadDepartmentUsers();
+};
+
+async function loadDepartmentsForSelect() {
+  try {
+    const res = await requestJson('/api/departments');
+    if (res.ok && Array.isArray(res.data)) {
+      window.appDepartments = res.data;
+    }
+  } catch (e) {
+    console.warn('Failed to load departments for select:', e.message);
+  }
+};
+
+function renderUsersTable(users, mode, deptFilter) {
   const tbody = document.getElementById('usersTableBody');
+  const emptyMsg = mode === 'pending' 
+    ? 'No pending user requests. All requests processed.'
+    : mode === 'active' 
+      ? 'No active users found.'
+      : `No users found for department: ${deptFilter || 'ALL'}`;
   
   if (!users || users.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No pending user requests. All requests processed.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-state">${emptyMsg}</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = users.map(u => `
+  tbody.innerHTML = users.map(u => {
+    const showActions = mode === 'pending' || mode === 'active' || mode === 'department';
+    const statusClass = u.isApproved ? 'ok' : u.status === 'Rejected' ? 'red' : 'neutral';
+    const statusText = u.isApproved ? 'Active' : (u.status === 'Rejected' ? 'Rejected' : 'Pending');
+    
+    return `
     <tr>
       <td><strong>${escapeHtml(u.name || 'Unknown')}</strong></td>
       <td>${escapeHtml(u.email)}</td>
@@ -2312,18 +2392,16 @@ function renderUsersTable(users) {
       </td>
       <td>${escapeHtml(u.department || 'IT')}</td>
       <td>
-        <span class="status-pill ${u.isApproved ? 'ok' : u.status === 'Rejected' ? 'red' : 'neutral'}">
-          ${u.isApproved ? 'Approved' : (u.status === 'Rejected' ? 'Rejected' : 'Pending')}
-        </span>
+        <span class="status-pill ${statusClass}">${statusText}</span>
       </td>
       <td>${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : 'Recent'}</td>
+      <td>${u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'Never'}</td>
       <td>
-        <button type="button" class="btn btn-sm btn-secondary" onclick="openEditUserModal('${escapeHtml(u.email)}', '${escapeHtml(u._id || u.userId || u.email)}', '${escapeHtml(u.role)}', '${escapeHtml(u.department)}', '${escapeHtml(u.status)}', ${u.isApproved})">
-          Edit
-        </button>
+        ${showActions ? `<button type="button" class="btn btn-sm btn-secondary" onclick="openEditUserModal('${escapeHtml(u.email)}', '${escapeHtml(u._id || u.userId || u.email)}', '${escapeHtml(u.role)}', '${escapeHtml(u.department)}', '${escapeHtml(u.status)}', ${u.isApproved})">Edit</button>` : ''}
       </td>
     </tr>
-  `).join('');
+  `.trim();
+  }).join('');
 }
 
 window.openEditUserModal = function(email, userId, role, department, status, isApproved) {
@@ -2331,12 +2409,23 @@ window.openEditUserModal = function(email, userId, role, department, status, isA
   document.getElementById('editUserRole').value = role || 'DepartmentUser';
   
   const deptSelect = document.getElementById('editUserDepartment');
-  deptSelect.value = department === 'ALL' || department === 'ALL DEPARTMENTS' ? 'ALL' : (department || 'IT');
+  deptSelect.innerHTML = generateDepartmentOptions(department);
   
   document.getElementById('editUserStatus').innerHTML = `<strong class="status-pill ${isApproved ? 'ok' : status === 'Rejected' ? 'red' : 'neutral'}">${isApproved ? 'Approved' : status}</strong>`;
   
   openModal('editUserModal');
 };
+
+function generateDepartmentOptions(selectedDept) {
+  const depts = window.appDepartments || [];
+  let options = '<option value="ALL">ALL DEPARTMENTS (Admin only)</option>';
+  depts.forEach(d => {
+    const code = d.code || d;
+    const isSelected = code.toUpperCase() === String(selectedDept || '').toUpperCase();
+    options += `<option value="${code}" ${isSelected ? 'selected' : ''}>${escapeHtml(d.name || code)} (${code})</option>`;
+  });
+  return options;
+}
 
 window.saveUserChanges = async function() {
   const userId = document.getElementById('editUserId').value;

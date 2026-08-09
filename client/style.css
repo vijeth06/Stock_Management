@@ -199,6 +199,35 @@ button, input, select, textarea { font: inherit; }
 .chip-dot.offline { background: var(--red-500); box-shadow: 0 0 0 3px rgba(239,68,68,0.2); }
 .chip-dot.warning { background: var(--amber-500); box-shadow: 0 0 0 3px rgba(245,158,11,0.2); }
 
+.tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 2px solid var(--gray-200);
+  margin-bottom: 16px;
+  padding-bottom: 4px;
+}
+.tab-btn {
+  padding: 8px 16px;
+  border: 2px solid transparent;
+  border-bottom: none;
+  background: transparent;
+  border-radius: 6px 6px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.tab-btn.active, .tab-btn:hover {
+  background: var(--gray-100);
+  border-color: var(--gray-300);
+}
+.tab-btn.active {
+  background: var(--blue-50);
+  border-color: var(--blue-500);
+  color: var(--blue-700);
+}
+
 .main-area {
   flex: 1;
   margin-left: var(--sidebar-w);
