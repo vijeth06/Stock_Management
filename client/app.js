@@ -253,27 +253,6 @@ document.getElementById('signOutBtn')?.addEventListener('click', () => {
   navigateTo('login');
 });
 
-// QR Code SVG Generator
-function generateQrSvg(text) {
-  const matrixSize = 21;
-  let hash = 7;
-  for (let i = 0; i < text.length; i++) {
-    hash = (hash * 31 + text.charCodeAt(i)) % 2147483647;
-  }
-  let rects = '';
-  for (let r = 0; r < matrixSize; r++) {
-    for (let c = 0; c < matrixSize; c++) {
-      const isFinder = (r < 7 && c < 7) || (r < 7 && c > 13) || (r > 13 && c < 7);
-      const isFinderPattern = isFinder && (r === 0 || r === 6 || c === 0 || c === 6 || (r >= 2 && r <= 4 && c >= 2 && c <= 4));
-      const val = (r * 13 + c * 17 + hash) % 3 === 0;
-      if (isFinderPattern || (!isFinder && val)) {
-        rects += `<rect x="${c * 6}" y="${r * 6}" width="5.5" height="5.5" fill="#0f172a"/>`;
-      }
-    }
-  }
-  return `<svg viewBox="0 0 ${matrixSize * 6} ${matrixSize * 6}" width="110" height="110">${rects}</svg>`;
-}
-
 // DASHBOARD
 async function loadDashboard() {
   setLoading('Loading dashboard overview...');
@@ -601,7 +580,6 @@ function renderAssetList(assets, filterDept) {
       </div>
       <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
         <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" onclick="showAssetHistory('${escapeHtml(asset.assetId)}')">History</button>
-        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" onclick="showQrBadge('${escapeHtml(asset.assetId)}')">QR Badge</button>
         <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" onclick="openEditAsset('${escapeHtml(asset.assetId)}')">Edit</button>
         <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px;" onclick="openQuickTransfer('${escapeHtml(asset.assetId)}')">Transfer</button>
         <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:var(--amber-600);" onclick="openQuickCondemn('${escapeHtml(asset.assetId)}')">Condemn</button>
@@ -736,25 +714,6 @@ window.deleteAsset = async function(assetId, elementId) {
     showResult(res);
     await loadAssets();
   }
-};
-
-window.showQrBadge = function(assetId) {
-  requestJson(`/api/assets/${encodeURIComponent(assetId)}`).then(res => {
-    if (res.ok && res.data) {
-      const a = res.data;
-      document.getElementById('badgeAssetId').textContent = a.assetId;
-      document.getElementById('badgeAssetName').textContent = a.name;
-      document.getElementById('badgeCategory').textContent = a.category;
-      document.getElementById('badgeDept').textContent = a.department;
-      document.getElementById('badgeLocation').textContent = a.location || 'Unassigned';
-      document.getElementById('badgeSerial').textContent = a.serialNumber || 'N/A';
-      document.getElementById('badgeHash').textContent = a.billHash || a.blockchainTxHash || '0x7f83b1657ff1fc53b9...';
-      document.getElementById('qrCodeContainer').innerHTML = generateQrSvg(`${a.assetId}:${a.serialNumber}:${a.billHash}`);
-      openModal('qrModal');
-    } else {
-      showToast('Asset details could not be retrieved', 'error');
-    }
-  });
 };
 
 window.openQuickTransfer = async function(assetId) {

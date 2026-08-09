@@ -65,7 +65,10 @@ async function getPendingUsers(req, res, next) {
   try {
     const usersRes = await getAllUsersFromFabric();
     const users = usersRes.users || [];
-    const pendingUsers = users.filter(u => u.status === "PendingApproval" || !u.isApproved);
+    const pendingUsers = users.filter(u => 
+      (u.status === "PendingApproval" || (!u.isApproved && u.status !== "Rejected")) &&
+      u.status !== "Rejected"
+    );
     res.json({ ok: true, data: pendingUsers });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });

@@ -42,6 +42,7 @@ async function createAsset(req, res, next) {
 async function getAssets(req, res, next) {
   try {
     const department = req.query.department;
+    const searchName = req.query.name;
     let result = await getAllAssetsFromFabric();
     if (!result.success) return res.status(500).json({ ok: false, error: result.error });
     
@@ -53,6 +54,14 @@ async function getAssets(req, res, next) {
       assets = assets.filter(a => (a.department || "").toUpperCase() === userDept);
     } else if (department) {
       assets = assets.filter(a => (a.department || "").toUpperCase() === String(department).toUpperCase());
+    }
+    
+    if (searchName) {
+      const searchTerm = String(searchName).toLowerCase();
+      assets = assets.filter(a => 
+        (a.name || '').toLowerCase().includes(searchTerm) ||
+        (a.assetId || '').toLowerCase().includes(searchTerm)
+      );
     }
 
     res.json({ ok: true, data: assets });

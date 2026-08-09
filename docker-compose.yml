@@ -131,7 +131,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    command: sh -c "npm install --omit=dev && npm start"
+    command: sh -c "npm start"
 
   fabric-tools:
     image: hyperledger/fabric-tools:2.5
