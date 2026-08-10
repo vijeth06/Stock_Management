@@ -32,9 +32,15 @@
         </button>
         <button type="button" class="nav-item" data-page="assets">
           <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 112 0 1 1 0 01-2 0zm7-1a1 1 0 100 2 1 1 0 000-2z" clip-rule="evenodd"/>
+            <path fill-rule="evenodd" d="M10 2a4 4 0 00-4 4v1H5a1 1 0 00-.994.89l-1 9A1 1 0 004 18h12a1 1 0 00.994-1.11l-1-9A1 1 0 0015 7h-1V6a4 4 0 00-4-4zm2 5V6a2 2 0 10-4 0v1h4zm-6 3a1 1 0 012 0 1 1 0 01-2 0zm7-1a1 1 0 000 2 1 1 0 000-2z" clip-rule="evenodd"/>
           </svg>
           Assets
+        </button>
+        <button type="button" class="nav-item" data-page="consumables">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 01-2 2H4a2 2 0 01-2-2V5zM4 9a2 2 0 012-2h12a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V9z"/>
+          </svg>
+          Consumables
         </button>
         <button type="button" class="nav-item" data-page="maintenance">
           <svg class="nav-icon" viewBox="0 0 20 20" fill="currentColor">
@@ -429,6 +435,66 @@
               <div id="assetDisplay" class="table-wrap">
                 <div class="empty-state">No assets registered yet.</div>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- CONSUMABLES -->
+        <section class="page" id="page-consumables">
+          <div class="page-header">
+            <div>
+              <h1>Consumable Stock Management</h1>
+              <p class="page-subtitle">Register, consume, purchase, and verify departmental consumables</p>
+            </div>
+            <div class="page-actions">
+              <button type="button" class="btn btn-secondary" id="refreshConsumablesBtn">Refresh</button>
+              <button type="button" class="btn btn-primary" id="openConsumableModalBtn">Register Consumable</button>
+            </div>
+          </div>
+
+          <div class="content-grid-2">
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Registered Consumables</h2>
+                <p>Consumables tracked on the blockchain</p>
+              </div>
+              <div id="consumablesList" class="table-wrap">
+                <div class="empty-state">No consumables registered yet.</div>
+              </div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <h2>Stock Transactions</h2>
+                <p>Record consumption or purchase of consumable items</p>
+              </div>
+              <form id="consumableTxnForm" class="form-grid">
+                <div class="form-field">
+                  <label>Consumable ID</label>
+                  <select name="consumableId" id="txnConsumableId" required></select>
+                </div>
+                <div class="form-field">
+                  <label>Transaction Type</label>
+                  <select name="txnType" id="txnType" required>
+                    <option value="consume">Consume</option>
+                    <option value="purchase">Purchase</option>
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label>Quantity</label>
+                  <input name="quantity" type="number" min="1" required>
+                </div>
+                <div class="form-field">
+                  <label>Date</label>
+                  <input name="txnDate" type="date" required>
+                </div>
+                <div class="form-field full-width">
+                  <label>Notes</label>
+                  <input name="notes" placeholder="Optional notes...">
+                </div>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-primary">Record Transaction</button>
+                </div>
+              </form>
             </div>
           </div>
         </section>
@@ -960,7 +1026,7 @@
         </div>
         <div class="form-field">
           <label>Technician / Service Provider</label>
-          <input name="technician" required placeholder="e.g. Alex Smith (Hardware Lead)">
+          <input name="technician" required placeholder="Enter Your Name">
         </div>
         <div class="form-field">
           <label>Service Date</label>
@@ -996,7 +1062,7 @@
         </div>
         <div class="form-field">
           <label>Requested By</label>
-          <input name="requestedBy" required placeholder="e.g. Department Manager">
+          <input name="requestedBy" required placeholder="Enter Your Name">
         </div>
         <div class="form-field">
           <label>Proposed Disposal Method</label>
@@ -1047,7 +1113,7 @@
         </div>
         <div class="form-field">
           <label>Transfer Requested By</label>
-          <input name="requestedBy" required placeholder="e.g. Dr. HOD (CSE)">
+          <input name="requestedBy" required placeholder="Enter Your Name">
         </div>
         <div class="form-field full-width">
           <label>Reason for Inter-Department Transfer</label>
@@ -1079,7 +1145,7 @@
         </div>
         <div class="form-field">
           <label>Department Manager</label>
-          <input name="manager" placeholder="e.g. Elena Rostova">
+          <input name="manager" placeholder="Enter Your Name">
         </div>
         <div class="form-field full-width">
           <label>Description</label>
@@ -1239,6 +1305,58 @@
     </div>
   </div>
 
+  <!-- Register Consumable Modal -->
+  <div id="addConsumableModal" class="modal-backdrop hidden">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <h3>Register Consumable Item</h3>
+        <button type="button" class="modal-close" data-modal-close>&times;</button>
+      </div>
+      <form id="addConsumableForm" class="modal-body form-grid">
+        <div class="form-field">
+          <label>Consumable ID</label>
+          <input name="consumableId" required placeholder="e.g. CSE-CONS-001">
+        </div>
+        <div class="form-field">
+          <label>Department</label>
+          <select name="department" id="addConsumableDept" required></select>
+        </div>
+        <div class="form-field">
+          <label>Name / Description</label>
+          <input name="name" required placeholder="e.g. Cat6 Ethernet Cable">
+        </div>
+        <div class="form-field">
+          <label>Unit</label>
+          <input name="unit" value="Nos" placeholder="e.g. Nos, Kgs, Litres">
+        </div>
+        <div class="form-field">
+          <label>Initial Stock</label>
+          <input name="initialStock" type="number" min="0" value="0" required>
+        </div>
+        <div class="form-field">
+          <label>Purchase Date</label>
+          <input name="purchaseDate" type="date">
+        </div>
+        <div class="form-field">
+          <label>Purchase Value (₹)</label>
+          <input name="purchaseValue" type="number" step="0.01" value="0">
+        </div>
+        <div class="form-field">
+          <label>Location</label>
+          <input name="location" placeholder="e.g. Store Room - CSE">
+        </div>
+        <div class="form-field full-width">
+          <label>Remarks</label>
+          <input name="remarks" placeholder="Optional notes...">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Register Consumable</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Proforma-I Modal -->
   <div id="addProforma1Modal" class="modal-backdrop hidden">
     <div class="modal-card modal-lg">
@@ -1248,8 +1366,12 @@
       </div>
       <form id="addProforma1Form" class="modal-body form-grid">
         <div class="form-field">
+          <label>Financial Year</label>
+          <input name="auditYear" type="number" required placeholder="e.g. 2025" value="2025">
+        </div>
+        <div class="form-field">
           <label>Department</label>
-          <input name="department" required placeholder="e.g. IT">
+          <select name="department" id="proforma1Department" required></select>
         </div>
         <div class="form-field">
           <label>Laboratory / Workshop</label>
@@ -1261,15 +1383,20 @@
         </div>
         <div class="form-field">
           <label>Staff In-Charge</label>
-          <input name="staffInCharge" required placeholder="e.g. Dr. Aris Thorne">
+          <input name="staffInCharge" required placeholder="Enter Your Name">
         </div>
         <div class="form-field">
           <label>Verification Date</label>
           <input name="verificationDate" type="date" required>
         </div>
         <div class="form-field">
+          <label>Asset ID (Register No)</label>
+          <input name="assetId" placeholder="e.g. ASSET-001 (optional - links to original asset)" list="proforma1AssetList">
+          <datalist id="proforma1AssetList"></datalist>
+        </div>
+        <div class="form-field">
           <label>Equipment Description</label>
-          <input name="description" required placeholder="e.g. Precision Workstation Tower">
+          <input name="equipmentDescription" required placeholder="e.g. Precision Workstation Tower">
         </div>
         <div class="form-field">
           <label>Serial / Register No</label>
@@ -1281,7 +1408,7 @@
         </div>
         <div class="form-field">
           <label>Purchases During Year</label>
-          <input name="purchasedDuringYear" type="number" value="1" min="0" required>
+          <input name="purchasesDuringYear" type="number" value="1" min="0" required>
         </div>
         <div class="form-field">
           <label>Actual Physical Stock</label>
@@ -1294,12 +1421,34 @@
             <option value="Good Condition">Good Condition</option>
             <option value="Under Maintenance">Under Maintenance</option>
             <option value="Not Working">Not Working</option>
+            <option value="Damaged">Damaged</option>
             <option value="Repair Required">Repair Required</option>
+            <option value="Condemnation Required">Condemnation Required</option>
+            <option value="Missing">Missing</option>
+            <option value="Condemned">Condemned</option>
+            <option value="Disposed">Disposed</option>
           </select>
+        </div>
+        <div class="form-field">
+          <label>Previous Book Value (₹)</label>
+          <input name="previousBookValue" type="number" step="0.01" value="2000" placeholder="0.00">
         </div>
         <div class="form-field">
           <label>Purchase Value (₹)</label>
           <input name="purchaseValue" type="number" step="0.01" value="2500" required>
+        </div>
+        <div class="form-field">
+          <label>Current Book Value (₹)</label>
+          <input name="currentBookValue" type="number" step="0.01" value="2500" placeholder="Calculated automatically">
+        </div>
+        <div class="form-field full-width">
+          <label>Outcome</label>
+          <select name="outcome" required>
+            <option value="Verified">Verified - Equipment OK</option>
+            <option value="under_maintenance">Under Maintenance - Requires Repair</option>
+            <option value="condemnation_required">Condemnation Required - Damaged/Not Working</option>
+            <option value="missing">Missing / Loss Review Required</option>
+          </select>
         </div>
         <div class="form-field full-width">
           <label>Remarks</label>
@@ -1321,9 +1470,14 @@
         <button type="button" class="modal-close" data-modal-close>&times;</button>
       </div>
       <form id="addProforma2Form" class="modal-body form-grid">
+        <input type="hidden" name="proforma1RecordId" id="proforma2P1RefInput">
+        <div class="form-field">
+          <label>Financial Year</label>
+          <input name="auditYear" type="number" required placeholder="e.g. 2025" value="2025">
+        </div>
         <div class="form-field">
           <label>Department</label>
-          <input name="department" required placeholder="e.g. Operations">
+          <select name="department" id="proforma2Department" required></select>
         </div>
         <div class="form-field">
           <label>Laboratory / Workshop</label>
@@ -1335,15 +1489,20 @@
         </div>
         <div class="form-field">
           <label>Staff In-Charge</label>
-          <input name="staffInCharge" required placeholder="e.g. Marcus Vance">
+          <input name="staffInCharge" required placeholder="Enter Your Name">
         </div>
         <div class="form-field">
           <label>Verification Date</label>
           <input name="verificationDate" type="date" required>
         </div>
         <div class="form-field">
+          <label>Asset ID</label>
+          <input name="assetId" id="proforma2AssetId" required placeholder="Select linked Asset ID" list="proforma2AssetList">
+          <datalist id="proforma2AssetList"></datalist>
+        </div>
+        <div class="form-field">
           <label>Equipment Description</label>
-          <input name="description" required placeholder="e.g. Fuser Engine Assembly">
+          <input name="equipmentDescription" required placeholder="e.g. Fuser Engine Assembly">
         </div>
         <div class="form-field">
           <label>Quantity</label>
@@ -1361,13 +1520,43 @@
           <label>Current Book Value (₹)</label>
           <input name="bookValue" type="number" step="0.01" value="200" required>
         </div>
+        <div class="form-field">
+          <label>Condition at Condemnation</label>
+          <select name="condition">
+            <option value="Not Working">Not Working</option>
+            <option value="Damaged">Damaged</option>
+            <option value="Condemnation Required">Condemnation Required</option>
+            <option value="Missing">Missing</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>Repair Cost (₹)</label>
+          <input name="repairCost" type="number" step="0.01" value="0" placeholder="Estimated repair cost, if applicable">
+        </div>
         <div class="form-field full-width">
           <label>Reason for Condemnation</label>
-          <textarea name="reasonForCondemnation" rows="2" required placeholder="Explain irrecoverable damage or obsolete state..."></textarea>
+          <textarea name="reason" rows="2" required placeholder="Explain irrecoverable damage or obsolete state..."></textarea>
         </div>
         <div class="form-field full-width">
           <label>Inspection Remarks</label>
-          <input name="remarks" placeholder="Technical evaluation notes...">
+          <textarea name="inspectionRemarks" rows="2" placeholder="Technical evaluation notes, inspection details..."></textarea>
+        </div>
+        <div class="form-field full-width">
+          <label>Disposal Method</label>
+          <select name="disposalMethod">
+            <option value="Scrap">Scrap</option>
+            <option value="Sale">Sale</option>
+            <option value="Write-off">Write-off</option>
+            <option value="Donation">Donation</option>
+          </select>
+        </div>
+        <div class="form-field full-width">
+          <label>Approval Information</label>
+          <input name="approvalInfo" placeholder="Approval authority and reference">
+        </div>
+        <div class="form-field full-width">
+          <label>Remarks</label>
+          <input name="remarks" placeholder="Additional notes...">
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>
@@ -1386,11 +1575,15 @@
       </div>
       <form id="addProforma3Form" class="modal-body form-grid">
         <div class="form-field">
-          <label>Department</label>
-          <input name="department" required placeholder="e.g. IT">
+          <label>Financial Year</label>
+          <input name="auditYear" type="number" required placeholder="e.g. 2025" value="2025">
         </div>
         <div class="form-field">
-          <label>Laboratory / Workshop</label>
+          <label>Department</label>
+          <select name="department" id="proforma3Department" required></select>
+        </div>
+        <div class="form-field">
+          <label>Laboratory / Section</label>
           <input name="laboratory" required placeholder="e.g. Networking Lab">
         </div>
         <div class="form-field">
@@ -1399,15 +1592,24 @@
         </div>
         <div class="form-field">
           <label>Staff In-Charge</label>
-          <input name="staffInCharge" required placeholder="e.g. Lead Eng David">
+          <input name="staffInCharge" required placeholder="Enter Your Name">
         </div>
         <div class="form-field">
           <label>Verification Date</label>
           <input name="verificationDate" type="date" required>
         </div>
         <div class="form-field">
+          <label>Consumable ID</label>
+          <input name="consumableId" placeholder="e.g. CONS-001 (optional - links to registered consumable)" list="proforma3ConsList">
+          <datalist id="proforma3ConsList"></datalist>
+        </div>
+        <div class="form-field">
           <label>Consumable Description</label>
           <input name="description" required placeholder="e.g. Cat6 Ethernet Spool 300m">
+        </div>
+        <div class="form-field">
+          <label>Unit</label>
+          <input name="unit" value="Nos" placeholder="e.g. Nos, Kgs, Litres">
         </div>
         <div class="form-field">
           <label>Previous Stock</label>
@@ -1429,6 +1631,10 @@
           <label>Purchase Value (₹)</label>
           <input name="purchaseValue" type="number" step="0.01" value="750" required>
         </div>
+        <div class="form-field">
+          <label>Current Value (₹)</label>
+          <input name="currentValue" type="number" step="0.01" value="750" placeholder="Current market value">
+        </div>
         <div class="form-field full-width">
           <label>Remarks</label>
           <input name="remarks" placeholder="Stock balance notes...">
@@ -1449,12 +1655,17 @@
         <button type="button" class="modal-close" data-modal-close>&times;</button>
       </div>
       <form id="addProforma4Form" class="modal-body form-grid">
+        <input type="hidden" name="verificationRecordId" id="proforma4P3RefInput">
         <div class="form-field">
-          <label>Department</label>
-          <input name="department" required placeholder="e.g. Electronics">
+          <label>Financial Year</label>
+          <input name="auditYear" type="number" required placeholder="e.g. 2025" value="2025">
         </div>
         <div class="form-field">
-          <label>Laboratory / Workshop</label>
+          <label>Department</label>
+          <select name="department" id="proforma4Department" required></select>
+        </div>
+        <div class="form-field">
+          <label>Laboratory / Section</label>
           <input name="laboratory" required placeholder="e.g. Circuit Lab">
         </div>
         <div class="form-field">
@@ -1463,11 +1674,16 @@
         </div>
         <div class="form-field">
           <label>Staff In-Charge</label>
-          <input name="staffInCharge" required placeholder="e.g. Dr. Elena Vance">
+          <input name="staffInCharge" required placeholder="Enter Your Name">
         </div>
         <div class="form-field">
           <label>Verification Date</label>
           <input name="verificationDate" type="date" required>
+        </div>
+        <div class="form-field">
+          <label>Consumable ID</label>
+          <input name="consumableId" id="proforma4ConsumableId" required placeholder="Select linked Consumable ID" list="proforma4ConsList">
+          <datalist id="proforma4ConsList"></datalist>
         </div>
         <div class="form-field">
           <label>Item Description</label>
@@ -1493,9 +1709,26 @@
           <label>Book Value (₹)</label>
           <input name="bookValue" type="number" step="0.01" value="400" required>
         </div>
+        <div class="form-field">
+          <label>Condition</label>
+          <select name="condition">
+            <option value="Damaged">Damaged</option>
+            <option value="Expired">Expired</option>
+            <option value="Lost">Lost</option>
+            <option value="Contaminated">Contaminated</option>
+          </select>
+        </div>
         <div class="form-field full-width">
-          <label>Reason for Condemnation</label>
-          <textarea name="condemnationReason" rows="2" required placeholder="Explain chemical expiration or damage..."></textarea>
+          <label>Reason for Condemnation / Loss</label>
+          <textarea name="reason" rows="2" required placeholder="Explain chemical expiration, damage, or loss..."></textarea>
+        </div>
+        <div class="form-field full-width">
+          <label>Verification Details</label>
+          <textarea name="verificationDetails" rows="2" placeholder="Inspection / verification details..."></textarea>
+        </div>
+        <div class="form-field full-width">
+          <label>Remarks</label>
+          <input name="remarks" placeholder="Additional notes...">
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-modal-close>Cancel</button>

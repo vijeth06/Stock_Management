@@ -320,7 +320,250 @@ async function generateExcelBuffer(reportData) {
   return buffer;
 }
 
+/**
+ * Generate a PDF buffer for Proforma-I (Equipment Verification)
+ */
+async function generateProformaIPdf(data) {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ margin: 40, size: 'A4' });
+      const buffers = [];
+      doc.on('data', chunk => buffers.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+      doc.on('error', reject);
+
+      doc.rect(40, 40, 515, 60).fill('#1e40af');
+      doc.fillColor('#ffffff').fontSize(18).font('Helvetica-Bold').text('KONGU ENGINEERING COLLEGE', 55, 52);
+      doc.fontSize(11).font('Helvetica').text('Departmental Stock Verification - Proforma-I', 55, 72);
+
+      doc.fillColor('#000000').fontSize(10).font('Helvetica');
+      const metaY = 110;
+      doc.text(`Financial Year: ${data.auditYear || new Date().getFullYear()}`, 50, metaY);
+      doc.text(`Department: ${data.department || ''}`, 50, metaY + 14);
+      doc.text(`Laboratory/Workshop: ${data.laboratory || data.workshop || ''}`, 50, metaY + 28);
+      doc.text(`Staff In-Charge: ${data.staffInCharge || ''}`, 50, metaY + 42);
+      doc.text(`Verification Date: ${data.verificationDate || new Date().toISOString().split('T')[0]}`, 50, metaY + 56);
+
+      doc.moveDown(4);
+      let y = doc.y;
+
+      if (Array.isArray(data.items) && data.items.length > 0) {
+        doc.fontSize(13).font('Helvetica-Bold').fillColor('#1e3a8a').text('Equipment Verification Details', 40, y);
+        y += 25;
+
+        doc.rect(40, y, 515, 20).fill('#f1f5f9');
+        doc.fillColor('#334155').fontSize(8).font('Helvetica-Bold');
+        const headers = ['Asset/Register No', 'Equipment Description', 'Book Stock', 'Purchases', 'Physical Stock', 'Difference', 'Prev Book Value', 'Current Purchase', 'Current Book', 'Working Condition', 'Outcome'];
+        let x = 45;
+        headers.forEach((h, i) => {
+          doc.text(h, x, y + 5, { width: 42, align: 'center' });
+          x += 42;
+        });
+        y += 20;
+
+        doc.fillColor('#0f172a').fontSize(7).font('Helvetica');
+        data.items.forEach(item => {
+          x = 45;
+          doc.text(String(item.assetId || item.registerNumber || ''), x, y + 1, { width: 42 });
+          x += 42;
+          doc.text(String(item.equipmentDescription || item.name || ''), x, y + 1, { width: 42 });
+          x += 42;
+          doc.text(String(item.bookStock || item.bookStockPreviousYear || 0), x, y + 1, { width: 42, align: 'right' });
+          x += 42;
+          doc.text(String(item.purchasesDuringYear || item.purchasedDuringYear || 0), x, y + 1, { width: 42, align: 'right' });
+          x += 42;
+          doc.text(String(item.physicalStock || item.actualPhysicalStock || 0), x, y + 1, { width: 42, align: 'right' });
+          x += 42;
+          doc.text(String(item.difference || ''), x, y + 1, { width: 42, align: 'right' });
+          x += 42;
+          doc.text(String(item.previousBookValue || ''), x, y + 1, { width: 42, align: 'right' });
+          x += 42;
+          doc.text(String(item.currentPurchaseValue || ''), x, y + 1, { width: 42, align: 'right' });
+          x += 42;
+          doc.text(String(item.currentBookValue || ''), x, y + 1, { width: 42, align: 'right' });
+          x += 42;
+          doc.text(String(item.workingCondition || ''), x, y + 1, { width: 42 });
+          x += 42;
+          doc.text(String(item.outcome || ''), x, y + 1, { width: 42 });
+          y += 14;
+        });
+      } else {
+        doc.fillColor('#64748b').fontSize(9).font('Helvetica').text('No equipment items recorded', 50, y);
+        y += 20;
+      }
+
+      y += 20;
+      doc.fillColor('#0f172a').fontSize(9).font('Helvetica-Bold').text('Verification Remarks:', 40, y);
+      y += 14;
+      doc.fillColor('#64748b').fontSize(8).font('Helvetica').text(data.remarks || 'No remarks', 45, y, { width: 500 });
+      y += 40;
+
+      doc.rect(40, y, 515, 50).fillAndStroke('#f8fafc', '#e2e8f0');
+      doc.fillColor('#0f172a').fontSize(9).font('Helvetica-Bold').text('Auditor Sign-off', 50, y + 8);
+      doc.fillColor('#64748b').fontSize(8).font('Helvetica').text('This verification is recorded on Hyperledger Fabric blockchain.', 50, y + 24);
+      doc.text('_________________________', 320, y + 38);
+      doc.text('Audit Officer Signature', 320, y + 46);
+
+      doc.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+/**
+ * Generate Excel buffers for Proformas II, III, IV
+ */
+async function generateProformaIIExcel(data) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Proforma-II - Equipment Condemnation');
+  sheet.columns = [
+    { header: 'Field', key: 'field', width: 35 },
+    { header: 'Value', key: 'value', width: 50 }
+  ];
+  sheet.getRow(1).font = { bold: true };
+  const rows = [
+    { field: 'Record ID', value: data.recordId || '' },
+    { field: 'Financial Year', value: data.auditYear || '' },
+    { field: 'Department', value: data.department || '' },
+    { field: 'Asset ID', value: data.assetId || '' },
+    { field: 'Equipment Description', value: data.equipmentDescription || '' },
+    { field: 'Quantity', value: data.quantity || 1 },
+    { field: 'Purchase Date', value: data.purchaseDate || '' },
+    { field: 'Purchase Value', value: data.purchaseValue || '' },
+    { field: 'Book Value', value: data.bookValue || '' },
+    { field: 'Condition', value: data.condition || '' },
+    { field: 'Reason for Condemnation', value: data.reason || '' },
+    { field: 'Inspection Details', value: data.inspectionDetails || '' },
+    { field: 'Loss Details', value: data.lossDetails || '' },
+    { field: 'Repair Cost', value: data.repairCost || '' },
+    { field: 'Verification Information', value: data.verificationInfo || '' },
+    { field: 'Remarks', value: data.remarks || '' },
+    { field: 'Status', value: data.status || 'Pending' },
+    { field: 'Requested By', value: data.requestedBy || '' },
+    { field: 'Requested At', value: data.createdAt || '' },
+    { field: 'Approved By', value: data.approvedBy || '' },
+    { field: 'Approved At', value: data.approvedAt || '' }
+  ];
+  rows.forEach(r => sheet.addRow({ field: r.field, value: r.value }));
+
+  // If items array exists, add a detailed table
+  if (Array.isArray(data.items) && data.items.length > 0) {
+    sheet.addRow([]);
+    sheet.addRow(['Item Details']);
+    const itemSheet = workbook.addWorksheet('Condemnation Items');
+    itemSheet.columns = [
+      { header: 'Asset ID', key: 'assetId', width: 20 },
+      { header: 'Description', key: 'name', width: 30 },
+      { header: 'Quantity', key: 'quantity', width: 10 },
+      { header: 'Book Value', key: 'bookValue', width: 15 },
+      { header: 'Reason', key: 'reason', width: 30 },
+      { header: 'Condition', key: 'condition', width: 15 }
+    ];
+    itemSheet.getRow(1).font = { bold: true };
+    data.items.forEach(item => itemSheet.addRow(item));
+  }
+
+  return workbook.xlsx.writeBuffer();
+}
+
+async function generateProformaIIIExcel(data) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Proforma-III - Consumable Verification');
+  sheet.columns = [
+    { header: 'Field', key: 'field', width: 35 },
+    { header: 'Value', key: 'value', width: 50 }
+  ];
+  sheet.getRow(1).font = { bold: true };
+  const rows = [
+    { field: 'Record ID', value: data.recordId || '' },
+    { field: 'Financial Year', value: data.auditYear || '' },
+    { field: 'Department', value: data.department || '' },
+    { field: 'Laboratory/Section', value: data.laboratory || '' },
+    { field: 'Staff In-Charge', value: data.staffInCharge || '' },
+    { field: 'Verification Date', value: data.verificationDate || '' },
+    { field: 'Remarks', value: data.remarks || '' }
+  ];
+  rows.forEach(r => sheet.addRow({ field: r.field, value: r.value }));
+
+  if (Array.isArray(data.items) && data.items.length > 0) {
+    sheet.addRow([]);
+    const itemSheet = workbook.addWorksheet('Consumable Details');
+    itemSheet.columns = [
+      { header: 'Consumable ID', key: 'consumableId', width: 20 },
+      { header: 'Description', key: 'description', width: 30 },
+      { header: 'Previous Stock', key: 'previousStock', width: 15 },
+      { header: 'Purchases', key: 'purchasedQuantity', width: 12 },
+      { header: 'Consumed', key: 'consumedQuantity', width: 12 },
+      { header: 'Book Stock', key: 'remainingBookStock', width: 12 },
+      { header: 'Physical Stock', key: 'actualPhysicalStock', width: 15 },
+      { header: 'Difference', key: 'difference', width: 12 },
+      { header: 'Purchase Value', key: 'purchaseValue', width: 15 },
+      { header: 'Current Value', key: 'currentValue', width: 15 },
+      { header: 'Outcome', key: 'outcome', width: 20 }
+    ];
+    itemSheet.getRow(1).font = { bold: true };
+    data.items.forEach(item => itemSheet.addRow(item));
+  }
+
+  return workbook.xlsx.writeBuffer();
+}
+
+async function generateProformaIVExcel(data) {
+  const workbook = new ExcelJS.Workbook();
+   const sheet = workbook.addWorksheet('Proforma-IV - Consumable Condemnation');
+  sheet.columns = [
+    { header: 'Field', key: 'field', width: 35 },
+    { header: 'Value', key: 'value', width: 50 }
+  ];
+  sheet.getRow(1).font = { bold: true };
+  const rows = [
+    { field: 'Record ID', value: data.recordId || '' },
+    { field: 'Financial Year', value: data.auditYear || '' },
+    { field: 'Department', value: data.department || '' },
+    { field: 'Consumable ID', value: data.consumableId || '' },
+    { field: 'Linked Proforma-III', value: data.verificationRecordId || '' },
+    { field: 'Item Description', value: data.itemDescription || '' },
+    { field: 'Quantity', value: data.quantity || '' },
+    { field: 'Book Stock', value: data.bookStock || '' },
+    { field: 'Physical Stock', value: data.physicalStock || '' },
+    { field: 'Difference', value: data.difference || '' },
+    { field: 'Purchase Date', value: data.purchaseDate || '' },
+    { field: 'Book Value', value: data.bookValue || '' },
+    { field: 'Condemnation/Loss Reason', value: data.reason || '' },
+    { field: 'Verification Details', value: data.verificationDetails || '' },
+    { field: 'Remarks', value: data.remarks || '' },
+    { field: 'Status', value: data.status || 'Pending' },
+    { field: 'Requested By', value: data.requestedBy || '' },
+    { field: 'Requested At', value: data.createdAt || '' },
+    { field: 'Approved By', value: data.approvedBy || '' },
+    { field: 'Approved At', value: data.approvedAt || '' }
+  ];
+  rows.forEach(r => sheet.addRow({ field: r.field, value: r.value }));
+
+  if (Array.isArray(data.items) && data.items.length > 0) {
+    sheet.addRow([]);
+    const itemSheet = workbook.addWorksheet('Condemnation Items');
+    itemSheet.columns = [
+      { header: 'Consumable ID', key: 'consumableId', width: 20 },
+      { header: 'Description', key: 'description', width: 30 },
+      { header: 'Book Stock', key: 'bookStock', width: 12 },
+      { header: 'Physical Stock', key: 'actualStock', width: 15 },
+      { header: 'Difference', key: 'difference', width: 12 },
+      { header: 'Reason', key: 'reason', width: 30 }
+    ];
+    itemSheet.getRow(1).font = { bold: true };
+    data.items.forEach(item => itemSheet.addRow(item));
+  }
+
+  return workbook.xlsx.writeBuffer();
+}
+
 module.exports = {
   generatePdfBuffer,
-  generateExcelBuffer
+  generateExcelBuffer,
+  generateProformaIPdf,
+  generateProformaIIExcel,
+  generateProformaIIIExcel,
+  generateProformaIVExcel
 };

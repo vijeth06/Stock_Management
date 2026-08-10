@@ -6,7 +6,8 @@ const {
   deleteAssetFromFabric,
   getAssetHistoryFromFabric,
   getAllDepartmentsFromFabric,
-  createDepartmentOnFabric
+  createDepartmentOnFabric,
+  getAllCondemnationRecordsFromFabric
 } = require("../services/fabricService");
 const { checkDepartmentAccess } = require("../middleware/auth");
 
@@ -240,6 +241,8 @@ async function getAssetHistory(req, res, next) {
     if (asset.createdAt) {
       timeline.push({
         event: "Asset Created",
+        type: "creation",
+        action: "create",
         date: asset.createdAt,
         details: `Asset ${asset.assetId} registered in ${asset.department}`
       });
@@ -249,11 +252,29 @@ async function getAssetHistory(req, res, next) {
       historyRes.history.forEach(item => {
         try {
           const val = JSON.parse(item.value);
-          timeline.push({
+          const eventData = {
             event: item.isDelete ? "Asset Ledger Deleted" : "Asset Ledger Update",
+            type: val.status ? "status_update" : "ledger_update",
+            action: "update",
             date: item.timestamp,
-            details: `Ledger Status: ${val.status || 'Updated'}, Department: ${val.department || 'N/A'}`
-          });
+            details: `Ledger Status: ${val.status || 'Updated'}, Department: ${val.department || 'N/A'}`,
+            previousStatus: val.previousStatus,
+            newStatus: val.status,
+            field: val.updatedField,
+            newValue: val.newValue
+          };
+          
+          if (val.status === "CONDEMNATION_REQUESTED" || val.status === "Condemned") {
+            eventData.event = "Condemnation";
+            eventData.type = "condemnation";
+            eventData.action = "condemn";
+          } else if (val.previousStatus && val.status && val.previousStatus !== val.status) {
+            eventData.event = "Status Change";
+            eventData.type = "status_change";
+            eventData.action = "status";
+          }
+          
+          timeline.push(eventData);
         } catch (e) {}
       });
     }
@@ -261,6 +282,8 @@ async function getAssetHistory(req, res, next) {
     (asset.maintenanceRecords || []).forEach(record => {
       timeline.push({
         event: "Maintenance",
+        type: "maintenance",
+        action: "maintenance",
         date: record.maintenanceDate || record.createdAt,
         details: `${record.description} by ${record.technician} (${record.status})`
       });
@@ -269,9 +292,76 @@ async function getAssetHistory(req, res, next) {
     if (asset.condemnationRecord) {
       timeline.push({
         event: "Condemnation Request",
+        type: "condemnation",
+        action: "condemn",
         date: asset.condemnationRecord.requestedAt || asset.updatedAt,
         details: `Condemnation ${asset.condemnationRecord.status} by ${asset.condemnationRecord.requestedBy}`
       });
+    }
+
+    try {
+      const condRes = await getAllCondemnationRecordsFromFabric();
+      if (condRes.success && Array.isArray(condRes.records)) {
+        const assetCondemations = condRes.records.filter(r => r.assetId === assetId);
+        assetCondemations.forEach(rec => {
+          timeline.push({
+            event: "Condemnation Record",
+            type: "condemnation",
+            action: "condemn",
+            date: rec.requestedAt || rec.createdAt,
+            details: `Condemnation ${rec.status} requested by ${rec.requestedBy || rec.createdBy || 'Unknown'}`
+          });
+        });
+      }
+    } catch (e) {}
+
+    if (asset.transfers && Array.isArray(asset.transfers)) {
+      asset.transfers.forEach(t => {
+        timeline.push({
+          event: "Transfer",
+          type: "transfer",
+          action: "transfer",
+          date: t.transferDate || t.createdAt,
+          details: `Transferred from ${t.fromDepartment} to ${t.toDepartment}`
+        });
+      });
+    }
+
+    if (historyRes.success && Array.isArray(historyRes.history)) {
+      historyRes.history.forEach((item, idx) => {
+        try {
+          const val = JSON.parse(item.value);
+          if (val.updatedField === "department" && val.newValue && val.previousValue && val.newValue !== val.previousValue) {
+            if (!timeline.some(t => t.type === "transfer" && t.date === item.timestamp)) {
+              timeline.push({
+                event: "Transfer",
+                type: "transfer",
+                action: "transfer",
+                date: item.timestamp,
+                details: `Transferred from ${val.previousValue} to ${val.newValue}`
+              });
+            }
+          }
+        } catch (e) {}
+      });
+      
+      for (let i = 1; i < historyRes.history.length; i++) {
+        try {
+          const prev = JSON.parse(historyRes.history[i - 1].value);
+          const curr = JSON.parse(historyRes.history[i].value);
+          if (prev.department && curr.department && prev.department !== curr.department) {
+            if (!timeline.some(t => t.type === "transfer" && t.date === historyRes.history[i].timestamp)) {
+              timeline.push({
+                event: "Transfer",
+                type: "transfer",
+                action: "transfer",
+                date: historyRes.history[i].timestamp,
+                details: `Transferred from ${prev.department} to ${curr.department}`
+              });
+            }
+          }
+        } catch (e) {}
+      }
     }
 
     timeline.sort((a, b) => new Date(a.date) - new Date(b.date));

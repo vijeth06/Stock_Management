@@ -4,9 +4,14 @@ const {
   getAllBillsFromFabric,
   getAllMaintenanceRecordsFromFabric,
   getAllCondemnationRecordsFromFabric,
-  getDepartmentValuationOnFabric
+  getDepartmentValuationOnFabric,
+  getAllEquipmentVerificationsFromFabric,
+  getAllEquipmentCondemnationsFromFabric,
+  getAllConsumableVerificationsFromFabric,
+  getAllConsumableCondemnationsFromFabric,
+  getAllConsumablesFromFabric
 } = require("../services/fabricService");
-const { generatePdfBuffer, generateExcelBuffer } = require("../services/reportExportService");
+const { generatePdfBuffer, generateExcelBuffer, generateProformaIPdf, generateProformaIIExcel, generateProformaIIIExcel, generateProformaIVExcel } = require("../services/reportExportService");
 
 async function generateYearlyReport(req, res, next) {
   try {
@@ -38,6 +43,25 @@ async function generateYearlyReport(req, res, next) {
       ok: true,
       data: report
     });
+
+    // Record AUDIT_COMPLETED event on blockchain
+    try {
+      await require('../services/fabricService').recordAuditEventOnFabric({
+        event: 'AUDIT_COMPLETED',
+        reportId: report.reportId,
+        year: reportYear,
+        auditOfficer: auditOfficer || 'Administrator',
+        auditPeriod: auditPeriod || `FY ${reportYear}`,
+        totalAssets: report.totalAssets,
+        activeAssets: report.activeAssets,
+        condemnedAssets: report.condemnedAssets,
+        disposedAssets: report.disposedAssets,
+        department: 'ALL',
+        createdAt: new Date().toISOString()
+      });
+    } catch (auditErr) {
+      console.warn('Failed to record AUDIT_COMPLETED on blockchain:', auditErr.message);
+    }
   } catch (error) {
     next(error);
   }
@@ -84,11 +108,19 @@ async function getDashboard(req, res, next) {
     const billsRes = await getAllBillsFromFabric();
     const mntRes = await getAllMaintenanceRecordsFromFabric();
     const condRes = await getAllCondemnationRecordsFromFabric();
+    const consumablesRes = await getAllConsumablesFromFabric();
+    const verificationsRes = await getAllEquipmentVerificationsFromFabric();
 
     let assets = assetsRes.assets || [];
     let bills = billsRes.bills || [];
     let maintenances = mntRes.records || [];
     let condemnations = condRes.records || [];
+    let consumables = [];
+    try {
+      const consumableResult = await getAllConsumablesFromFabric();
+      consumables = consumableResult.success ? (consumableResult.consumables || []) : [];
+    } catch (e) { consumables = []; }
+    let verifications = verificationsRes.records || [];
 
     const reqUser = req.user;
     if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department) {
@@ -103,6 +135,7 @@ async function getDashboard(req, res, next) {
 
       const condAssetIds = new Set(assets.map(a => a.assetId));
       condemnations = condemnations.filter(c => condAssetIds.has(c.assetId));
+      consumables = consumables.filter(c => (c.department || "").toUpperCase() === userDept);
     }
 
     const statusCounts = {
@@ -138,11 +171,20 @@ async function getDashboard(req, res, next) {
         verifiedBills: bills.filter(b => b.verified).length,
         totalMaintenances: maintenances.length,
         totalCondemnationRequests: condemnations.length,
-        totalTransfers: 0
+        totalTransfers: 0,
+        totalConsumables: consumables.length,
+        lowStockConsumables: consumables.filter(c => (c.currentStock || 0) <= 0).length,
+        totalConsumableVerifications: verificationsRes.records.length,
+        pendingCondemnationRequests: condemnations.filter(c => c.status === 'Pending' || c.status === 'Pending Approval').length
       },
       analytics: {
         assetStatus: statusCounts,
-        departmentSummary
+        departmentSummary,
+        consumableStock: {
+          total: consumables.length,
+          lowStock: consumables.filter(c => (c.currentStock || 0) <= 0).length,
+          healthyStock: consumables.filter(c => (c.currentStock || 0) > 0).length
+        }
       },
       recentAssets: assets.slice(0, 5).map(a => ({
         assetId: a.assetId,
@@ -150,9 +192,19 @@ async function getDashboard(req, res, next) {
         status: a.status,
         department: a.department
       }))
-    };
+     };
 
-    res.json({ ok: true, data: summary });
+     summary.financialSummary = {
+       totalValuation: assets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0),
+       netBookValue: assets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0) * 0.7,
+       assetCount: assets.length,
+       depreciationMethod: "Straight-Line"
+     };
+
+     res.json({
+       ok: true,
+       data: summary
+     });
   } catch (error) {
     next(error);
   }
@@ -239,7 +291,11 @@ module.exports = {
   exportReport,
   getAnnualSummary,
   getFinancialReport,
-  getDepartmentValuation
+  getDepartmentValuation,
+  exportEquipmentVerificationReport,
+  exportEquipmentCondemnationReport,
+  exportConsumableVerificationReport,
+  exportConsumableCondemnationReport
 };
 
 async function getDepartmentValuation(req, res, next) {
@@ -264,6 +320,125 @@ async function getDepartmentValuation(req, res, next) {
     }
 
     res.json({ ok: true, data: valuation });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function exportEquipmentVerificationReport(req, res, next) {
+  try {
+    const { recordId } = req.params;
+    const { format = "pdf" } = req.query;
+    const fabRes = await getAllEquipmentVerificationsFromFabric();
+    let items = fabRes.records || [];
+    let record = items.find(i => i.recordId === recordId || i._id === recordId);
+
+    if (!record) {
+      return res.status(404).json({ ok: false, error: "Proforma-I record not found" });
+    }
+
+    // Department access check
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const userDept = String(req.user.department).toUpperCase();
+      if (record.department && String(record.department).toUpperCase() !== userDept) {
+        return res.status(403).json({ ok: false, error: "Access denied" });
+      }
+    }
+
+    const buffer = await generateProformaIPdf(record);
+    if (format === "excel") {
+      const xlsxBuffer = await generateExcelBuffer({ assetsList: [], ...record });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename=proforma-I-${recordId}.xlsx`);
+      return res.send(xlsxBuffer);
+    }
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=proforma-I-${recordId}.pdf`);
+    return res.send(buffer);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function exportEquipmentCondemnationReport(req, res, next) {
+  try {
+    const { recordId } = req.params;
+    const { format = "pdf" } = req.query;
+    const fabRes = await getAllEquipmentCondemnationsFromFabric();
+    let items = fabRes.records || [];
+    let record = items.find(i => i.recordId === recordId || i._id === recordId);
+
+    if (!record) {
+      return res.status(404).json({ ok: false, error: "Proforma-II record not found" });
+    }
+
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const userDept = String(req.user.department).toUpperCase();
+      if (record.department && String(record.department).toUpperCase() !== userDept) {
+        return res.status(403).json({ ok: false, error: "Access denied" });
+      }
+    }
+
+    const buffer = await generateProformaIIExcel(record);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename=proforma-II-${recordId}.xlsx`);
+    return res.send(buffer);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function exportConsumableVerificationReport(req, res, next) {
+  try {
+    const { recordId } = req.params;
+    const { format = "pdf" } = req.query;
+    const fabRes = await getAllConsumableVerificationsFromFabric();
+    let items = fabRes.records || [];
+    let record = items.find(i => i.recordId === recordId || i._id === recordId);
+
+    if (!record) {
+      return res.status(404).json({ ok: false, error: "Proforma-III record not found" });
+    }
+
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const userDept = String(req.user.department).toUpperCase();
+      if (record.department && String(record.department).toUpperCase() !== userDept) {
+        return res.status(403).json({ ok: false, error: "Access denied" });
+      }
+    }
+
+    const buffer = await generateProformaIIIExcel(record);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename=proforma-III-${recordId}.xlsx`);
+    return res.send(buffer);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function exportConsumableCondemnationReport(req, res, next) {
+  try {
+    const { recordId } = req.params;
+    const { format = "pdf" } = req.query;
+    const fabRes = await getAllConsumableCondemnationsFromFabric();
+    let items = fabRes.records || [];
+    let record = items.find(i => i.recordId === recordId || i._id === recordId);
+
+    if (!record) {
+      return res.status(404).json({ ok: false, error: "Proforma-IV record not found" });
+    }
+
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const userDept = String(req.user.department).toUpperCase();
+      if (record.department && String(record.department).toUpperCase() !== userDept) {
+        return res.status(403).json({ ok: false, error: "Access denied" });
+      }
+    }
+
+    const buffer = await generateProformaIVExcel(record);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename=proforma-IV-${recordId}.xlsx`);
+    return res.send(buffer);
   } catch (err) {
     next(err);
   }

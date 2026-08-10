@@ -8,7 +8,11 @@ const {
   createConsumableVerificationOnFabric,
   getAllConsumableVerificationsFromFabric,
   createConsumableCondemnationOnFabric,
-  getAllConsumableCondemnationsFromFabric
+  getAllConsumableCondemnationsFromFabric,
+  readAssetFromFabric,
+  updateAssetOnFabric,
+  readConsumableFromFabric,
+  updateConsumableStockOnFabric
 } = require("../services/fabricService");
 
 const verificationsStore = {
@@ -30,6 +34,15 @@ function validateNonNegativeItems(items, fields) {
   return null;
 }
 
+function validateNonNegativeFields(obj, fields) {
+  for (const field of fields) {
+    if (obj[field] !== undefined && obj[field] !== null && Number(obj[field]) < 0) {
+      return `Value for '${field}' cannot be negative`;
+    }
+  }
+  return null;
+}
+
 async function createEquipmentVerification(req, res, next) {
   try {
     const payload = req.body;
@@ -42,18 +55,60 @@ async function createEquipmentVerification(req, res, next) {
       payload.department = req.user.department;
     }
 
-    const invalidErrMsg = validateNonNegativeItems(payload.items, ["bookStockPreviousYear", "purchasedDuringYear", "actualPhysicalStock", "purchaseValue"]);
+    if (!payload.financialYear && !payload.auditYear) {
+      payload.financialYear = new Date().getFullYear().toString() + "-" + (new Date().getFullYear() + 1).toString().slice(-2);
+    }
+
+    if (!payload.auditYear && payload.financialYear) {
+      const parts = String(payload.financialYear).split("-");
+      if (parts.length === 2) payload.auditYear = parseInt(parts[0]);
+    }
+
+    const topLevelInvalid = validateNonNegativeFields(payload, ["previousBookValue", "currentBookValue"]);
+    if (topLevelInvalid) {
+      return res.status(400).json({ ok: false, error: topLevelInvalid });
+    }
+
+    const invalidErrMsg = validateNonNegativeItems(payload.items, ["bookStockPreviousYear", "purchasedDuringYear", "actualPhysicalStock", "purchaseValue", "currentBookValue", "previousBookValue"]);
     if (invalidErrMsg) {
       return res.status(400).json({ ok: false, error: invalidErrMsg });
+    }
+
+    if (!payload.auditYear) {
+      payload.auditYear = new Date().getFullYear();
+    }
+
+    // Validate asset linking if assetId is provided
+    if (payload.assetId) {
+      const assetRes = await readAssetFromFabric(payload.assetId);
+      if (!assetRes.success || !assetRes.asset) {
+        return res.status(404).json({ ok: false, error: `Asset ${payload.assetId} not found on ledger` });
+      }
+      if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+        if (!checkDepartmentAccess(req.user, assetRes.asset.department)) {
+          return res.status(403).json({ ok: false, error: "Cannot verify asset from another department" });
+        }
+      }
     }
 
     if (Array.isArray(payload.items)) {
       payload.items = payload.items.map(item => {
         const bookCurrent = (Number(item.bookStockPreviousYear) || 0) + (Number(item.purchasedDuringYear) || 0);
+        const physicalStock = Number(item.actualPhysicalStock) || 0;
+        const difference = bookCurrent - physicalStock;
+        let outcome = item.outcome || "Verified";
+        if (item.workingCondition === "Damaged" || item.workingCondition === "Not Working" || item.workingCondition === "Condemnation Required") {
+          if (!item.outcome) outcome = "Condemnation Required";
+        } else if (item.workingCondition === "Repair Required" || item.workingCondition === "Under Maintenance") {
+          if (!item.outcome) outcome = "Under Maintenance";
+        } else if (item.workingCondition === "Missing" || difference > 0) {
+          if (!item.outcome) outcome = "Missing / Loss Review Required";
+        }
         return {
           ...item,
           bookStockCurrentYear: bookCurrent,
-          difference: bookCurrent - (Number(item.actualPhysicalStock) || 0)
+          difference,
+          outcome
         };
       });
     }
@@ -63,6 +118,7 @@ async function createEquipmentVerification(req, res, next) {
       _id: recordId,
       recordId,
       status: payload.status || "Completed",
+      auditYear: payload.auditYear,
       createdAt: new Date().toISOString()
     };
 
@@ -72,6 +128,8 @@ async function createEquipmentVerification(req, res, next) {
     }
 
     verificationsStore.equipmentVerifications.unshift(verification);
+
+    try { await recordAuditLog({ actor: req.user && req.user.email, role: req.user && req.user.role, action: 'PROFORMA_I_CREATED', resourceType: 'EquipmentVerification', resourceId: recordId, details: { department: payload.department, auditYear: payload.auditYear } }); } catch (e) {}
 
     res.status(201).json({ ok: true, data: verification, blockchain: fabricRes });
   } catch (error) {
@@ -136,6 +194,19 @@ async function createEquipmentCondemnation(req, res, next) {
       return res.status(400).json({ ok: false, error: invalidErrMsg });
     }
 
+    // Validate linkage to original Asset ID
+    if (payload.assetId) {
+      const assetRes = await readAssetFromFabric(payload.assetId);
+      if (!assetRes.success || !assetRes.asset) {
+        return res.status(404).json({ ok: false, error: `Asset ${payload.assetId} not found on ledger` });
+      }
+      payload.assetStatus = assetRes.asset.status;
+    }
+
+    if (!payload.auditYear) {
+      payload.auditYear = new Date().getFullYear();
+    }
+
     const record = {
       ...payload,
       _id: recordId,
@@ -149,7 +220,21 @@ async function createEquipmentCondemnation(req, res, next) {
       return res.status(500).json({ ok: false, error: fabricRes.error || "Failed to store equipment condemnation on ledger" });
     }
 
+    // Update asset status to CONDEMNATION_REQUESTED on blockchain if assetId is linked
+    if (payload.assetId) {
+      const assetRes = await readAssetFromFabric(payload.assetId);
+      if (assetRes.success && assetRes.asset) {
+        if (!["Condemned", "Disposed", "Retirement Requested"].includes(assetRes.asset.status)) {
+          try {
+            await updateAssetOnFabric(payload.assetId, { field: "status", newValue: "CONDEMNATION_REQUESTED" });
+          } catch (e) { }
+        }
+      }
+    }
+
     verificationsStore.equipmentCondemnations.unshift(record);
+
+    try { await recordAuditLog({ actor: req.user && req.user.email, role: req.user && req.user.role, action: 'PROFORMA_II_CREATED', resourceType: 'EquipmentCondemnation', resourceId: recordId, details: { assetId: payload.assetId, department: payload.department } }); } catch (e) {}
 
     res.status(201).json({ ok: true, data: record, blockchain: fabricRes });
   } catch (error) {
@@ -209,26 +294,35 @@ async function approveEquipmentCondemnation(req, res, next) {
     const { getAllEquipmentCondemnationsFromFabric } = require("../services/fabricService");
     const fabricRes = await getAllEquipmentCondemnationsFromFabric();
     let record = (fabricRes.records || []).find(i => i.recordId === recordId || i._id === recordId);
-    if (!record) {
-      record = verificationsStore.equipmentCondemnations.find(i => i.recordId === recordId || i._id === recordId);
-    }
-    if (!record) return res.status(404).json({ ok: false, error: "Record not found" });
+    const memRecord = verificationsStore.equipmentCondemnations.find(i => i.recordId === recordId || i._id === recordId);
+    const effectiveRecord = memRecord || record;
+    if (!effectiveRecord) return res.status(404).json({ ok: false, error: "Record not found" });
 
-    if (record.status !== "Pending") {
+    if (effectiveRecord.status && effectiveRecord.status !== "Pending") {
       return res.status(400).json({ ok: false, error: "Condemnation request is not pending" });
     }
 
+    record = effectiveRecord;
     record.status = "Approved";
     record.approvedBy = approvedBy;
     record.approvedAt = new Date().toISOString();
 
-    // Update in-memory store
-    const memRecord = verificationsStore.equipmentCondemnations.find(i => i.recordId === recordId || i._id === recordId);
-    if (memRecord) {
-      memRecord.status = record.status;
-      memRecord.approvedBy = record.approvedBy;
-      memRecord.approvedAt = record.approvedAt;
+    // Update on blockchain - mark asset as Condemned
+    if (record.assetId) {
+      try {
+        const assetRes = await readAssetFromFabric(record.assetId);
+        if (assetRes.success && assetRes.asset && assetRes.asset.status !== 'CONDEMNED' && assetRes.asset.status !== 'Condemned' && assetRes.asset.status !== 'Disposed' && assetRes.asset.status !== 'DISPOSED') {
+          await updateAssetOnFabric(record.assetId, { field: "status", newValue: "CONDEMNED" });
+        }
+      } catch (e) { }
     }
+
+    // Update in-memory store
+    memRecord.status = record.status;
+    memRecord.approvedBy = record.approvedBy;
+    memRecord.approvedAt = record.approvedAt;
+
+    try { await recordAuditLog({ actor: req.user && req.user.email, role: req.user && req.user.role, action: 'PROFORMA_II_APPROVED', resourceType: 'EquipmentCondemnation', resourceId: recordId, details: { assetId: record.assetId } }); } catch (e) {}
 
     res.json({ ok: true, data: record });
   } catch (error) {
@@ -257,6 +351,13 @@ async function rejectEquipmentCondemnation(req, res, next) {
     record.rejectedBy = rejectedBy;
     record.rejectedAt = new Date().toISOString();
 
+    // Restore asset status to Active on blockchain if linked
+    if (record.assetId) {
+      try {
+        await updateAssetOnFabric(record.assetId, { field: "status", newValue: "Active" });
+      } catch (e) { }
+    }
+
     // Update in-memory store
     const memRecord = verificationsStore.equipmentCondemnations.find(i => i.recordId === recordId || i._id === recordId);
     if (memRecord) {
@@ -264,6 +365,8 @@ async function rejectEquipmentCondemnation(req, res, next) {
       memRecord.rejectedBy = record.rejectedBy;
       memRecord.rejectedAt = record.rejectedAt;
     }
+
+    try { await recordAuditLog({ actor: req.user && req.user.email, role: req.user && req.user.role, action: 'PROFORMA_II_REJECTED', resourceType: 'EquipmentCondemnation', resourceId: recordId, details: { assetId: record.assetId } }); } catch (e) {}
 
     res.json({ ok: true, data: record });
   } catch (error) {
@@ -285,13 +388,35 @@ async function createConsumableVerification(req, res, next) {
       return res.status(400).json({ ok: false, error: invalidErrMsg });
     }
 
+    if (!payload.auditYear) {
+      payload.auditYear = new Date().getFullYear();
+    }
+
+    // Validate consumable linking if consumableId is provided
+    if (payload.consumableId) {
+      const consRes = await readConsumableFromFabric(payload.consumableId);
+      if (!consRes.success || !consRes.consumable) {
+        return res.status(404).json({ ok: false, error: `Consumable ${payload.consumableId} not found on ledger` });
+      }
+    }
+
     if (Array.isArray(payload.items)) {
       payload.items = payload.items.map(item => {
         const rem = (Number(item.previousStock) || 0) + (Number(item.purchasedQuantity) || 0) - (Number(item.consumedQuantity) || 0);
+        const physicalStock = Number(item.actualPhysicalStock) || 0;
+        const difference = rem - physicalStock;
+        let outcome = item.outcome || "Verified";
+        if (difference !== 0 && !item.outcome) {
+          outcome = difference < 0 ? "Excess" : "Shortage";
+        }
+        if (item.condition === "Damaged" || item.condition === "Expired") {
+          outcome = "Condemnation Required";
+        }
         return {
           ...item,
           remainingBookStock: rem,
-          difference: rem - (Number(item.actualPhysicalStock) || 0)
+          difference,
+          outcome
         };
       });
     }
@@ -301,6 +426,7 @@ async function createConsumableVerification(req, res, next) {
       _id: recordId,
       recordId,
       status: payload.status || "Completed",
+      auditYear: payload.auditYear,
       createdAt: new Date().toISOString()
     };
 
@@ -310,6 +436,8 @@ async function createConsumableVerification(req, res, next) {
     }
 
     verificationsStore.consumableVerifications.unshift(verification);
+
+    try { await recordAuditLog({ actor: req.user && req.user.email, role: req.user && req.user.role, action: 'PROFORMA_III_CREATED', resourceType: 'ConsumableVerification', resourceId: recordId, details: { department: payload.department, auditYear: payload.auditYear } }); } catch (e) {}
 
     res.status(201).json({ ok: true, data: verification, blockchain: fabricRes });
   } catch (error) {
@@ -362,6 +490,27 @@ async function createConsumableCondemnation(req, res, next) {
     const payload = req.body;
     const recordId = `CNC-${Date.now()}`;
 
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      payload.department = req.user.department;
+    }
+
+    const invalidErrMsg = validateNonNegativeItems(payload.items, ["quantity", "bookValue"]);
+    if (invalidErrMsg) {
+      return res.status(400).json({ ok: false, error: invalidErrMsg });
+    }
+
+    if (!payload.auditYear) {
+      payload.auditYear = new Date().getFullYear();
+    }
+
+    // Validate consumable linking
+    if (payload.consumableId) {
+      const consRes = await readConsumableFromFabric(payload.consumableId);
+      if (!consRes.success || !consRes.consumable) {
+        return res.status(404).json({ ok: false, error: `Consumable ${payload.consumableId} not found on ledger` });
+      }
+    }
+
     if (Array.isArray(payload.items)) {
       payload.items = payload.items.map(item => ({
         ...item,
@@ -374,6 +523,7 @@ async function createConsumableCondemnation(req, res, next) {
       _id: recordId,
       recordId,
       status: payload.status || "Pending",
+      auditYear: payload.auditYear,
       createdAt: new Date().toISOString()
     };
 
@@ -383,6 +533,8 @@ async function createConsumableCondemnation(req, res, next) {
     }
 
     verificationsStore.consumableCondemnations.unshift(record);
+
+    try { await recordAuditLog({ actor: req.user && req.user.email, role: req.user && req.user.role, action: 'PROFORMA_IV_CREATED', resourceType: 'ConsumableCondemnation', resourceId: recordId, details: { consumableId: payload.consumableId, department: payload.department } }); } catch (e) {}
 
     res.status(201).json({ ok: true, data: record, blockchain: fabricRes });
   } catch (error) {
@@ -435,25 +587,30 @@ async function approveConsumableCondemnation(req, res, next) {
     const { getAllConsumableCondemnationsFromFabric } = require("../services/fabricService");
     const fabricRes = await getAllConsumableCondemnationsFromFabric();
     let record = (fabricRes.records || []).find(i => i.recordId === recordId || i._id === recordId);
-    if (!record) {
-      record = verificationsStore.consumableCondemnations.find(i => i.recordId === recordId || i._id === recordId);
-    }
-    if (!record) return res.status(404).json({ ok: false, error: "Record not found" });
+    const memRecord = verificationsStore.consumableCondemnations.find(i => i.recordId === recordId || i._id === recordId);
+    const effectiveRecord = memRecord || record;
+    if (!effectiveRecord) return res.status(404).json({ ok: false, error: "Record not found" });
 
-    if (record.status !== "Pending") {
+    if (effectiveRecord.status && effectiveRecord.status !== "Pending") {
       return res.status(400).json({ ok: false, error: "Condemnation request is not pending" });
     }
 
+    record = effectiveRecord;
     record.status = "Approved";
     record.approvedBy = approvedBy;
     record.approvedAt = new Date().toISOString();
 
-    const memRecord = verificationsStore.consumableCondemnations.find(i => i.recordId === recordId || i._id === recordId);
-    if (memRecord) {
-      memRecord.status = record.status;
-      memRecord.approvedBy = record.approvedBy;
-      memRecord.approvedAt = record.approvedAt;
+    // Reduce consumable stock on blockchain if linked
+    if (record.consumableId && Array.isArray(record.items) && record.items.length > 0) {
+      const totalCondemnedQty = record.items.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+      if (totalCondemnedQty > 0) {
+        try {
+          await updateConsumableStockOnFabric(record.consumableId, "consume", totalCondemnedQty, `Condemnation approved: ${approvedBy}`);
+        } catch (e) { }
+      }
     }
+
+    try { await recordAuditLog({ actor: req.user && req.user.email, role: req.user && req.user.role, action: 'PROFORMA_IV_APPROVED', resourceType: 'ConsumableCondemnation', resourceId: recordId, details: { consumableId: record.consumableId } }); } catch (e) {}
 
     res.json({ ok: true, data: record });
   } catch (error) {
@@ -488,6 +645,8 @@ async function rejectConsumableCondemnation(req, res, next) {
       memRecord.rejectedBy = record.rejectedBy;
       memRecord.rejectedAt = record.rejectedAt;
     }
+
+    try { await recordAuditLog({ actor: req.user && req.user.email, role: req.user && req.user.role, action: 'PROFORMA_IV_REJECTED', resourceType: 'ConsumableCondemnation', resourceId: recordId, details: { consumableId: record.consumableId } }); } catch (e) {}
 
     res.json({ ok: true, data: record });
   } catch (error) {

@@ -16,8 +16,8 @@ const DEMO_ADMIN_NAME = process.env.ADMIN_NAME || "Demo Administrator";
 
 const ROLE_HIERARCHY = {
   Administrator: ["Administrator"],
-  DepartmentUser: ["DepartmentUser", "Administrator"],
-  AuditOfficer: ["AuditOfficer", "Administrator"]
+  DepartmentUser: ["DepartmentUser"],
+  AuditOfficer: ["AuditOfficer"]
 };
 
 async function hashPassword(password) {

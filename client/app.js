@@ -13,7 +13,8 @@ let currentUser = null;
 
 const PAGE_TITLES = {
   dashboard: 'Dashboard',
-  assets: 'Assets',
+  assets: 'Asset Registry',
+  consumables: 'Consumable Stock Management',
   maintenance: 'Maintenance Hub',
   condemnation: 'Condemnation & Disposal',
   transfers: 'Asset Transfers',
@@ -21,7 +22,7 @@ const PAGE_TITLES = {
   departments: 'Departments',
   reports: 'Reports',
   bills: 'Bills & Invoices',
-  verification: 'Verification',
+  verification: 'Audit & Proforma Verification',
   valuation: 'Department Valuation',
   lifecycle: 'Asset Lifecycle',
   users: 'User Management',
@@ -33,6 +34,7 @@ const KPI_CONFIG = [
   { key: 'activeAssets', label: 'Active', icon: 'green', svg: '<circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 14l-1-1 2-2-2 2-1-1 3-3" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' },
   { key: 'maintenanceAssets', label: 'In Repair', icon: 'amber', svg: '<path d="M8 16a8 8 0 100-16 8 8 0 000 16zM8 11a3 3 0 100-6 3 3 0 000 6z"/><path d="M11 8H8v4h3V8z"/>' },
   { key: 'condemnedAssets', label: 'Condemned', icon: 'red', svg: '<path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9z" clip-rule="evenodd"/>' },
+  { key: 'totalConsumables', label: 'Consumables', icon: 'blue', svg: '<path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 01-2 2H4a2 2 0 01-2-2V5zM4 11a2 2 0 012-2h12a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6z"/>' },
   { key: 'totalTransfers', label: 'Transfers', icon: 'gray', svg: '<path fill-rule="evenodd" d="M8 5a1 1 0 100 2h5.586l-1.293 1.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L13.586 5H8z" clip-rule="evenodd"/>' },
   { key: 'verifiedBills', label: 'Verified Bills', icon: 'green', svg: '<path d="M5 3a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7l-5-4H5z" />' }
 ];
@@ -93,6 +95,23 @@ function closeModal(modalId) {
   if (modal) modal.classList.add('hidden');
 }
 
+function showDataModal(title, content, options = {}) {
+  let modal = document.getElementById('dataModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'dataModal';
+    modal.className = 'modal-backdrop';
+    modal.innerHTML = '<div class="modal-card"><div class="modal-header"><h3 id="dataModalTitle"></h3><button type="button" class="modal-close" data-modal-close>&times;</button></div><div class="modal-body" id="dataModalBody"></div></div>';
+    document.body.appendChild(modal);
+  }
+  document.getElementById('dataModalTitle').textContent = title;
+  document.getElementById('dataModalBody').innerHTML = content;
+  if (options.size === 'md') {
+    modal.querySelector('.modal-card').classList.add('modal-md');
+  }
+  openModal('dataModal');
+}
+
 document.querySelectorAll('[data-modal-close]').forEach(btn => {
   btn.addEventListener('click', (e) => {
     const backdrop = e.target.closest('.modal-backdrop');
@@ -120,6 +139,7 @@ function navigateTo(page) {
   // Trigger page specific data loads
   if (page === 'dashboard') loadDashboard();
   else if (page === 'assets') loadAssets();
+  else if (page === 'consumables') { loadConsumables(); populateConsumableSelect(); populateDepartmentDropdowns(); }
   else if (page === 'maintenance') loadMaintenance();
   else if (page === 'condemnation') loadCondemnation();
   else if (page === 'transfers') loadTransfers();
@@ -127,6 +147,13 @@ function navigateTo(page) {
   else if (page === 'departments') loadDepartments();
   else if (page === 'reports') loadReports();
   else if (page === 'bills') loadBills();
+  else if (page === 'verification') {
+    populateDepartmentDropdowns();
+    populateAssetDataList('proforma1AssetList');
+    populateAssetDataList('proforma2AssetList');
+    populateConsumableDataList('proforma3ConsList');
+    populateConsumableDataList('proforma4ConsList');
+  }
   else if (page === 'valuation') loadValuation();
   else if (page === 'lifecycle') {
     document.getElementById('lifecycleEmpty').style.display = 'block';
@@ -730,11 +757,10 @@ window.openQuickTransfer = async function(assetId) {
 };
 
 document.getElementById('addAssetBtn')?.addEventListener('click', async () => {
-  // Populate department select options - only show departments registered in blockchain
-  const deptsRes = await requestJson('/api/departments');
+  const deps = await populateDepartmentDropdowns();
   const deptSelect = document.querySelector('#addAssetForm select[name="department"]');
-  if (deptSelect && deptsRes.ok && deptsRes.data && deptsRes.data.length > 0) {
-    const blockchainDepts = deptsRes.data.filter(d => !d.isDefault && d.isActive !== false);
+  if (deptSelect && deps && deps.length > 0) {
+    const blockchainDepts = deps.filter(d => !d.isDefault && d.isActive !== false);
     deptSelect.innerHTML = blockchainDepts.map(d => `<option value="${escapeHtml(d.code || d.name)}">${escapeHtml(d.name)} (${escapeHtml(d.code)})</option>`).join('');
   }
   openModal('addAssetModal');
@@ -1501,8 +1527,8 @@ function renderEquipmentVerifications(items) {
     <div class="detail-row" style="padding:14px 10px; align-items:flex-start;">
       <div style="flex:1;">
         <div style="display:flex; justify-content:space-between;">
-          <strong>${escapeHtml(p.recordId)} — ${escapeHtml(p.department)} (${escapeHtml(p.laboratory)})</strong>
-          <span class="status-pill ok">${escapeHtml(p.status || 'Completed')}</span>
+          <strong>${escapeHtml(p.recordId)} — ${escapeHtml(p.department)} (${escapeHtml(p.laboratory)}) FY: ${escapeHtml(p.auditYear)}</strong>
+          <span class="status-pill ${p.status === 'Completed' ? 'ok' : ''}">${escapeHtml(p.status || 'Completed')}</span>
         </div>
         <div class="muted" style="margin-top:2px;">
           Date: ${escapeHtml(p.verificationDate ? p.verificationDate.slice(0,10) : '')} | Stock Book No: <strong>${escapeHtml(p.stockBookNumber)}</strong> | Staff: ${escapeHtml(p.staffInCharge)}
@@ -1510,13 +1536,20 @@ function renderEquipmentVerifications(items) {
         <div style="margin-top:8px; display:flex; flex-direction:column; gap:4px; font-size:12.5px;">
           ${(p.items || []).map(i => `
             <div style="background:var(--gray-50); padding:8px; border-radius:4px; border:1px solid var(--gray-200);">
-              <div><strong>${escapeHtml(i.description)}</strong> (SN: ${escapeHtml(i.serialNumber || 'N/A')})</div>
+              <div><strong>${escapeHtml(i.equipmentDescription || i.description || '')}</strong> (Asset: ${escapeHtml(i.assetId || 'N/A')}) (SN: ${escapeHtml(i.registerNumber || i.serialNumber || 'N/A')})</div>
               <div class="muted" style="margin-top:2px;">
-                Prev Book: ${i.bookStockPreviousYear} | Added: ${i.purchasedDuringYear} | Current Book: <strong>${i.bookStockCurrentYear}</strong> | Physical: <strong>${i.actualPhysicalStock}</strong> | Variance: <span style="color:${i.difference !== 0 ? 'var(--red-600)' : 'var(--green-700)'}; font-weight:600;">${i.difference}</span>
+                Prev Book: ${i.bookStockPreviousYear} | Added: ${i.purchasesDuringYear || i.purchasedDuringYear} | Current Book: <strong>${i.bookStockCurrentYear}</strong> | Physical: <strong>${i.actualPhysicalStock}</strong> | Variance: <span style="color:${i.difference !== 0 ? 'var(--red-600)' : 'var(--green-700)'}; font-weight:600;">${i.difference}</span>
+              </div>
+              <div class="muted" style="margin-top:2px;">
+                Condition: ${escapeHtml(i.workingCondition || '-')} | Outcome: <span style="font-weight:600;">${escapeHtml(i.outcome || 'Verified')}</span>
               </div>
             </div>
           `).join('')}
         </div>
+      </div>
+      <div style="margin-left:8px; display:flex; flex-direction:column; gap:4px;">
+         <a href="/api/proforma/equipment/verification/${escapeHtml(p.recordId || p._id)}/export?format=pdf&token=${auth.token}" target="_blank" class="btn btn-sm btn-outline">PDF</a>
+         <a href="/api/proforma/equipment/verification/${escapeHtml(p.recordId || p._id)}/export?format=excel&token=${auth.token}" target="_blank" class="btn btn-sm btn-outline">Excel</a>
       </div>
     </div>
   `).join('');
@@ -1540,30 +1573,33 @@ function renderEquipmentCondemnations(items) {
     <div class="detail-row" style="padding:14px 10px; align-items:flex-start;">
       <div style="flex:1;">
         <div style="display:flex; justify-content:space-between;">
-          <strong>${escapeHtml(p.recordId)} — ${escapeHtml(p.department)} (${escapeHtml(p.laboratory)})</strong>
+          <strong>${escapeHtml(p.recordId)} — ${escapeHtml(p.department)} FY: ${escapeHtml(p.auditYear)}</strong>
           <span class="status-pill ${p.status === 'Approved' ? 'ok' : p.status === 'Rejected' ? 'error' : 'neutral'}">${escapeHtml(p.status)}</span>
         </div>
         <div class="muted" style="margin-top:2px;">
-          Stock Book No: ${escapeHtml(p.stockBookNumber)} | Staff: ${escapeHtml(p.staffInCharge)}
+          Linked Asset: ${escapeHtml(p.assetId || 'N/A')} | Proforma-I Ref: ${escapeHtml(p.proforma1RecordId || 'N/A')} | Stock Book: ${escapeHtml(p.stockBookNumber)}
         </div>
         <div style="margin-top:8px; display:flex; flex-direction:column; gap:4px; font-size:12.5px;">
           ${(p.items || []).map(i => `
             <div style="background:var(--gray-50); padding:8px; border-radius:4px; border:1px solid var(--gray-200);">
-              <div><strong>${escapeHtml(i.description)}</strong> (Qty: ${i.quantity})</div>
-              <div style="margin-top:2px;"><strong>Reason:</strong> ${escapeHtml(i.reasonForCondemnation || p.remarks || 'N/A')}</div>
+              <div><strong>${escapeHtml(i.equipmentDescription || i.description || '')}</strong> (Asset: ${escapeHtml(i.assetId || 'N/A')}, Qty: ${i.quantity})</div>
+              <div style="margin-top:2px;"><strong>Reason:</strong> ${escapeHtml(i.reason || p.reason || 'N/A')}</div>
               <div class="muted" style="margin-top:2px;">
-                Purchase Value: ₹${Number(i.purchaseValue || 0).toLocaleString()} | Book Value: ₹${Number(i.bookValue || 0).toLocaleString()}
+                Purchase Value: ₹${Number(i.purchaseValue || 0).toLocaleString()} | Book Value: ₹${Number(i.bookValue || 0).toLocaleString()} | Repair Cost: ₹${Number(i.repairCost || 0).toLocaleString()}
               </div>
+              ${i.condition ? `<div class="muted">Condition: ${escapeHtml(i.condition)}</div>` : ''}
+              ${i.inspectionRemarks ? `<div class="muted">Inspection: ${escapeHtml(i.inspectionRemarks)}</div>` : ''}
             </div>
           `).join('')}
         </div>
       </div>
-      ${(p.status === 'Pending') ? `
-        <div style="display:flex; gap:6px; margin-top:4px;">
+      <div style="margin-left:8px; display:flex; flex-direction:column; gap:4px;">
+         <a href="/api/proforma/equipment/condemnation/${escapeHtml(p.recordId || p._id)}/export?format=excel&token=${auth.token}" target="_blank" class="btn btn-sm btn-outline">Excel</a>
+        ${(p.status === 'Pending') ? `
           <button type="button" class="btn btn-primary" style="padding:4px 8px; font-size:11.5px;" onclick="approveProforma2('${escapeHtml(p.recordId)}')">Approve</button>
           <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:var(--red-600);" onclick="rejectProforma2('${escapeHtml(p.recordId)}')">Reject</button>
-        </div>
-      ` : ''}
+        ` : ''}
+      </div>
     </div>
   `).join('');
 }
@@ -1606,22 +1642,28 @@ function renderConsumableVerifications(items) {
     <div class="detail-row" style="padding:14px 10px; align-items:flex-start;">
       <div style="flex:1;">
         <div style="display:flex; justify-content:space-between;">
-          <strong>${escapeHtml(p.recordId)} — ${escapeHtml(p.department)} (${escapeHtml(p.laboratory)})</strong>
+          <strong>${escapeHtml(p.recordId)} — ${escapeHtml(p.department)} FY: ${escapeHtml(p.auditYear)}</strong>
           <span class="status-pill ok">${escapeHtml(p.status || 'Completed')}</span>
         </div>
         <div class="muted" style="margin-top:2px;">
-          Stock Book No: ${escapeHtml(p.stockBookNumber)} | Staff: ${escapeHtml(p.staffInCharge)}
+          Consumable ID: ${escapeHtml(p.consumableId || 'N/A')} | Stock Book: ${escapeHtml(p.stockBookNumber)} | Staff: ${escapeHtml(p.staffInCharge)}
         </div>
         <div style="margin-top:8px; display:flex; flex-direction:column; gap:4px; font-size:12.5px;">
           ${(p.items || []).map(i => `
             <div style="background:var(--gray-50); padding:8px; border-radius:4px; border:1px solid var(--gray-200);">
-              <div><strong>${escapeHtml(i.description)}</strong></div>
+              <div><strong>${escapeHtml(i.description || i.consumableDescription || '')}</strong> (ID: ${escapeHtml(i.consumableId || 'N/A')})</div>
               <div class="muted" style="margin-top:2px;">
-                Prev Stock: ${i.previousStock} + Purchased: ${i.purchasedQuantity} - Consumed: ${i.consumedQuantity} = Remaining Book: <strong>${i.remainingBookStock}</strong> | Physical: <strong>${i.actualPhysicalStock}</strong> | Variance: <span style="color:${i.difference !== 0 ? 'var(--red-600)' : 'var(--green-700)'}; font-weight:600;">${i.difference}</span>
+                Prev Stock: ${i.previousStock} + Purchased: ${i.purchasedQuantity} - Consumed: ${i.consumedQuantity} = Book Stock: <strong>${i.remainingBookStock}</strong> | Physical: <strong>${i.actualPhysicalStock}</strong> | Variance: <span style="color:${i.difference !== 0 ? 'var(--red-600)' : 'var(--green-700)'}; font-weight:600;">${i.difference}</span>
+              </div>
+              <div class="muted" style="margin-top:2px;">
+                Outcome: <span style="font-weight:600;">${escapeHtml(i.outcome || 'Verified')}</span> | Purchase Value: ₹${Number(i.purchaseValue || 0).toLocaleString()} | Current Value: ₹${Number(i.currentValue || 0).toLocaleString()}
               </div>
             </div>
           `).join('')}
         </div>
+      </div>
+      <div style="margin-left:8px; display:flex; flex-direction:column; gap:4px;">
+         <a href="/api/proforma/consumable/verification/${escapeHtml(p.recordId || p._id)}/export?format=excel&token=${auth.token}" target="_blank" class="btn btn-sm btn-outline">Excel</a>
       </div>
     </div>
   `).join('');
@@ -1645,30 +1687,33 @@ function renderConsumableCondemnations(items) {
     <div class="detail-row" style="padding:14px 10px; align-items:flex-start;">
       <div style="flex:1;">
         <div style="display:flex; justify-content:space-between;">
-          <strong>${escapeHtml(p.recordId)} — ${escapeHtml(p.department)} (${escapeHtml(p.laboratory)})</strong>
+          <strong>${escapeHtml(p.recordId)} — ${escapeHtml(p.department)} FY: ${escapeHtml(p.auditYear)}</strong>
           <span class="status-pill ${p.status === 'Approved' ? 'ok' : p.status === 'Rejected' ? 'error' : 'neutral'}">${escapeHtml(p.status)}</span>
         </div>
         <div class="muted" style="margin-top:2px;">
-          Stock Book No: ${escapeHtml(p.stockBookNumber)} | Staff: ${escapeHtml(p.staffInCharge)}
+          Linked Consumable: ${escapeHtml(p.consumableId || 'N/A')} | Proforma-III Ref: ${escapeHtml(p.verificationRecordId || 'N/A')} | Stock Book: ${escapeHtml(p.stockBookNumber)}
         </div>
         <div style="margin-top:8px; display:flex; flex-direction:column; gap:4px; font-size:12.5px;">
           ${(p.items || []).map(i => `
             <div style="background:var(--gray-50); padding:8px; border-radius:4px; border:1px solid var(--gray-200);">
-              <div><strong>${escapeHtml(i.description)}</strong> (Qty: ${i.quantity})</div>
-              <div style="margin-top:2px;"><strong>Reason:</strong> ${escapeHtml(i.condemnationReason || p.remarks || 'N/A')}</div>
+              <div><strong>${escapeHtml(i.description || '')}</strong> (Consumable: ${escapeHtml(i.consumableId || 'N/A')}, Qty: ${i.quantity})</div>
+              <div style="margin-top:2px;"><strong>Reason:</strong> ${escapeHtml(i.reason || p.reason || 'N/A')}</div>
               <div class="muted" style="margin-top:2px;">
-                Book Stock: ${i.bookStock} | Physical: ${i.actualStock} | Book Value: ₹${Number(i.bookValue || 0).toLocaleString()}
+                Book Stock: ${i.bookStock} | Physical: ${i.actualStock} | Difference: ${i.difference || 0} | Book Value: ₹${Number(i.bookValue || 0).toLocaleString()}
               </div>
+              ${i.condition ? `<div class="muted">Condition: ${escapeHtml(i.condition)}</div>` : ''}
+              ${i.verificationDetails ? `<div class="muted">Verification: ${escapeHtml(i.verificationDetails)}</div>` : ''}
             </div>
           `).join('')}
         </div>
       </div>
-      ${(p.status === 'Pending') ? `
-        <div style="display:flex; gap:6px; margin-top:4px;">
+      <div style="margin-left:8px; display:flex; flex-direction:column; gap:4px;">
+         <a href="/api/proforma/consumable/condemnation/${escapeHtml(p.recordId || p._id)}/export?format=excel&token=${auth.token}" target="_blank" class="btn btn-sm btn-outline">Excel</a>
+        ${(p.status === 'Pending') ? `
           <button type="button" class="btn btn-primary" style="padding:4px 8px; font-size:11.5px;" onclick="approveProforma4('${escapeHtml(p.recordId)}')">Approve</button>
           <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:var(--red-600);" onclick="rejectProforma4('${escapeHtml(p.recordId)}')">Reject</button>
-        </div>
-      ` : ''}
+        ` : ''}
+      </div>
     </div>
   `).join('');
 }
@@ -1723,10 +1768,30 @@ function renderAuditLogs(logs) {
 }
 
 // MODAL OPENERS
-document.getElementById('openProforma1ModalBtn')?.addEventListener('click', () => openModal('addProforma1Modal'));
-document.getElementById('openProforma2ModalBtn')?.addEventListener('click', () => openModal('addProforma2Modal'));
-document.getElementById('openProforma3ModalBtn')?.addEventListener('click', () => openModal('addProforma3Modal'));
-document.getElementById('openProforma4ModalBtn')?.addEventListener('click', () => openModal('addProforma4Modal'));
+document.getElementById('openProforma1ModalBtn')?.addEventListener('click', async () => {
+  await populateDepartmentDropdowns();
+  await populateAssetDataList('proforma1AssetList');
+  openModal('addProforma1Modal');
+});
+document.getElementById('openProforma2ModalBtn')?.addEventListener('click', async () => {
+  await populateDepartmentDropdowns();
+  await populateAssetDataList('proforma2AssetList');
+  openModal('addProforma2Modal');
+});
+document.getElementById('openProforma3ModalBtn')?.addEventListener('click', async () => {
+  await populateDepartmentDropdowns('proforma3Department');
+  await populateConsumableDataList('proforma3ConsList');
+  openModal('addProforma3Modal');
+});
+document.getElementById('openProforma4ModalBtn')?.addEventListener('click', async () => {
+  await populateDepartmentDropdowns('proforma4Department');
+  await populateConsumableDataList('proforma4ConsList');
+  openModal('addProforma4Modal');
+});
+document.getElementById('openConsumableModalBtn')?.addEventListener('click', async () => {
+  await populateDepartmentDropdowns('addConsumableDept');
+  openModal('addConsumableModal');
+});
 
 // FORMS SUBMIT LISTENERS
 document.getElementById('addProforma1Form')?.addEventListener('submit', async (e) => {
@@ -1736,20 +1801,26 @@ document.getElementById('addProforma1Form')?.addEventListener('submit', async (e
   const data = Object.fromEntries(formData.entries());
   const payload = {
     department: data.department,
+    auditYear: data.auditYear ? Number(data.auditYear) : new Date().getFullYear(),
     laboratory: data.laboratory,
     stockBookNumber: data.stockBookNumber,
     staffInCharge: data.staffInCharge,
     verificationDate: data.verificationDate,
+    assetId: data.assetId || undefined,
     remarks: data.remarks || '',
     items: [
       {
-        description: data.description,
-        serialNumber: data.serialNumber,
+        assetId: data.assetId || undefined,
+        equipmentDescription: data.equipmentDescription || data.description,
+        registerNumber: data.serialNumber,
         bookStockPreviousYear: Number(data.bookStockPreviousYear),
-        purchasedDuringYear: Number(data.purchasedDuringYear),
+        purchasedDuringYear: Number(data.purchasesDuringYear),
         actualPhysicalStock: Number(data.actualPhysicalStock),
         workingCondition: data.workingCondition,
-        purchaseValue: Number(data.purchaseValue)
+        purchaseValue: Number(data.purchaseValue),
+        previousBookValue: Number(data.previousBookValue),
+        currentBookValue: Number(data.currentBookValue),
+        outcome: data.outcome
       }
     ]
   };
@@ -1776,19 +1847,28 @@ document.getElementById('addProforma2Form')?.addEventListener('submit', async (e
   const data = Object.fromEntries(formData.entries());
   const payload = {
     department: data.department,
+    auditYear: data.auditYear ? Number(data.auditYear) : new Date().getFullYear(),
     laboratory: data.laboratory,
     stockBookNumber: data.stockBookNumber,
     staffInCharge: data.staffInCharge,
     verificationDate: data.verificationDate,
+    assetId: data.assetId,
+    proforma1RecordId: data.proforma1RecordId || undefined,
     remarks: data.remarks || '',
     items: [
       {
-        description: data.description,
+        assetId: data.assetId,
+        equipmentDescription: data.equipmentDescription || data.description,
         quantity: Number(data.quantity),
         purchaseDate: data.purchaseDate,
         purchaseValue: Number(data.purchaseValue),
         bookValue: Number(data.bookValue),
-        reasonForCondemnation: data.reasonForCondemnation
+        condition: data.condition,
+        reason: data.reason,
+        inspectionRemarks: data.inspectionRemarks,
+        repairCost: Number(data.repairCost),
+        disposalMethod: data.disposalMethod,
+        approvalInfo: data.approvalInfo
       }
     ]
   };
@@ -1815,19 +1895,25 @@ document.getElementById('addProforma3Form')?.addEventListener('submit', async (e
   const data = Object.fromEntries(formData.entries());
   const payload = {
     department: data.department,
+    auditYear: data.auditYear ? Number(data.auditYear) : new Date().getFullYear(),
     laboratory: data.laboratory,
     stockBookNumber: data.stockBookNumber,
     staffInCharge: data.staffInCharge,
     verificationDate: data.verificationDate,
+    consumableId: data.consumableId || undefined,
     remarks: data.remarks || '',
     items: [
       {
+        consumableId: data.consumableId || undefined,
         description: data.description,
+        unit: data.unit,
         previousStock: Number(data.previousStock),
         purchasedQuantity: Number(data.purchasedQuantity),
         consumedQuantity: Number(data.consumedQuantity),
         actualPhysicalStock: Number(data.actualPhysicalStock),
-        purchaseValue: Number(data.purchaseValue)
+        purchaseValue: Number(data.purchaseValue),
+        currentValue: Number(data.currentValue),
+        outcome: data.outcome || ''
       }
     ]
   };
@@ -1854,20 +1940,26 @@ document.getElementById('addProforma4Form')?.addEventListener('submit', async (e
   const data = Object.fromEntries(formData.entries());
   const payload = {
     department: data.department,
+    auditYear: data.auditYear ? Number(data.auditYear) : new Date().getFullYear(),
     laboratory: data.laboratory,
     stockBookNumber: data.stockBookNumber,
     staffInCharge: data.staffInCharge,
     verificationDate: data.verificationDate,
+    consumableId: data.consumableId,
+    verificationRecordId: data.verificationRecordId || undefined,
     remarks: data.remarks || '',
     items: [
       {
+        consumableId: data.consumableId,
         description: data.description,
         quantity: Number(data.quantity),
         bookStock: Number(data.bookStock),
         actualStock: Number(data.actualStock),
         purchaseDate: data.purchaseDate,
         bookValue: Number(data.bookValue),
-        condemnationReason: data.condemnationReason
+        condition: data.condition,
+        reason: data.reason,
+        verificationDetails: data.verificationDetails
       }
     ]
   };
@@ -1887,6 +1979,244 @@ document.getElementById('addProforma4Form')?.addEventListener('submit', async (e
   showResult(res);
 });
 
+// CONSUMABLE HELPERS
+async function loadConsumables() {
+  const res = await requestJson('/api/consumables');
+  if (res.ok) {
+    renderConsumableList(res.data || []);
+  }
+}
+
+async function populateConsumableSelect() {
+  const res = await requestJson('/api/consumables');
+  const select = document.getElementById('txnConsumableId');
+  if (select && res.ok) {
+    const consumables = res.data || [];
+    select.innerHTML = '<option value="">Select a consumable...</option>' + (consumables.map(c =>
+      `<option value="${c.consumableId}">${c.consumableId} - ${c.name} (${c.currentStock || c.bookStock || 0} in stock)</option>`
+    ).join(''));
+  }
+}
+
+async function populateConsumableDataList(listId) {
+  const list = document.getElementById(listId);
+  if (!list) return;
+  const res = await requestJson('/api/consumables');
+  if (res.ok) {
+    list.innerHTML = (res.data || []).map(c =>
+      `<option value="${c.consumableId}">${c.consumableId} - ${c.name}</option>`
+    ).join('');
+  }
+}
+
+function renderConsumableList(consumables) {
+  const container = document.getElementById('consumablesList');
+  if (!container) return;
+  if (!consumables.length) {
+    container.innerHTML = '<div class="empty-state">No consumables registered yet.</div>';
+    return;
+  }
+  container.innerHTML = `
+    <table class="asset-table">
+      <thead><tr>
+        <th>Consumable ID</th><th>Name</th><th>Department</th><th>Unit</th>
+        <th>Current Stock</th><th>Total Purchased</th><th>Total Consumed</th><th>Status</th><th>Actions</th>
+      </tr></thead>
+      <tbody>
+        ${consumables.map(c => `
+          <tr>
+            <td>${c.consumableId || ''}</td>
+            <td>${c.name || ''}</td>
+            <td>${c.department || ''}</td>
+            <td>${c.unit || ''}</td>
+            <td>${c.currentStock || 0}</td>
+            <td>${c.totalPurchased || 0}</td>
+            <td>${c.totalConsumed || 0}</td>
+            <td><span class="status-chip ${c.currentStock > 0 ? 'status-green' : 'status-gray'}">${c.status || 'Active'}</span></td>
+            <td><button class="btn btn-sm btn-outline" onclick="viewConsumableHistory('${c.consumableId || ''}')">History</button></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function viewConsumableHistory(consumableId) {
+  if (!consumableId) return;
+  const res = await requestJson(`/api/consumables/${consumableId}/history`);
+  if (res.ok) {
+    showDataModal('Consumable Usage History', `
+      <div class="table-wrap">${renderUsageHistoryTable(res.data?.history || [])}</div>
+    `, { size: 'md' });
+  } else {
+    showResult(res);
+  }
+}
+
+function renderUsageHistoryTable(history) {
+  if (!history.length) return '<div class="empty-state">No transactions found.</div>';
+  return `
+    <table class="asset-table" style="width:100%">
+      <thead><tr><th>Date</th><th>Type</th><th>Quantity</th><th>Reference</th><th>Notes</th></tr></thead>
+      <tbody>
+        ${history.map(h => `
+          <tr>
+            <td>${h.createdAt || h.purchaseDate || ''}</td>
+            <td>${h.type === 'purchase' ? 'Purchase' : h.transactionId ? 'Consume' : 'Transaction'}</td>
+            <td>${h.quantity || 0}</td>
+            <td>${h.transactionId || h.vendor || ''}</td>
+            <td>${h.remarks || h.notes || ''}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+document.getElementById('addConsumableForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  setLoading('Registering consumable...');
+  const formData = new FormData(e.target);
+  const data = Object.fromEntries(formData.entries());
+  const payload = {
+    consumableId: data.consumableId,
+    department: data.department,
+    name: data.name,
+    unit: data.unit || 'Nos',
+    currentStock: Number(data.initialStock || 0),
+    initialStock: Number(data.initialStock || 0),
+    purchaseDate: data.purchaseDate || '',
+    purchaseValue: Number(data.purchaseValue || 0),
+    location: data.location || '',
+    remarks: data.remarks || ''
+  };
+
+  const res = await requestJson('/api/consumables', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (res.ok) {
+    showToast('Consumable registered successfully', 'success');
+    closeModal('addConsumableModal');
+    e.target.reset();
+    await loadConsumables();
+    await populateConsumableSelect();
+    await populateConsumableDataList('proforma3ConsList');
+    await populateConsumableDataList('proforma4ConsList');
+  }
+  showResult(res);
+});
+
+document.getElementById('consumableTxnForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const formData = new FormData(e.target);
+  const data = Object.fromEntries(formData.entries());
+  if (!data.consumableId || !data.quantity || Number(data.quantity) <= 0) {
+    showToast('Please select a consumable and enter a valid quantity', 'error');
+    return;
+  }
+
+  const isConsume = data.txnType === 'consume';
+  setLoading(isConsume ? 'Recording consumption...' : 'Recording purchase...');
+
+  let url = `/api/consumables/${data.consumableId}/${isConsume ? 'consume' : 'purchase'}`;
+  const payload = {
+    quantity: Number(data.quantity),
+    consumedDate: data.txnDate,
+    consumedBy: currentUser?.email || currentUser?.name || 'User',
+    remarks: data.notes || '',
+    purchaseDate: data.txnDate,
+    purchaseValue: isConsume ? undefined : 0,
+    vendor: data.notes || ''
+  };
+
+  const res = await requestJson(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (res.ok) {
+    showToast(`${isConsume ? 'Consumption' : 'Purchase'} recorded successfully`, 'success');
+    e.target.reset();
+    await loadConsumables();
+    await populateConsumableSelect();
+  }
+  showResult(res);
+});
+
+document.getElementById('refreshConsumablesBtn')?.addEventListener('click', async () => {
+  await loadConsumables();
+  await populateConsumableSelect();
+  showToast('Consumables refreshed', 'info');
+});
+
+async function populateDepartmentDropdowns(selectId) {
+  const res = await requestJson('/api/departments');
+  const deps = res.ok ? (res.data || []) : [];
+  const optionsHtml = deps
+    .filter(d => d.isActive !== false)
+    .map(d => `<option value="${d.code}">${d.code} - ${d.name}</option>`)
+    .join('');
+
+  const selectIds = selectId ? [selectId] : ['proforma1Department', 'proforma2Department', 'proforma3Department', 'proforma4Department', 'addConsumableDept', 'editAssetDeptInput'];
+  selectIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.tagName === 'SELECT') {
+      el.innerHTML = optionsHtml;
+    }
+  });
+
+  const addAssetDept = document.getElementById('assetDepartment');
+  if (addAssetDept) {
+    addAssetDept.innerHTML = optionsHtml;
+  }
+  return deps;
+}
+
+async function populateAssetDataList(listId) {
+  const list = document.getElementById(listId);
+  if (!list) return;
+  const res = await requestJson('/api/assets');
+  if (res.ok) {
+    list.innerHTML = (res.data || []).map(a =>
+      `<option value="${a.assetId}">${a.assetId} - ${a.name}</option>`
+    ).join('');
+  }
+}
+
+async function exportUsersList() {
+  const res = await requestJson('/api/users');
+  if (!res.ok) {
+    showResult(res);
+    return;
+  }
+  const users = res.data || [];
+  const csvLines = ['Name,Email,Role,Department,Status,Created'];
+  users.forEach(u => {
+    csvLines.push([
+      `"${(u.name || '').replace(/"/g, '""')}"`,
+      `"${(u.email || '').replace(/"/g, '""')}"`,
+      `"${u.role || ''}"`,
+      `"${u.department || ''}"`,
+      `"${u.status || u.isActive ? 'Active' : 'Inactive'}"`,
+      `"${u.createdAt || ''}"`
+    ].join(','));
+  });
+  const csvContent = csvLines.join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `users-list-${new Date().getFullYear()}-${new Date().getMonth()+1}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('User list exported as CSV', 'success');
+}
+
+// Wire navigation to load page-specific content
 document.querySelectorAll('.nav-item').forEach((button) => {
   button.addEventListener('click', () => {
     const page = button.getAttribute('data-page');
@@ -1938,6 +2268,24 @@ document.getElementById('refreshFinancialBtn')?.addEventListener('click', async 
 document.getElementById('refreshBillsBtn')?.addEventListener('click', async () => {
   await loadBills();
   showToast('Bills & invoices refreshed', 'info');
+});
+
+// Bill upload form handler
+document.getElementById('billUploadForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  setLoading('Uploading bill...');
+  const formData = new FormData(e.target);
+  const res = await requestJson('/api/bills', {
+    method: 'POST',
+    body: formData
+  });
+  if (res.ok) {
+    showToast('Bill uploaded and recorded on blockchain', 'success');
+    closeModal('billUploadModal');
+    e.target.reset();
+    await loadBills();
+  }
+  showResult(res);
 });
 
 document.getElementById('refreshVerifBtn')?.addEventListener('click', async () => {

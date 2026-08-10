@@ -265,6 +265,19 @@ class AssetManagementContract extends Contract {
             await ctx.stub.putState(assetId, Buffer.from(JSON.stringify(asset)));
         }
 
+        const eventPayload = {
+            event: 'BILL_REGISTERED',
+            billId: billObj.billId,
+            assetId: billObj.assetId || '',
+            department: billObj.department || '',
+            vendor: billObj.vendor || '',
+            amount: billObj.amount,
+            documentHash: billObj.documentHash || '',
+            paymentStatus: billObj.paymentStatus,
+            createdAt: new Date().toISOString()
+        };
+        try { ctx.stub.setEvent('BillRegistered', Buffer.from(JSON.stringify(eventPayload))); } catch (e) {}
+
         return jsonStr;
     }
 
@@ -357,10 +370,22 @@ class AssetManagementContract extends Contract {
         asset.maintenanceCount = (asset.maintenanceCount || 0) + 1;
         asset.updatedAt = new Date().toISOString();
 
+        const mntStr = JSON.stringify(maintenanceRecord);
         await ctx.stub.putState(assetId, Buffer.from(JSON.stringify(asset)));
-        await ctx.stub.putState(`MNT_${recordId}`, Buffer.from(JSON.stringify(maintenanceRecord)));
+        await ctx.stub.putState(`MNT_${recordId}`, Buffer.from(mntStr));
 
-        return JSON.stringify(maintenanceRecord);
+        const eventPayload = {
+            event: 'MAINTENANCE_RECORDED',
+            assetId,
+            recordId,
+            technician,
+            cost: parseFloat(cost),
+            department: department || asset.department || '',
+            createdAt: new Date().toISOString()
+        };
+        try { ctx.stub.setEvent('MaintenanceRecorded', Buffer.from(JSON.stringify(eventPayload))); } catch (e) {}
+
+        return mntStr;
     }
 
     async GetAllMaintenanceRecords(ctx) {
@@ -391,8 +416,10 @@ class AssetManagementContract extends Contract {
             createdAt: new Date().toISOString()
         };
 
-        await ctx.stub.putState(`EQV_${recordId}`, Buffer.from(JSON.stringify(record)));
-        return JSON.stringify(record);
+        const jsonStr = JSON.stringify(record);
+        await ctx.stub.putState(`EQV_${recordId}`, Buffer.from(jsonStr));
+        try { ctx.stub.setEvent('ASSET_VERIFIED', Buffer.from(jsonStr)); } catch (e) {}
+        return jsonStr;
     }
 
     async GetAllEquipmentVerifications(ctx) {
@@ -419,8 +446,10 @@ class AssetManagementContract extends Contract {
             createdAt: new Date().toISOString()
         };
 
-        await ctx.stub.putState(`EQC_${recordId}`, Buffer.from(JSON.stringify(record)));
-        return JSON.stringify(record);
+        const jsonStr = JSON.stringify(record);
+        await ctx.stub.putState(`EQC_${recordId}`, Buffer.from(jsonStr));
+        try { ctx.stub.setEvent('CONDEMNATION_REQUESTED', Buffer.from(jsonStr)); } catch (e) {}
+        return jsonStr;
     }
 
     async GetAllEquipmentCondemnations(ctx) {
@@ -447,8 +476,10 @@ class AssetManagementContract extends Contract {
             createdAt: new Date().toISOString()
         };
 
-        await ctx.stub.putState(`CNV_${recordId}`, Buffer.from(JSON.stringify(record)));
-        return JSON.stringify(record);
+        const jsonStr = JSON.stringify(record);
+        await ctx.stub.putState(`CNV_${recordId}`, Buffer.from(jsonStr));
+        try { ctx.stub.setEvent('CONSUMABLE_VERIFIED', Buffer.from(jsonStr)); } catch (e) {}
+        return jsonStr;
     }
 
     async GetAllConsumableVerifications(ctx) {
@@ -475,8 +506,10 @@ class AssetManagementContract extends Contract {
             createdAt: new Date().toISOString()
         };
 
-        await ctx.stub.putState(`CNC_${recordId}`, Buffer.from(JSON.stringify(record)));
-        return JSON.stringify(record);
+        const jsonStr = JSON.stringify(record);
+        await ctx.stub.putState(`CNC_${recordId}`, Buffer.from(jsonStr));
+        try { ctx.stub.setEvent('CONSUMABLE_CONDEMNATION_REQUESTED', Buffer.from(jsonStr)); } catch (e) {}
+        return jsonStr;
     }
 
     async GetAllConsumableCondemnations(ctx) {
@@ -526,13 +559,26 @@ class AssetManagementContract extends Contract {
         };
 
         asset.condemnationRecord = condemnationRecord;
-        asset.status = 'Condemnation Requested';
+        asset.status = 'CONDEMNATION_REQUESTED';
+        asset.previousStatus = 'Active';
         asset.updatedAt = new Date().toISOString();
 
+        const jsonStr = JSON.stringify(condemnationRecord);
         await ctx.stub.putState(assetId, Buffer.from(JSON.stringify(asset)));
-        await ctx.stub.putState(`COND_${recordId}`, Buffer.from(JSON.stringify(condemnationRecord)));
+        await ctx.stub.putState(`COND_${recordId}`, Buffer.from(jsonStr));
 
-        return JSON.stringify(condemnationRecord);
+        const eventPayload = {
+            event: 'CONDEMNATION_REQUESTED',
+            assetId,
+            recordId,
+            department: department || asset.department || '',
+            requestedBy,
+            reason,
+            createdAt: new Date().toISOString()
+        };
+        try { ctx.stub.setEvent('CondemnationRequested', Buffer.from(JSON.stringify(eventPayload))); } catch (e) {}
+
+        return jsonStr;
     }
 
     async ApproveCondemnation(ctx, assetId, approvedBy) {
@@ -555,10 +601,22 @@ class AssetManagementContract extends Contract {
         asset.status = 'Condemned';
         asset.updatedAt = new Date().toISOString();
 
+        const condStr = JSON.stringify(asset.condemnationRecord);
         await ctx.stub.putState(assetId, Buffer.from(JSON.stringify(asset)));
-        await ctx.stub.putState(`COND_${asset.condemnationRecord.recordId}`, Buffer.from(JSON.stringify(asset.condemnationRecord)));
+        await ctx.stub.putState(`COND_${asset.condemnationRecord.recordId}`, Buffer.from(condStr));
 
-        return JSON.stringify(asset.condemnationRecord);
+        const eventPayload = {
+            event: 'ASSET_CONDEMNED',
+            assetId,
+            recordId: asset.condemnationRecord.recordId,
+            approvedBy,
+            approvedAt: asset.condemnationRecord.approvedAt,
+            department: asset.department || '',
+            createdAt: new Date().toISOString()
+        };
+        try { ctx.stub.setEvent('AssetCondemned', Buffer.from(JSON.stringify(eventPayload))); } catch (e) {}
+
+        return condStr;
     }
 
     async RejectCondemnation(ctx, assetId, rejectedBy) {
@@ -601,8 +659,240 @@ class AssetManagementContract extends Contract {
     }
 
     // ==========================================
-    // ASSET MANAGEMENT FUNCTIONS
+    // CONSUMABLE STOCK MANAGEMENT FUNCTIONS
     // ==========================================
+
+    async CreateConsumable(ctx, consumableId, department, name, unit, initialStock, purchaseDate, purchaseValue, location, remarks) {
+        console.info(`=== CreateConsumable: Creating consumable ${consumableId} ===`);
+
+        const exists = await ctx.stub.getState(consumableId);
+        if (exists && exists.length > 0) {
+            throw new Error(`Consumable ${consumableId} already exists`);
+        }
+
+        const consumable = {
+            id: `cons-${Date.now()}`,
+            consumableId,
+            department: (department || 'IT').toUpperCase(),
+            name,
+            unit: unit || 'Units',
+            purchaseDate: purchaseDate || new Date().toISOString().split('T')[0],
+            purchaseValue: parseFloat(purchaseValue || 0),
+            currentStock: Number(initialStock || 0),
+            previousStock: 0,
+            totalPurchased: Number(initialStock || 0),
+            totalConsumed: 0,
+            bookStock: Number(initialStock || 0),
+            status: 'Active',
+            location: location || 'Store Room',
+            remarks: remarks || '',
+            billHash: '',
+            usageHistory: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+
+        const jsonStr = JSON.stringify(consumable);
+        await ctx.stub.putState(consumableId, Buffer.from(jsonStr));
+        try { ctx.stub.setEvent('CONSUMABLE_CREATED', Buffer.from(jsonStr)); } catch (e) {}
+        console.info(`Consumable ${consumableId} created successfully`);
+        return jsonStr;
+    }
+
+    async ReadConsumable(ctx, consumableId) {
+        console.info(`=== ReadConsumable: Reading consumable ${consumableId} ===`);
+        const data = await ctx.stub.getState(consumableId);
+        if (!data || data.length === 0) {
+            throw new Error(`Consumable ${consumableId} does not exist`);
+        }
+        return data.toString();
+    }
+
+    async RecordConsumableConsumption(ctx, consumableId, quantity, consumedDate, consumedBy, remarks) {
+        console.info(`=== RecordConsumableConsumption: ${quantity} units of ${consumableId} consumed ===`);
+
+        const data = await ctx.stub.getState(consumableId);
+        if (!data || data.length === 0) {
+            throw new Error(`Consumable ${consumableId} does not exist`);
+        }
+
+        const consumable = JSON.parse(data.toString());
+        const qty = Number(quantity || 0);
+        if (qty <= 0) {
+            throw new Error('Consumption quantity must be positive');
+        }
+        if (qty > (consumable.currentStock || 0)) {
+            throw new Error(`Insufficient stock: requested ${qty}, available ${consumable.currentStock || 0}`);
+        }
+
+        consumable.currentStock = (consumable.currentStock || 0) - qty;
+        consumable.totalConsumed = (consumable.totalConsumed || 0) + qty;
+        consumable.updatedAt = new Date().toISOString();
+
+        if (!Array.isArray(consumable.usageHistory)) {
+            consumable.usageHistory = [];
+        }
+        consumable.usageHistory.push({
+            transactionId: `CONS-${Date.now()}`,
+            quantity: qty,
+            consumedDate: consumedDate || new Date().toISOString().split('T')[0],
+            consumedBy: consumedBy || 'DepartmentUser',
+            remarks: remarks || '',
+            createdAt: new Date().toISOString()
+        });
+
+        const eventPayload = {
+            event: 'STOCK_CONSUMED',
+            consumableId: consumable.consumableId,
+            quantity: qty,
+            remainingStock: consumable.currentStock,
+            consumedBy: consumedBy || 'system',
+            department: consumable.department || '',
+            createdAt: new Date().toISOString()
+        };
+
+        const jsonStr = JSON.stringify(consumable);
+        await ctx.stub.putState(consumableId, Buffer.from(jsonStr));
+        try { ctx.stub.setEvent('StockConsumed', Buffer.from(JSON.stringify(eventPayload))); } catch (e) {}
+        return jsonStr;
+    }
+
+    async RecordConsumablePurchase(ctx, consumableId, quantity, purchaseDate, purchaseValue, vendor, billHash) {
+        console.info(`=== RecordConsumablePurchase: ${quantity} units of ${consumableId} purchased ===`);
+
+        const data = await ctx.stub.getState(consumableId);
+        if (!data || data.length === 0) {
+            throw new Error(`Consumable ${consumableId} does not exist`);
+        }
+
+        const consumable = JSON.parse(data.toString());
+        const qty = Number(quantity || 0);
+        if (qty <= 0) {
+            throw new Error('Purchase quantity must be positive');
+        }
+
+        consumable.previousStock = consumable.currentStock || 0;
+        consumable.currentStock = (consumable.currentStock || 0) + qty;
+        consumable.totalPurchased = (consumable.totalPurchased || 0) + qty;
+        consumable.bookStock = consumable.currentStock;
+        consumable.updatedAt = new Date().toISOString();
+
+        if (!Array.isArray(consumable.usageHistory)) {
+            consumable.usageHistory = [];
+        }
+        consumable.usageHistory.push({
+            transactionId: `PUR-${Date.now()}`,
+            purchaseDate: purchaseDate || new Date().toISOString().split('T')[0],
+            quantity: qty,
+            purchaseValue: parseFloat(purchaseValue || 0),
+            vendor: vendor || '',
+            billHash: billHash || '',
+            type: 'purchase',
+            createdAt: new Date().toISOString()
+        });
+
+        if (billHash) {
+            consumable.billHash = billHash;
+        }
+
+        const eventPayload = {
+            event: 'STOCK_PURCHASED',
+            consumableId: consumable.consumableId,
+            quantity: qty,
+            newStock: consumable.currentStock,
+            purchaseValue: parseFloat(purchaseValue || 0),
+            department: consumable.department || '',
+            createdAt: new Date().toISOString()
+        };
+
+        const jsonStr = JSON.stringify(consumable);
+        await ctx.stub.putState(consumableId, Buffer.from(jsonStr));
+        try { ctx.stub.setEvent('StockPurchased', Buffer.from(JSON.stringify(eventPayload))); } catch (e) {}
+        return jsonStr;
+    }
+
+    async GetAllConsumables(ctx) {
+        console.info('=== GetAllConsumables: Getting all consumables ===');
+        const iterator = await ctx.stub.getStateByRange('CONS_', 'CONS_\uffff');
+        const consumables = [];
+
+        const res_items = await getAllResults(iterator);
+        for (const res of res_items) {
+            if (res.value.toString().length > 0) {
+                try {
+                    const cons = JSON.parse(res.value.toString());
+                    if (cons.consumableId) consumables.push(cons);
+                } catch (e) {}
+            }
+        }
+
+        // Also check direct keys
+        const allIterator = await ctx.stub.getStateByRange('', '');
+        const allItems = await getAllResults(allIterator);
+        for (const item of allItems) {
+            if (item.key.startsWith('USER_') || item.key.startsWith('DEPT_') ||
+                item.key.startsWith('BILL_') || item.key.startsWith('MNT_') ||
+                item.key.startsWith('COND_') || item.key.startsWith('EQV_') ||
+                item.key.startsWith('EQC_') || item.key.startsWith('CNV_') ||
+                item.key.startsWith('CNC_') || item.key.startsWith('CONS_')) {
+                if (item.key.startsWith('CONS_')) continue;
+            }
+            try {
+                const obj = JSON.parse(item.value.toString());
+                if (obj.consumableId && !consumables.find(c => c.consumableId === obj.consumableId)) {
+                    consumables.push(obj);
+                }
+            } catch (e) {}
+        }
+
+        return JSON.stringify(consumables);
+    }
+
+    async RecordAuditEvent(ctx, eventDataJson) {
+        const eventData = JSON.parse(eventDataJson);
+        const eventId = `AUDIT-${Date.now()}`;
+        const record = {
+            id: eventId,
+            recordId: eventId,
+            ...eventData,
+            createdAt: new Date().toISOString()
+        };
+        const jsonStr = JSON.stringify(record);
+        await ctx.stub.putState(`AUDIT_${eventId}`, Buffer.from(jsonStr));
+        try { ctx.stub.setEvent('AUDIT_COMPLETED', Buffer.from(jsonStr)); } catch (e) {}
+        return jsonStr;
+    }
+
+    async UpdateConsumableStock(ctx, consumableId, action, quantity, details) {
+        console.info(`=== UpdateConsumableStock: ${action} ${quantity} of ${consumableId} ===`);
+
+        const data = await ctx.stub.getState(consumableId);
+        if (!data || data.length === 0) {
+            throw new Error(`Consumable ${consumableId} does not exist`);
+        }
+
+        const consumable = JSON.parse(data.toString());
+        const qty = Number(quantity || 0);
+
+        if (action === 'consume') {
+            if (qty > (consumable.currentStock || 0)) {
+                throw new Error(`Insufficient stock: requested ${qty}, available ${consumable.currentStock || 0}`);
+            }
+            consumable.currentStock = (consumable.currentStock || 0) - qty;
+            consumable.totalConsumed = (consumable.totalConsumed || 0) + qty;
+        } else if (action === 'purchase') {
+            consumable.currentStock = (consumable.currentStock || 0) + qty;
+            consumable.totalPurchased = (consumable.totalPurchased || 0) + qty;
+        } else if (action === 'adjust') {
+            consumable.currentStock = qty;
+        }
+
+        consumable.updatedAt = new Date().toISOString();
+        const jsonStr = JSON.stringify(consumable);
+        await ctx.stub.putState(consumableId, Buffer.from(jsonStr));
+        return jsonStr;
+    }
+
 
     async CreateAsset(ctx, assetId, department, category, name, purchaseDate, purchaseValue, location, owner, warrantyExpiry, billHash, status) {
         console.info(`=== CreateAsset: Creating asset ${assetId} ===`);
@@ -612,6 +902,7 @@ class AssetManagementContract extends Contract {
             throw new Error(`Asset ${assetId} already exists`);
         }
 
+        const assetStatus = status || 'Active';
         const asset = {
             id: `asset-${Date.now()}`,
             assetId,
@@ -620,7 +911,7 @@ class AssetManagementContract extends Contract {
             name,
             purchaseDate: purchaseDate || new Date().toISOString().split('T')[0],
             purchaseValue: parseFloat(purchaseValue || 0),
-            status: status || 'Active',
+            status: assetStatus.startsWith('Active') ? 'Active' : assetStatus,
             location: location || 'Default Location',
             owner: owner || 'Unassigned',
             warrantyExpiry: warrantyExpiry || '',
@@ -631,9 +922,22 @@ class AssetManagementContract extends Contract {
             updatedAt: new Date().toISOString()
         };
 
-        await ctx.stub.putState(assetId, Buffer.from(JSON.stringify(asset)));
+        const jsonStr = JSON.stringify(asset);
+        await ctx.stub.putState(assetId, Buffer.from(jsonStr));
+
+        const eventPayload = {
+            event: 'ASSET_CREATED',
+            assetId: asset.assetId,
+            department: asset.department,
+            category: asset.category,
+            purchaseValue: asset.purchaseValue,
+            status: asset.status,
+            createdAt: new Date().toISOString()
+        };
+        try { ctx.stub.setEvent('AssetCreated', Buffer.from(JSON.stringify(eventPayload))); } catch (e) {}
+
         console.info(`Asset ${assetId} created successfully`);
-        return JSON.stringify(asset);
+        return jsonStr;
     }
 
     async ReadAsset(ctx, assetId) {
@@ -663,23 +967,59 @@ class AssetManagementContract extends Contract {
         const asset = JSON.parse(assetJSON.toString());
 
         if (field === 'status') {
-            const allowedStatuses = ['Active', 'Maintenance', 'Condemned', 'Disposed', 'Retired', 'Condemnation Requested'];
+            const allowedStatuses = ['PURCHASED', 'ACTIVE', 'UNDER_MAINTENANCE', 'NOT_WORKING', 'CONDEMNATION_REQUESTED', 'CONDEMNED', 'DISPOSED', 'Active', 'Maintenance', 'Condemned', 'Disposed', 'Retired', 'Condemnation Requested'];
             if (!allowedStatuses.includes(newValue)) {
                 throw new Error(`Status ${newValue} is not allowed`);
             }
-            if (asset.status === 'Condemned' && newValue === 'Active') {
-                throw new Error('Condemned asset cannot return to Active state');
-            }
-            if (asset.status === 'Disposed') {
-                throw new Error('Disposed assets cannot be modified or re-activated');
-            }
+            const prevStatus = asset.status;
+            this.validateLifecycleTransition(prevStatus, newValue);
+            asset.previousStatus = prevStatus;
+            asset.updatedAt = new Date().toISOString();
+            const eventPayload = {
+                event: 'STATUS_CHANGED',
+                assetId: asset.assetId,
+                previousStatus: prevStatus,
+                newStatus: newValue,
+                department: asset.department || '',
+                user: asset.owner || 'system',
+                reason: 'Status updated via UpdateAsset',
+                createdAt: new Date().toISOString()
+            };
+            try { ctx.stub.setEvent('StatusChanged', Buffer.from(JSON.stringify(eventPayload))); } catch (e) {}
         }
 
         asset[field] = field === 'purchaseValue' ? parseFloat(newValue) : newValue;
-        asset.updatedAt = new Date().toISOString();
+        if (field !== 'status') asset.updatedAt = new Date().toISOString();
 
         await ctx.stub.putState(assetId, Buffer.from(JSON.stringify(asset)));
         return JSON.stringify(asset);
+    }
+
+    // ==========================================
+    // LIFECYCLE TRANSITION VALIDATION
+    // ==========================================
+
+    validateLifecycleTransition(prevStatus, newStatus) {
+        if (prevStatus === newStatus) return;
+
+        const validTransitions = {
+            'PURCHASED': ['ACTIVE', 'DISPOSED'],
+            'ACTIVE': ['UNDER_MAINTENANCE', 'NOT_WORKING', 'CONDEMNATION_REQUESTED', 'CONDEMNED', 'DISPOSED'],
+            'UNDER_MAINTENANCE': ['ACTIVE', 'NOT_WORKING', 'CONDEMNATION_REQUESTED', 'CONDEMNED', 'DISPOSED'],
+            'NOT_WORKING': ['UNDER_MAINTENANCE', 'CONDEMNATION_REQUESTED', 'CONDEMNED', 'DISPOSED'],
+            'CONDEMNATION_REQUESTED': ['CONDEMNED', 'ACTIVE', 'NOT_WORKING', 'UNDER_MAINTENANCE'],
+            'CONDEMNED': ['DISPOSED'],
+            'DISPOSED': [],
+            'Active': ['UNDER_MAINTENANCE', 'NOT_WORKING', 'CONDEMNATION_REQUESTED', 'CONDEMNED', 'DISPOSED'],
+            'Maintenance': ['Active', 'NOT_WORKING', 'CONDEMNATION_REQUESTED', 'CONDEMNED', 'DISPOSED'],
+            'Condemned': ['DISPOSED'],
+            'Retired': [],
+            'Condemnation Requested': ['Condemned', 'Active']
+        };
+        const allowed = validTransitions[prevStatus] || [];
+        if (!allowed.includes(newStatus)) {
+            throw new Error(`Invalid lifecycle transition: '${prevStatus}' cannot transition to '${newStatus}'`);
+        }
     }
 
     async DeleteAsset(ctx, assetId) {
@@ -763,9 +1103,11 @@ class AssetManagementContract extends Contract {
                     res.key.startsWith('BILL_') || res.key.startsWith('MNT_') ||
                     res.key.startsWith('COND_') || res.key.startsWith('EQV_') ||
                     res.key.startsWith('EQC_') || res.key.startsWith('CNV_') ||
-                    res.key.startsWith('CNC_')) {
+                    res.key.startsWith('CNC_') || res.key.startsWith('AUDIT_')) {
                     continue;
                 }
+                // Skip keys that are CONS_ prefixed (consumable records) or not asset objects
+                if (res.key.startsWith('CONS_')) continue;
 
                 try {
                     const asset = JSON.parse(res.value.toString());
@@ -964,7 +1306,7 @@ class AssetManagementContract extends Contract {
 
                 // Detect status change
                 if (val.status && val.status !== lastStatus && lastStatus !== null) {
-                    const significantStatuses = ['Active', 'Maintenance', 'Condemned', 'Disposed', 'Condemnation Requested'];
+                    const significantStatuses = ['Active', 'Maintenance', 'Condemned', 'Disposed', 'Condemnation Requested', 'UNDER_MAINTENANCE', 'NOT_WORKING', 'CONDEMNATION_REQUESTED', 'CONDEMNED', 'DISPOSED', 'PURCHASED', 'Retired'];
                     if (significantStatuses.includes(val.status)) {
                         lifecycle.push({
                             event: 'STATUS_CHANGE',

@@ -137,6 +137,10 @@ module.exports = {
         return await invokeChaincode("UpdateAsset", [assetId, field, newValue]);
     },
 
+    recordAuditEventOnFabric: async function(eventData) {
+        return await invokeChaincode("RecordAuditEvent", [JSON.stringify(eventData)]);
+    },
+
     readAssetFromFabric: async function(assetId) {
         const res = await invokeChaincode("ReadAsset", [assetId], true);
         if (res.success) {
@@ -322,9 +326,10 @@ module.exports = {
     },
 
     // VERIFICATION API
-    createEquipmentVerificationOnFabric: async function(payload) {
-        return await invokeChaincode("CreateEquipmentVerification", [JSON.stringify(payload)]);
-    },
+     createEquipmentVerificationOnFabric: async function(payload) {
+         const { _id, ...payloadClean } = payload;
+         return await invokeChaincode("CreateEquipmentVerification", [JSON.stringify(payloadClean)]);
+     },
 
     getAllEquipmentVerificationsFromFabric: async function() {
         const res = await invokeChaincode("GetAllEquipmentVerifications", [], true);
@@ -334,9 +339,10 @@ module.exports = {
         return { success: false, records: [], error: res.error };
     },
 
-    createEquipmentCondemnationOnFabric: async function(payload) {
-        return await invokeChaincode("CreateEquipmentCondemnation", [JSON.stringify(payload)]);
-    },
+     createEquipmentCondemnationOnFabric: async function(payload) {
+         const { _id, ...payloadClean } = payload;
+         return await invokeChaincode("CreateEquipmentCondemnation", [JSON.stringify(payloadClean)]);
+     },
 
     getAllEquipmentCondemnationsFromFabric: async function() {
         const res = await invokeChaincode("GetAllEquipmentCondemnations", [], true);
@@ -346,9 +352,10 @@ module.exports = {
         return { success: false, records: [], error: res.error };
     },
 
-    createConsumableVerificationOnFabric: async function(payload) {
-        return await invokeChaincode("CreateConsumableVerification", [JSON.stringify(payload)]);
-    },
+     createConsumableVerificationOnFabric: async function(payload) {
+         const { _id, ...payloadClean } = payload;
+         return await invokeChaincode("CreateConsumableVerification", [JSON.stringify(payloadClean)]);
+     },
 
     getAllConsumableVerificationsFromFabric: async function() {
         const res = await invokeChaincode("GetAllConsumableVerifications", [], true);
@@ -358,9 +365,10 @@ module.exports = {
         return { success: false, records: [], error: res.error };
     },
 
-    createConsumableCondemnationOnFabric: async function(payload) {
-        return await invokeChaincode("CreateConsumableCondemnation", [JSON.stringify(payload)]);
-    },
+     createConsumableCondemnationOnFabric: async function(payload) {
+         const { _id, ...payloadClean } = payload;
+         return await invokeChaincode("CreateConsumableCondemnation", [JSON.stringify(payloadClean)]);
+     },
 
     getAllConsumableCondemnationsFromFabric: async function() {
         const res = await invokeChaincode("GetAllConsumableCondemnations", [], true);
@@ -437,5 +445,49 @@ module.exports = {
             return { success: true, user: res.result };
         }
         return res;
+    },
+
+    // CONSUMABLE API
+    createConsumableOnFabric: async function(consData) {
+        const args = [
+            consData.consumableId || "",
+            consData.department || "",
+            consData.name || "",
+            consData.unit || "Units",
+            String(consData.currentStock || consData.initialStock || 0),
+            consData.purchaseDate || "",
+            String(consData.purchaseValue || 0),
+            consData.location || "",
+            consData.remarks || ""
+        ];
+        return await invokeChaincode("CreateConsumable", args);
+    },
+
+    readConsumableFromFabric: async function(consumableId) {
+        const res = await invokeChaincode("ReadConsumable", [consumableId], true);
+        if (res.success) {
+            return { success: true, consumable: res.result };
+        }
+        return res;
+    },
+
+    getAllConsumablesFromFabric: async function() {
+        const res = await invokeChaincode("GetAllConsumables", [], true);
+        if (res.success) {
+            return { success: true, consumables: Array.isArray(res.result) ? res.result : [] };
+        }
+        return { success: false, consumables: [], error: res.error };
+    },
+
+    recordConsumableConsumptionOnFabric: async function(consumableId, quantity, consumedDate, consumedBy, remarks) {
+        return await invokeChaincode("RecordConsumableConsumption", [consumableId, String(quantity), consumedDate || "", consumedBy || "User", remarks || ""]);
+    },
+
+    recordConsumablePurchaseOnFabric: async function(consumableId, quantity, purchaseDate, purchaseValue, vendor, billHash) {
+        return await invokeChaincode("RecordConsumablePurchase", [consumableId, String(quantity), purchaseDate || "", String(purchaseValue || 0), vendor || "", billHash || ""]);
+    },
+
+    updateConsumableStockOnFabric: async function(consumableId, action, quantity, details) {
+        return await invokeChaincode("UpdateConsumableStock", [consumableId, action || "adjust", String(quantity || 0), details || ""]);
     }
 };

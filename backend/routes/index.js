@@ -20,6 +20,7 @@ const maintenanceController = require("../controllers/maintenanceController");
 const billController = require("../controllers/billController.blockchain");
 const condemnationController = require("../controllers/condemnationController");
 const verificationController = require("../controllers/verificationController");
+const consumableController = require("../controllers/consumableController");
 const reportController = require("../controllers/reportController");
 
 router.use(authenticate);
@@ -75,6 +76,20 @@ router.get("/verification/consumables/condemnation", authorize(["Administrator",
 router.get("/verification/consumables/condemnation/:recordId", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), verificationController.getConsumableCondemnation);
 router.put("/verification/consumables/condemnation/:recordId/approve", authorize(["Administrator", "AuditOfficer"]), verificationController.approveConsumableCondemnation);
 router.put("/verification/consumables/condemnation/:recordId/reject", authorize(["Administrator", "AuditOfficer"]), verificationController.rejectConsumableCondemnation);
+
+// Consumable stock management
+router.get("/consumables", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), consumableController.getConsumables);
+router.get("/consumables/:consumableId", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), consumableController.getConsumable);
+router.post("/consumables", authorize(["Administrator", "DepartmentUser"]), consumableController.createConsumable);
+router.post("/consumables/:consumableId/consume", authorize(["Administrator", "DepartmentUser"]), consumableController.recordConsumption);
+router.post("/consumables/:consumableId/purchase", authorize(["Administrator", "DepartmentUser"]), consumableController.recordPurchase);
+router.get("/consumables/:consumableId/history", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), consumableController.getConsumableHistory);
+
+// Proforma report generation (individual forms)
+router.get("/proforma/equipment/verification/:recordId/export", authorize(["Administrator", "AuditOfficer", "DepartmentUser"]), reportController.exportEquipmentVerificationReport);
+router.get("/proforma/equipment/condemnation/:recordId/export", authorize(["Administrator", "AuditOfficer", "DepartmentUser"]), reportController.exportEquipmentCondemnationReport);
+router.get("/proforma/consumable/verification/:recordId/export", authorize(["Administrator", "AuditOfficer", "DepartmentUser"]), reportController.exportConsumableVerificationReport);
+router.get("/proforma/consumable/condemnation/:recordId/export", authorize(["Administrator", "AuditOfficer", "DepartmentUser"]), reportController.exportConsumableCondemnationReport);
 
 router.post("/transfers", authorize(["Administrator", "DepartmentUser"]), assetController.transferAsset);
 router.get("/transfers", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), assetController.getTransfers);
