@@ -13,7 +13,7 @@ Team Member Laptop
   ├── 2. Clone Repository & Install Dependencies
   ├── 3. Configure local .env to point FABRIC_HOST to Cloud Server IP
   ├── 4. Enroll Client Identity in local wallet
-  ├── 5. Start Local Gateway / Express Backend (npm start)
+  ├── 5. Start Local Gateway / Express Backend
   └── 6. Interact via Local Frontend Browser UI (http://localhost:3000)
 ```
 
@@ -27,42 +27,32 @@ Team Member Laptop
 3. Obtain the central server's Tailscale IP address (e.g. `100.110.120.130`).
 
 ### Step 2: Configure Environment Variables
-Copy `.env.example` to `gateway/.env` or `.env` in project root:
+Create a `.env` file in the project root (or `gateway/.env`):
 
-```env
-# Point to central Cloud Server IP over VPN
-FABRIC_NETWORK_MODE=REMOTE
-FABRIC_HOST=100.110.120.130
-FABRIC_PEER_PORT=7051
-FABRIC_ORDERER_PORT=7050
-FABRIC_CHANNEL_NAME=assets
-FABRIC_CHAINCODE_NAME=asset-management
-FABRIC_MSP_ID=Org1MSP
-FABRIC_IDENTITY=devUserA
-FABRIC_DISCOVERY_AS_LOCALHOST=false
-
-# Local Backend Settings
-PORT=3000
-MONGO_URI=mongodb://localhost:27017/assetmanagement
-JWT_SECRET=dev-secret-key-123
-```
+| Variable | Example Value | Description |
+|----------|--------------|-------------|
+| `FABRIC_NETWORK_MODE` | `REMOTE` | Connect to remote Fabric |
+| `FABRIC_HOST` | `100.110.120.130` | Cloud server Tailscale IP |
+| `FABRIC_PEER_PORT` | `7051` | Peer gRPC port |
+| `FABRIC_ORDERER_PORT` | `7050` | Orderer port |
+| `FABRIC_CHANNEL_NAME` | `assets` | Fabric channel name |
+| `FABRIC_CHAINCODE_NAME` | `asset-management` | Deployed chaincode |
+| `FABRIC_MSP_ID` | `Org1MSP` | Organization MSP ID |
+| `FABRIC_IDENTITY` | `devUserA` | Your enrolled identity |
+| `FABRIC_DISCOVERY_AS_LOCALHOST` | `false` | Disable localhost discovery |
+| `PORT` | `3000` | Local API port |
+| `JWT_SECRET` | *(set by team lead)* | JWT signing key |
 
 ### Step 3: Enroll / Copy Identity to Local Wallet
 Ensure your `network/wallet/` contains your user identity (e.g. `devUserA.id` or `appUser.id`).
-You can use the helper script:
-```bash
-./scripts/enroll-team-member.sh devUserA
-```
+
+Ask your team lead to generate your identity using the enrollment script, then place the `.id` file in `network/wallet/`.
 
 ### Step 4: Start Local Backend & Frontend
-```bash
-cd gateway
-npm install
-npm start
-```
+1. Install gateway dependencies: `npm install` in the `gateway/` directory
+2. Start the backend server
+3. The frontend is served automatically by the Express gateway
 
 ### Step 5: Test Connectivity & Shared Ledger
 Open browser at `http://localhost:3000` or run the verification test:
-```bash
-node tests/test-shared-ledger.js
-```
+`node tests/test-shared-ledger.js`

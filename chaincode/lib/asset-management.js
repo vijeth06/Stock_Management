@@ -34,44 +34,33 @@ class AssetManagementContract extends Contract {
     }
 
     async InitLedger(ctx) {
-        console.info('=== InitLedger: Initializing ledger with default assets and demo entities ===');
+        console.info('=== InitLedger: Initializing ledger with default departments ===');
         
-        const assets = [
-            {
-                assetId: 'ASSET-001',
-                department: 'IT',
-                category: 'Computer',
-                name: 'Development Laptop',
-                purchaseDate: '2024-01-15',
-                purchaseValue: 85000,
-                status: 'Active',
-                location: 'IT Department',
-                owner: 'John Smith',
-                warrantyExpiry: '2026-01-15',
-                billHash: '',
-                maintenanceRecords: [],
-                maintenanceCount: 0,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            }
+        // Seed only departments (no assets — admin user is auto-seeded by authService on first login)
+        const departments = [
+            { code: 'IT', name: 'Information Technology', description: 'IT Services & Asset Support', manager: 'Admin' },
+            { code: 'CSE', name: 'Computer Science & Engineering', description: 'Computer Lab & CSE Assets', manager: 'HOD' },
+            { code: 'ECE', name: 'Electronics & Communication Engineering', description: 'ECE Lab & Electronics Assets', manager: 'HOD' },
+            { code: 'ME', name: 'Mechanical Engineering', description: 'Workshop & ME Assets', manager: 'HOD' },
+            { code: 'CE', name: 'Civil Engineering', description: 'Civil Lab & Survey Instruments', manager: 'HOD' },
+            { code: 'CHE', name: 'Chemical Engineering', description: 'Chemistry Lab & Instruments', manager: 'HOD' },
+            { code: 'LIB', name: 'Library', description: 'Library Books & Digital Resources', manager: 'Librarian' }
         ];
 
-        for (const asset of assets) {
-            await ctx.stub.putState(asset.assetId, Buffer.from(JSON.stringify(asset)));
-            console.info(`Asset ${asset.assetId} added to ledger`);
+        for (const dept of departments) {
+            const deptKey = `DEPT_${dept.code}`;
+            const deptObj = {
+                code: dept.code,
+                name: dept.name,
+                description: dept.description,
+                manager: dept.manager,
+                isActive: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            await ctx.stub.putState(deptKey, Buffer.from(JSON.stringify(deptObj)));
+            console.info(`Department ${dept.code} added to ledger`);
         }
-
-        // Initialize default IT department
-        const defaultDept = {
-            code: 'IT',
-            name: 'Information Technology',
-            description: 'IT Services & Asset Support',
-            manager: 'Admin',
-            isActive: true,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        };
-        await ctx.stub.putState('DEPT_IT', Buffer.from(JSON.stringify(defaultDept)));
 
         return;
     }
@@ -1008,11 +997,11 @@ class AssetManagementContract extends Contract {
             'UNDER_MAINTENANCE': ['ACTIVE', 'NOT_WORKING', 'CONDEMNATION_REQUESTED', 'CONDEMNED', 'DISPOSED'],
             'NOT_WORKING': ['UNDER_MAINTENANCE', 'CONDEMNATION_REQUESTED', 'CONDEMNED', 'DISPOSED'],
             'CONDEMNATION_REQUESTED': ['CONDEMNED', 'ACTIVE', 'NOT_WORKING', 'UNDER_MAINTENANCE'],
-            'CONDEMNED': ['DISPOSED'],
+            'CONDEMNED': ['DISPOSED', 'Disposed'],
             'DISPOSED': [],
             'Active': ['UNDER_MAINTENANCE', 'NOT_WORKING', 'CONDEMNATION_REQUESTED', 'CONDEMNED', 'DISPOSED'],
             'Maintenance': ['Active', 'NOT_WORKING', 'CONDEMNATION_REQUESTED', 'CONDEMNED', 'DISPOSED'],
-            'Condemned': ['DISPOSED'],
+            'Condemned': ['DISPOSED', 'Disposed'],
             'Retired': [],
             'Condemnation Requested': ['Condemned', 'Active']
         };
@@ -1022,7 +1011,7 @@ class AssetManagementContract extends Contract {
         }
     }
 
-    async DeleteAsset(ctx, assetId) {
+     async DeleteAsset(ctx, assetId) {
         console.info(`=== DeleteAsset: Deleting asset ${assetId} ===`);
 
         const exists = await this.AssetExists(ctx, assetId);
@@ -1030,7 +1019,19 @@ class AssetManagementContract extends Contract {
             throw new Error(`Asset ${assetId} does not exist`);
         }
 
-        await ctx.stub.delState(assetId);
+        await ctx.stub.deleteState(assetId);
+        return;
+    }
+
+       async DeleteConsumable(ctx, consumableId) {
+        console.info(`=== DeleteConsumable: Deleting consumable ${consumableId} ===`);
+
+        const data = await ctx.stub.getState(consumableId);
+        if (!data || data.length === 0) {
+            throw new Error(`Consumable ${consumableId} does not exist`);
+        }
+
+        await ctx.stub.deleteState(consumableId);
         return;
     }
 

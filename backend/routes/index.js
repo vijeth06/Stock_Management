@@ -61,21 +61,21 @@ router.put("/condemnation/:recordId/reject", authorize(["Administrator"]), conde
 
 router.post("/verification/equipment", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), verificationController.createEquipmentVerification);
 router.get("/verification/equipment", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), verificationController.getEquipmentVerifications);
-router.get("/verification/equipment/:recordId", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), verificationController.getEquipmentVerification);
 router.post("/verification/equipment/condemnation", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), verificationController.createEquipmentCondemnation);
 router.get("/verification/equipment/condemnation", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), verificationController.getEquipmentCondemnations);
 router.get("/verification/equipment/condemnation/:recordId", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), verificationController.getEquipmentCondemnation);
 router.put("/verification/equipment/condemnation/:recordId/approve", authorize(["Administrator", "AuditOfficer"]), verificationController.approveEquipmentCondemnation);
 router.put("/verification/equipment/condemnation/:recordId/reject", authorize(["Administrator", "AuditOfficer"]), verificationController.rejectEquipmentCondemnation);
+router.get("/verification/equipment/:recordId", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), verificationController.getEquipmentVerification);
 
 router.post("/verification/consumables", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), verificationController.createConsumableVerification);
 router.get("/verification/consumables", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), verificationController.getConsumableVerifications);
-router.get("/verification/consumables/:recordId", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), verificationController.getConsumableVerification);
 router.post("/verification/consumables/condemnation", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), verificationController.createConsumableCondemnation);
 router.get("/verification/consumables/condemnation", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), verificationController.getConsumableCondemnations);
 router.get("/verification/consumables/condemnation/:recordId", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), verificationController.getConsumableCondemnation);
 router.put("/verification/consumables/condemnation/:recordId/approve", authorize(["Administrator", "AuditOfficer"]), verificationController.approveConsumableCondemnation);
 router.put("/verification/consumables/condemnation/:recordId/reject", authorize(["Administrator", "AuditOfficer"]), verificationController.rejectConsumableCondemnation);
+router.get("/verification/consumables/:recordId", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), verificationController.getConsumableVerification);
 
 // Consumable stock management
 router.get("/consumables", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), consumableController.getConsumables);
@@ -84,6 +84,7 @@ router.post("/consumables", authorize(["Administrator", "DepartmentUser"]), cons
 router.post("/consumables/:consumableId/consume", authorize(["Administrator", "DepartmentUser"]), consumableController.recordConsumption);
 router.post("/consumables/:consumableId/purchase", authorize(["Administrator", "DepartmentUser"]), consumableController.recordPurchase);
 router.get("/consumables/:consumableId/history", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), consumableController.getConsumableHistory);
+router.delete("/consumables/:consumableId", authorize(["Administrator"]), consumableController.deleteConsumable);
 
 // Proforma report generation (individual forms)
 router.get("/proforma/equipment/verification/:recordId/export", authorize(["Administrator", "AuditOfficer", "DepartmentUser"]), reportController.exportEquipmentVerificationReport);

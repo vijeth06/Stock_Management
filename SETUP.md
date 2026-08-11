@@ -13,21 +13,16 @@
 - `network/` for Fabric crypto and channel configuration
 
 ## Install Dependencies
-```powershell
-cd gateway
-npm install
-```
+Use your terminal to run `npm install` inside the `gateway/` directory.
 
 ## Start the Fabric Network
-```powershell
+Use Docker Compose to start the Fabric network and gateway services:
+```yaml
 docker-compose -f docker-compose.yml up -d
 ```
 
 ## Start the API
-```powershell
-cd gateway
-npm start
-```
+Run `npm start` in the `gateway/` directory.
 
 ## Open the UI
 Open the browser client served by the API at `http://localhost:3000`.

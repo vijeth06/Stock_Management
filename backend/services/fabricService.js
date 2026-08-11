@@ -489,5 +489,8 @@ module.exports = {
 
     updateConsumableStockOnFabric: async function(consumableId, action, quantity, details) {
         return await invokeChaincode("UpdateConsumableStock", [consumableId, action || "adjust", String(quantity || 0), details || ""]);
+    },
+    deleteConsumableFromFabric: async function(consumableId) {
+        return await invokeChaincode("DeleteConsumable", [consumableId]);
     }
 };

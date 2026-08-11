@@ -15,6 +15,10 @@ async function createAsset(req, res, next) {
       return res.status(400).json({ ok: false, error: 'assetId and name are required' });
     }
 
+    if (payload.purchaseValue !== undefined && Number(payload.purchaseValue) < 0) {
+      return res.status(400).json({ ok: false, error: 'Purchase value cannot be negative' });
+    }
+
     const userDept = getUserDepartment(req);
 
     if (userDept) {

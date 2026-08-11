@@ -4,7 +4,8 @@ const {
   getAllConsumablesFromFabric,
   recordConsumableConsumptionOnFabric,
   recordConsumablePurchaseOnFabric,
-  updateConsumableStockOnFabric
+  updateConsumableStockOnFabric,
+  deleteConsumableFromFabric
 } = require('../services/fabricService');
 const { checkDepartmentAccess } = require('../middleware/auth');
 const { recordAuditLog } = require('../services/auditService');
@@ -165,11 +166,31 @@ async function getConsumableHistory(req, res, next) {
   }
 }
 
+async function deleteConsumable(req, res, next) {
+  try {
+    const consumableId = req.params.consumableId;
+    const consRes = await readConsumableFromFabric(consumableId);
+    if (!consRes.success || !consRes.consumable) {
+      return res.status(404).json({ ok: false, error: 'Consumable not found' });
+    }
+
+    const fabricResult = await deleteConsumableFromFabric(consumableId);
+    if (!fabricResult || !fabricResult.success) {
+      return res.status(500).json({ ok: false, error: fabricResult.error || 'Failed to delete consumable on ledger' });
+    }
+
+    res.json({ ok: true, data: { consumableId } });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   createConsumable,
   getConsumables,
   getConsumable,
   recordConsumption,
   recordPurchase,
-  getConsumableHistory
+  getConsumableHistory,
+  deleteConsumable
 };

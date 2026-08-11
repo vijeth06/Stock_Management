@@ -61,8 +61,8 @@ async function testApi() {
     const login = await request("/auth/login", {
       method: "POST",
       body: JSON.stringify({
-        email: "admin@assetmgmt.local",
-        password: "Admin@12345!"
+        email: "admin@kongu.edu",
+        password: "Admin@123"
       })
     });
     expectSuccess("login endpoint", login, 200);
