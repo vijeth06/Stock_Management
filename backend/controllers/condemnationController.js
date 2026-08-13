@@ -6,6 +6,10 @@ const {
   getAllCondemnationRecordsFromFabric,
   getAllAssetsFromFabric
 } = require("../services/fabricService");
+const {
+  getAllEquipmentCondemnationsFromFabric,
+  getAllConsumableCondemnationsFromFabric
+} = require("../services/fabricService");
 
 async function requestCondemnation(req, res, next) {
   try {
@@ -64,6 +68,47 @@ async function getCondemnationRecords(req, res, next) {
     const assetsRes = await getAllAssetsFromFabric();
     let records = recordsRes.records || [];
     const assets = (assetsRes.success ? assetsRes.assets || [] : []);
+
+    // Also fetch verification-based condemnation records and merge them
+    const evCondRes = await getAllEquipmentCondemnationsFromFabric();
+    const eqRecords = evCondRes.records || [];
+
+    const cvCondRes = await getAllConsumableCondemnationsFromFabric();
+    const cvRecords = cvCondRes.records || [];
+
+    // Normalize equipment verification condemnations to match the condemnation record format
+    const normalizedEq = eqRecords.map(r => ({
+      recordId: r.recordId || r.id,
+      assetId: r.assetId,
+      department: r.department || (assets.find(a => a.assetId === r.assetId)?.department) || 'Unknown',
+      reason: r.reason,
+      requestedBy: r.requestedBy,
+      status: r.status === 'Pending' ? 'Pending' : r.status === 'Approved' ? 'Approved' : r.status === 'Rejected' ? 'Rejected' : (r.status || 'Pending'),
+      disposalMethod: r.disposalMethod || 'Scrap',
+      estimatedValue: r.estimatedValue,
+      inspectionDate: r.inspectionDate,
+      createdAt: r.createdAt,
+      source: 'verification',
+      type: 'Equipment'
+    }));
+
+    const normalizedCv = cvRecords.map(r => ({
+      recordId: r.recordId || r.id,
+      assetId: r.consumableId,
+      department: r.department || 'Unknown',
+      reason: r.reason,
+      requestedBy: r.requestedBy,
+      status: r.status === 'Pending' ? 'Pending' : r.status === 'Approved' ? 'Approved' : r.status === 'Rejected' ? 'Rejected' : (r.status || 'Pending'),
+      disposalMethod: r.disposalMethod || 'Scrap',
+      estimatedValue: r.estimatedValue,
+      inspectionDate: r.inspectionDate,
+      createdAt: r.createdAt,
+      source: 'verification',
+      type: 'Consumable'
+    }));
+
+    // Merge all records
+    records = [...records, ...normalizedEq, ...normalizedCv];
 
     const reqUser = req.user;
     if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department) {

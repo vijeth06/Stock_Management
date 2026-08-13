@@ -9,7 +9,8 @@ const {
   getAllEquipmentCondemnationsFromFabric,
   getAllConsumableVerificationsFromFabric,
   getAllConsumableCondemnationsFromFabric,
-  getAllConsumablesFromFabric
+  getAllConsumablesFromFabric,
+  getAllTransfersFromFabric
 } = require("../services/fabricService");
 const { generatePdfBuffer, generateExcelBuffer, generateProformaIPdf, generateProformaIIExcel, generateProformaIIIExcel, generateProformaIVExcel } = require("../services/reportExportService");
 
@@ -72,12 +73,39 @@ async function getReports(req, res, next) {
     const { year } = req.query;
     const reportYear = Number(year || new Date().getFullYear());
     const reportRes = await generateYearlyReportOnFabric(reportYear);
-    const reportData = reportRes.result || {
+    let reportData = reportRes.result || {
       reportId: `RPT-${reportYear}-001`,
       year: reportYear,
       totalAssets: 0,
       totalPurchaseValue: 0
     };
+
+    // Filter for DepartmentUser
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department && req.user.department !== "ALL") {
+      const assetsRes = await getAllAssetsFromFabric();
+      const userDept = String(req.user.department).toUpperCase();
+      const filteredAssets = assetsRes.assets || [];
+      const deptAssets = filteredAssets.filter(a => (a.department || '').toUpperCase() === userDept);
+      reportData = {
+        ...reportData,
+        totalAssets: deptAssets.length,
+        totalPurchaseValue: deptAssets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0),
+        activeAssets: deptAssets.filter(a => ['ACTIVE', 'PURCHASED'].includes(String(a.status || '').toUpperCase())).length,
+        maintenanceAssets: deptAssets.filter(a => ['UNDER_MAINTENANCE', 'MAINTENANCE', 'IN_MAINTENANCE'].includes(String(a.status || '').toUpperCase())).length,
+        condemnedAssets: deptAssets.filter(a => ['CONDEMNED', 'CONDEMNATION_REQUESTED'].includes(String(a.status || '').toUpperCase())).length,
+        disposedAssets: deptAssets.filter(a => ['DISPOSED', 'RETIRED'].includes(String(a.status || '').toUpperCase())).length,
+        categorySummary: {},
+        departmentSummary: {}
+      };
+      deptAssets.forEach(a => {
+        const cat = a.category || 'Unknown';
+        if (!reportData.categorySummary[cat]) reportData.categorySummary[cat] = 0;
+        reportData.categorySummary[cat] += 1;
+        const dept = a.department || 'Unknown';
+        if (!reportData.departmentSummary[dept]) reportData.departmentSummary[dept] = 0;
+        reportData.departmentSummary[dept] += 1;
+      });
+    }
 
     res.json({
       ok: true,
@@ -93,9 +121,27 @@ async function getReport(req, res, next) {
   try {
     const reportYear = new Date().getFullYear();
     const reportRes = await generateYearlyReportOnFabric(reportYear);
+    let reportData = reportRes.result || {};
+
+    // Filter for DepartmentUser
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department && req.user.department !== "ALL") {
+      const assetsRes = await getAllAssetsFromFabric();
+      const userDept = String(req.user.department).toUpperCase();
+      const deptAssets = (assetsRes.assets || []).filter(a => (a.department || '').toUpperCase() === userDept);
+      reportData = {
+        ...reportData,
+        totalAssets: deptAssets.length,
+        totalPurchaseValue: deptAssets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0),
+        activeAssets: deptAssets.filter(a => ['ACTIVE', 'PURCHASED'].includes(String(a.status || '').toUpperCase())).length,
+        maintenanceAssets: deptAssets.filter(a => ['UNDER_MAINTENANCE', 'MAINTENANCE', 'IN_MAINTENANCE'].includes(String(a.status || '').toUpperCase())).length,
+        condemnedAssets: deptAssets.filter(a => ['CONDEMNED', 'CONDEMNATION_REQUESTED'].includes(String(a.status || '').toUpperCase())).length,
+        disposedAssets: deptAssets.filter(a => ['DISPOSED', 'RETIRED'].includes(String(a.status || '').toUpperCase())).length
+      };
+    }
+
     res.json({
       ok: true,
-      data: reportRes.result || {}
+      data: reportData
     });
   } catch (error) {
     next(error);
@@ -110,6 +156,13 @@ async function getDashboard(req, res, next) {
     const condRes = await getAllCondemnationRecordsFromFabric();
     const consumablesRes = await getAllConsumablesFromFabric();
     const verificationsRes = await getAllEquipmentVerificationsFromFabric();
+    const evCondRes = await getAllEquipmentCondemnationsFromFabric();
+    const cvRes = await getAllConsumableVerificationsFromFabric();
+    let trRes = { transfers: [] };
+    try {
+        const trResult = await getAllTransfersFromFabric();
+        trRes = trResult;
+    } catch(e) {}
 
     let assets = assetsRes.assets || [];
     let bills = billsRes.bills || [];
@@ -136,6 +189,28 @@ async function getDashboard(req, res, next) {
       const condAssetIds = new Set(assets.map(a => a.assetId));
       condemnations = condemnations.filter(c => condAssetIds.has(c.assetId));
       consumables = consumables.filter(c => (c.department || "").toUpperCase() === userDept);
+
+      // Filter verification-based records by department
+      const evConds = evCondRes.records || [];
+      const evCondDeptFiltered = evConds.filter(r => {
+        if (r.department && String(r.department).toUpperCase() === userDept) return true;
+        const asset = assets.find(a => a.assetId === r.assetId);
+        return asset !== undefined;
+      });
+      const cvConds = cvRes.records || [];
+      const cvCondDeptFiltered = cvConds.filter(r => (r.department || "").toUpperCase() === userDept);
+
+      // Filter transfers by department
+      const trTransfers = trRes.transfers || [];
+      const trDeptFiltered = trTransfers.filter(t => {
+        const fromDept = String(t.fromDepartment || '').toUpperCase();
+        const toDept = String(t.toDepartment || '').toUpperCase();
+        return fromDept === userDept || toDept === userDept;
+      });
+
+      evCondRes.records = evCondDeptFiltered;
+      cvRes.records = cvCondDeptFiltered;
+      trRes.transfers = trDeptFiltered;
     }
 
     const statusCounts = {
@@ -148,10 +223,21 @@ async function getDashboard(req, res, next) {
     };
     const departmentSummary = {};
 
+    const normalizeStatus = (status) => {
+      const s = String(status || "").toUpperCase().trim();
+      if (s === 'ACTIVE' || s === 'IN USE' || s === 'IN_USE') return 'Active';
+      if (s === 'UNDER_MAINTENANCE' || s === 'MAINTENANCE' || s === 'IN MAINTENANCE' || s === 'IN_MAINTENANCE') return 'Maintenance';
+      if (s === 'CONDEMNED' || s === 'CONDEMNATION_REQUESTED' || s === 'CONDEMNATION APPROVED') return 'Condemned';
+      if (s === 'DISPOSED' || s === 'DISPOSAL') return 'Disposed';
+      if (s === 'RETIRED' || s === 'RETIREMENT_REQUESTED' || s === 'RETIREMENT REQUESTED') return 'Retired';
+      if (s === 'PUCHASED' || s === 'PURCHASED') return 'Active';
+      return 'Other';
+    };
+
     assets.forEach(asset => {
-      const status = asset.status || "Other";
-      if (statusCounts[status] !== undefined) {
-        statusCounts[status] += 1;
+      const normStatus = normalizeStatus(asset.status || 'Other');
+      if (statusCounts[normStatus] !== undefined) {
+        statusCounts[normStatus] += 1;
       } else {
         statusCounts.Other += 1;
       }
@@ -170,12 +256,12 @@ async function getDashboard(req, res, next) {
         totalBills: bills.length,
         verifiedBills: bills.filter(b => b.verified).length,
         totalMaintenances: maintenances.length,
-        totalCondemnationRequests: condemnations.length,
-        totalTransfers: 0,
+        totalCondemnationRequests: (evCondRes.records || []).length,
+        totalTransfers: trRes.transfers ? trRes.transfers.length : 0,
         totalConsumables: consumables.length,
         lowStockConsumables: consumables.filter(c => (c.currentStock || 0) <= 0).length,
-        totalConsumableVerifications: verificationsRes.records.length,
-        pendingCondemnationRequests: condemnations.filter(c => c.status === 'Pending' || c.status === 'Pending Approval').length
+        totalConsumableVerifications: cvRes.records ? cvRes.records.length : (verificationsRes.records || []).length,
+        pendingCondemnationRequests: (evCondRes.records || []).filter(c => c.status === 'Pending' || c.status === 'Pending Approval').length
       },
       analytics: {
         assetStatus: statusCounts,
@@ -214,12 +300,73 @@ async function exportReport(req, res, next) {
   try {
     const { format = "pdf" } = req.query;
     const reportYear = new Date().getFullYear();
+
     const reportRes = await generateYearlyReportOnFabric(reportYear);
     const assetsRes = await getAllAssetsFromFabric();
+    const billsRes = await getAllBillsFromFabric();
+    const mntRes = await getAllMaintenanceRecordsFromFabric();
+    const valuationRes = await getDepartmentValuationOnFabric();
+    const transfersRes = await getAllTransfersFromFabric();
+
+    const assets = assetsRes.assets || [];
+
+    // Filter by department for DepartmentUser
+    let filteredAssets = assets;
+    let filteredBills = billsRes.bills || [];
+    let filteredMaintenance = mntRes.records || [];
+    let filteredTransfers = transfersRes.transfers || [];
+
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department && req.user.department !== "ALL") {
+      const userDept = String(req.user.department).toUpperCase();
+      filteredAssets = assets.filter(a => (a.department || '').toUpperCase() === userDept);
+      const assetIds = new Set(filteredAssets.map(a => a.assetId));
+      filteredBills = billsRes.bills.filter(b => assetIds.has(b.assetId));
+      filteredMaintenance = mntRes.records.filter(m => assetIds.has(m.assetId));
+      filteredTransfers = transfersRes.transfers.filter(t => {
+        const fromDept = String(t.fromDepartment || '').toUpperCase();
+        const toDept = String(t.toDepartment || '').toUpperCase();
+        return fromDept === userDept || toDept === userDept;
+      });
+    }
+
+    const deptSummary = {};
+    filteredAssets.forEach(asset => {
+      const dept = asset.department || 'Unknown';
+      if (!deptSummary[dept]) {
+        deptSummary[dept] = { totalAssets: 0, totalPurchaseValue: 0, activeAssets: 0, maintenanceAssets: 0, condemnedAssets: 0, disposedAssets: 0 };
+      }
+      deptSummary[dept].totalAssets += 1;
+      deptSummary[dept].totalPurchaseValue += Number(asset.purchaseValue) || 0;
+      const normStatus = String(asset.status || '').toUpperCase();
+      if (normStatus === 'ACTIVE' || normStatus === 'PURCHASED') deptSummary[dept].activeAssets += 1;
+      if (normStatus === 'UNDER_MAINTENANCE' || normStatus === 'MAINTENANCE' || normStatus === 'IN_MAINTENANCE') deptSummary[dept].maintenanceAssets += 1;
+      if (normStatus === 'CONDEMNED' || normStatus === 'CONDEMNATION_REQUESTED') deptSummary[dept].condemnedAssets += 1;
+      if (normStatus === 'DISPOSED' || normStatus === 'RETIRED') deptSummary[dept].disposedAssets += 1;
+    });
 
     const reportData = {
       ...(reportRes.result || {}),
-      assetsList: assetsRes.assets || []
+      reportId: (reportRes.result && reportRes.result.reportId) || `RPT-${reportYear}-${Date.now()}`,
+      year: reportYear,
+      auditOfficer: req.user?.name || req.user?.email || 'Administrator',
+      auditPeriod: `FY ${reportYear}`,
+      totalAssets: filteredAssets.length,
+      totalPurchaseValue: filteredAssets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0),
+      activeAssets: filteredAssets.filter(a => ['ACTIVE', 'PURCHASED'].includes(String(a.status || '').toUpperCase())).length,
+      maintenanceAssets: filteredAssets.filter(a => ['UNDER_MAINTENANCE', 'MAINTENANCE', 'IN_MAINTENANCE'].includes(String(a.status || '').toUpperCase())).length,
+      condemnedAssets: filteredAssets.filter(a => ['CONDEMNED', 'CONDEMNATION_REQUESTED'].includes(String(a.status || '').toUpperCase())).length,
+      disposedAssets: filteredAssets.filter(a => ['DISPOSED', 'RETIRED'].includes(String(a.status || '').toUpperCase())).length,
+      totalBills: filteredBills.length,
+      totalBillValue: filteredBills.reduce((sum, b) => sum + (Number(b.amount) || 0), 0),
+      totalMaintenance: filteredMaintenance.length,
+      totalTransfers: filteredTransfers.length,
+      departmentSummary: deptSummary,
+      valuationData: valuationRes.valuation || {},
+      assetsList: filteredAssets,
+      billsList: filteredBills,
+      maintenanceList: filteredMaintenance,
+      transfersList: filteredTransfers,
+      generatedAt: new Date().toISOString()
     };
 
     if (format === "excel") {
@@ -246,17 +393,66 @@ async function getAnnualSummary(req, res, next) {
     const reportRes = await generateYearlyReportOnFabric(reportYear);
     const billsRes = await getAllBillsFromFabric();
 
-    const bills = billsRes.bills || [];
+    let bills = billsRes.bills || [];
+    let assets = [];
+    const assetsRes = await getAllAssetsFromFabric();
+    assets = assetsRes.assets || [];
+
+    const reqUser = req.user;
+    if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department && reqUser.department !== "ALL") {
+      const userDept = String(reqUser.department).toUpperCase();
+      assets = assets.filter(a => (a.department || '').toUpperCase() === userDept);
+      const assetIds = new Set(assets.map(a => a.assetId));
+      bills = bills.filter(b => assetIds.has(b.assetId));
+    }
+
     const report = reportRes.result || {};
 
-    res.json({
-      ok: true,
-      data: {
-        ...report,
-        totalBills: bills.length,
-        totalBillValue: bills.reduce((sum, b) => sum + (Number(b.amount) || 0), 0)
-      }
-    });
+    if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department && reqUser.department !== "ALL") {
+      const userDept = String(reqUser.department).toUpperCase();
+      const deptAssets = assets;
+      const deptSummary = {};
+      deptAssets.forEach(asset => {
+        const normStatus = String(asset.status || '').toUpperCase();
+        if (!deptSummary[asset.department]) {
+          deptSummary[asset.department] = { totalAssets: 0, totalPurchaseValue: 0, activeAssets: 0, maintenanceAssets: 0, condemnedAssets: 0, disposedAssets: 0 };
+        }
+        const s = deptSummary[asset.department];
+        s.totalAssets += 1;
+        s.totalPurchaseValue += Number(asset.purchaseValue) || 0;
+        if (['ACTIVE', 'PURCHASED'].includes(normStatus)) s.activeAssets += 1;
+        if (['UNDER_MAINTENANCE', 'MAINTENANCE', 'IN_MAINTENANCE'].includes(normStatus)) s.maintenanceAssets += 1;
+        if (['CONDEMNED', 'CONDEMNATION_REQUESTED'].includes(normStatus)) s.condemnedAssets += 1;
+        if (['DISPOSED', 'RETIRED'].includes(normStatus)) s.disposedAssets += 1;
+      });
+
+      res.json({
+        ok: true,
+        data: {
+          ...report,
+          totalAssets: deptAssets.length,
+          totalPurchaseValue: deptAssets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0),
+          activeAssets: deptAssets.filter(a => ['ACTIVE', 'PURCHASED'].includes(String(a.status || '').toUpperCase())).length,
+          maintenanceAssets: deptAssets.filter(a => ['UNDER_MAINTENANCE', 'MAINTENANCE', 'IN_MAINTENANCE'].includes(String(a.status || '').toUpperCase())).length,
+          condemnedAssets: deptAssets.filter(a => ['CONDEMNED', 'CONDEMNATION_REQUESTED'].includes(String(a.status || '').toUpperCase())).length,
+          disposedAssets: deptAssets.filter(a => ['DISPOSED', 'RETIRED'].includes(String(a.status || '').toUpperCase())).length,
+          totalBills: bills.length,
+          totalBillValue: bills.reduce((sum, b) => sum + (Number(b.amount) || 0), 0),
+          departmentSummary: deptSummary,
+          reportId: report.reportId || `RPT-${reportYear}`,
+          year: reportYear
+        }
+      });
+    } else {
+      res.json({
+        ok: true,
+        data: {
+          ...report,
+          totalBills: bills.length,
+          totalBillValue: bills.reduce((sum, b) => sum + (Number(b.amount) || 0), 0)
+        }
+      });
+    }
   } catch (error) {
     next(error);
   }
@@ -265,7 +461,13 @@ async function getAnnualSummary(req, res, next) {
 async function getFinancialReport(req, res, next) {
   try {
     const assetsRes = await getAllAssetsFromFabric();
-    const assets = assetsRes.assets || [];
+    let assets = assetsRes.assets || [];
+
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department && req.user.department !== "ALL") {
+      const userDept = String(req.user.department).toUpperCase();
+      assets = assets.filter(a => (a.department || '').toUpperCase() === userDept);
+    }
+
     const totalValuation = assets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0);
     const netBookValue = totalValuation * 0.7;
 
@@ -283,8 +485,100 @@ async function getFinancialReport(req, res, next) {
   }
 }
 
+async function exportFullYearlyReport(req, res, next) {
+  try {
+    const { year, format = "pdf" } = req.query;
+    const reportYear = Number(year || new Date().getFullYear());
+
+    const reportRes = await generateYearlyReportOnFabric(reportYear);
+    const assetsRes = await getAllAssetsFromFabric();
+    const billsRes = await getAllBillsFromFabric();
+    const mntRes = await getAllMaintenanceRecordsFromFabric();
+    const valuationRes = await getDepartmentValuationOnFabric();
+    const transfersRes = await getAllTransfersFromFabric();
+
+    const assets = assetsRes.assets || [];
+
+    // Filter by department for DepartmentUser
+    let filteredAssets = assets;
+    let filteredBills = billsRes.bills || [];
+    let filteredMaintenance = mntRes.records || [];
+    let filteredTransfers = transfersRes.transfers || [];
+
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department && req.user.department !== "ALL") {
+      const userDept = String(req.user.department).toUpperCase();
+      filteredAssets = assets.filter(a => (a.department || '').toUpperCase() === userDept);
+      const assetIds = new Set(filteredAssets.map(a => a.assetId));
+      filteredBills = billsRes.bills.filter(b => assetIds.has(b.assetId));
+      filteredMaintenance = mntRes.records.filter(m => assetIds.has(m.assetId));
+      filteredTransfers = transfersRes.transfers.filter(t => {
+        const fromDept = String(t.fromDepartment || '').toUpperCase();
+        const toDept = String(t.toDepartment || '').toUpperCase();
+        return fromDept === userDept || toDept === userDept;
+      });
+    }
+
+    const deptSummary = {};
+    filteredAssets.forEach(asset => {
+      const dept = asset.department || 'Unknown';
+      if (!deptSummary[dept]) {
+        deptSummary[dept] = { totalAssets: 0, totalPurchaseValue: 0, activeAssets: 0, maintenanceAssets: 0, condemnedAssets: 0, disposedAssets: 0 };
+      }
+      deptSummary[dept].totalAssets += 1;
+      deptSummary[dept].totalPurchaseValue += Number(asset.purchaseValue) || 0;
+      const normStatus = String(asset.status || '').toUpperCase();
+      if (normStatus === 'ACTIVE' || normStatus === 'PURCHASED') deptSummary[dept].activeAssets += 1;
+      if (normStatus === 'UNDER_MAINTENANCE' || normStatus === 'MAINTENANCE' || normStatus === 'IN_MAINTENANCE') deptSummary[dept].maintenanceAssets += 1;
+      if (normStatus === 'CONDEMNED' || normStatus === 'CONDEMNATION_REQUESTED') deptSummary[dept].condemnedAssets += 1;
+      if (normStatus === 'DISPOSED' || normStatus === 'RETIRED') deptSummary[dept].disposedAssets += 1;
+    });
+
+    const reportData = {
+      ...(reportRes.result || {}),
+      reportId: (reportRes.result && reportRes.result.reportId) || `RPT-${reportYear}-${Date.now()}`,
+      year: reportYear,
+      auditOfficer: req.user?.name || req.user?.email || 'Administrator',
+      auditPeriod: `FY ${reportYear}`,
+      totalAssets: filteredAssets.length,
+      totalPurchaseValue: filteredAssets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0),
+      activeAssets: filteredAssets.filter(a => ['ACTIVE', 'PURCHASED'].includes(String(a.status || '').toUpperCase())).length,
+      maintenanceAssets: filteredAssets.filter(a => ['UNDER_MAINTENANCE', 'MAINTENANCE', 'IN_MAINTENANCE'].includes(String(a.status || '').toUpperCase())).length,
+      condemnedAssets: filteredAssets.filter(a => ['CONDEMNED', 'CONDEMNATION_REQUESTED'].includes(String(a.status || '').toUpperCase())).length,
+      disposedAssets: filteredAssets.filter(a => ['DISPOSED', 'RETIRED'].includes(String(a.status || '').toUpperCase())).length,
+      totalBills: filteredBills.length,
+      totalBillValue: filteredBills.reduce((sum, b) => sum + (Number(b.amount) || 0), 0),
+      totalMaintenance: filteredMaintenance.length,
+      totalTransfers: filteredTransfers.length,
+      departmentSummary: deptSummary,
+      valuationData: valuationRes.valuation || {},
+      assetsList: filteredAssets,
+      billsList: filteredBills,
+      maintenanceList: filteredMaintenance,
+      transfersList: filteredTransfers,
+      generatedAt: new Date().toISOString()
+    };
+
+    if (format === "excel") {
+      const buffer = await generateExcelBuffer(reportData);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename=report-${reportYear}.xlsx`);
+      return res.send(buffer);
+    } else {
+      const buffer = await generatePdfBuffer(reportData);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename=report-${reportYear}.pdf`);
+      return res.send(buffer);
+    }
+  } catch (error) {
+    console.error("Export yearly report error:", error);
+    next(error);
+  }
+}
+
 module.exports = {
   generateYearlyReport,
+  exportReport,
+  exportFullYearlyReport,
   getReports,
   getReport,
   getDashboard,

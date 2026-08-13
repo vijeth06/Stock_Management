@@ -1,4 +1,4 @@
-const { createAssetOnFabric, updateAssetOnFabric, readAssetFromFabric, getAllAssetsFromFabric, getAssetHistoryFromFabric, getAssetLifecycleOnFabric, getAssetAuditTrailOnFabric, bulkImportAssetsOnFabric, bulkTransferAssetsOnFabric, getAllCondemnationRecordsFromFabric } = require('../services/fabricService');
+const { createAssetOnFabric, updateAssetOnFabric, readAssetFromFabric, getAllAssetsFromFabric, getAssetHistoryFromFabric, getAssetLifecycleOnFabric, getAssetAuditTrailOnFabric, bulkImportAssetsOnFabric, bulkTransferAssetsOnFabric, getAllCondemnationRecordsFromFabric, getAllTransfersFromFabric } = require('../services/fabricService');
 const { checkDepartmentAccess } = require('../middleware/auth');
 
 function getUserDepartment(req) {
@@ -161,6 +161,10 @@ async function getAssetHistory(req, res, next) {
     const fabricRes = await readAssetFromFabric(assetId);
     if (!fabricRes.success || !fabricRes.asset) {
       return res.status(404).json({ ok: false, error: 'Asset not found on ledger' });
+    }
+
+    if (req.user && !checkDepartmentAccess(req.user, fabricRes.asset.department)) {
+      return res.status(403).json({ ok: false, error: 'Access denied to another department\'s asset' });
     }
 
     const asset = fabricRes.asset;
@@ -371,15 +375,24 @@ async function getTransfers(req, res, next) {
     const all = await getAllAssetsFromFabric();
     if (!all.success) return res.status(500).json({ ok: false, error: all.error });
 
-    let assets = all.assets || [];
-    if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department) {
-      const userDept = String(reqUser.department).toUpperCase();
-      assets = assets.filter(a => (a.department || "").toUpperCase() === userDept);
+    // When no assetId is provided, return transfer records filtered by department for DepartmentUser
+    const transfersRes = await getAllTransfersFromFabric();
+    if (transfersRes.success) {
+        let transfers = transfersRes.transfers || [];
+        const reqUser = req.user;
+        if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department) {
+            const userDept = String(reqUser.department).toUpperCase();
+            transfers = transfers.filter(t => {
+                const fromDept = String(t.fromDepartment || '').toUpperCase();
+                const toDept = String(t.toDepartment || '').toUpperCase();
+                return fromDept === userDept || toDept === userDept;
+            });
+        }
+        return res.json({ ok: true, data: transfers });
     }
-
-     return res.json({ ok: true, data: assets });
+    return res.json({ ok: true, data: [] });
    } catch (err) {
-     next(err);
+      next(err);
    }
 }
 

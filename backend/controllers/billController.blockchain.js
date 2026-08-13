@@ -38,22 +38,17 @@ async function uploadBill(req, res, next) {
     }
 
     let storageRes = null;
+    let documentContent = null;
+    let documentMimeType = null;
+    let documentName = null;
     if (req.file) {
-        const tmpPath = req.file.path;
-        const destName = `${billId || `BILL-${Date.now()}`}-${req.file.filename}`;
-        try {
-            storageRes = await uploadFile(tmpPath, destName);
-            let buf = null;
-            if (storageRes.storage === 'local') {
-            buf = fs.readFileSync(storageRes.key);
-            } else {
-            buf = fs.readFileSync(tmpPath);
-            }
-            documentHash = crypto.createHash('sha256').update(buf).digest('hex');
-            billId = billId || `BILL-${Date.now()}`;
-        } finally {
-            try { fs.unlinkSync(tmpPath); } catch (e) {}
-        }
+      const buf = req.file.buffer;
+      documentHash = crypto.createHash('sha256').update(buf).digest('hex');
+      billId = billId || `BILL-${Date.now()}`;
+      documentContent = buf.toString('base64');
+      documentMimeType = req.file.mimetype || 'application/octet-stream';
+      documentName = req.file.originalname || `${billId}.bin`;
+      // NOTE: no local disk write; storing document bytes on-chain via CreateBill
     }
 
     if (!assetId || !documentHash) {
@@ -72,7 +67,10 @@ async function uploadBill(req, res, next) {
       amount: Number(amount || 0),
       documentHash,
       paymentStatus: paymentStatus || 'Paid',
-      documentKey: (storageRes && storageRes.key) || providedDocumentKey || ''
+      documentKey: (storageRes && storageRes.key) || providedDocumentKey || '',
+      documentContent,
+      documentMimeType,
+      documentName
     };
 
     const fabricResult = await createBillOnFabric(billData);
@@ -117,13 +115,8 @@ async function generateBillDownloadToken(req, res, next) {
       return res.json({ ok: true, data: { url: presigned, expiresIn: Number(process.env.FILE_TOKEN_TTL || 300) } });
     }
 
-    // Fallback: local file token
-    const uploadDir = require('path').join(__dirname, "../../uploads/bills");
-    const filename = `${billId}.pdf`;
-    const filePath = require('path').join(uploadDir, filename);
-    if (!require('fs').existsSync(filePath)) return res.status(404).json({ ok: false, error: 'Bill document not found on server' });
-
-    const token = generateDownloadToken(filePath, Number(process.env.FILE_TOKEN_TTL || 300));
+    // Non-S3 flow: generate a token that references the billId (ledger-backed)
+    const token = generateDownloadToken(billId, Number(process.env.FILE_TOKEN_TTL || 300));
 
     try { await recordAuditLog({ actor: req.user && req.user.email, role: req.user && req.user.role, action: 'GENERATE_BILL_DOWNLOAD_TOKEN', resourceType: 'Bill', resourceId: billId, details: { ttl: process.env.FILE_TOKEN_TTL || 300 } }); } catch (e) {}
 
@@ -137,14 +130,26 @@ async function downloadBillByToken(req, res, next) {
   try {
     const token = req.query.token || req.body && req.body.token;
     if (!token) return res.status(400).json({ ok: false, error: 'token is required' });
-    const filePath = validateDownloadToken(token);
-    if (!filePath) return res.status(401).json({ ok: false, error: 'Invalid or expired token' });
+    const info = validateDownloadToken(token);
+    if (!info) return res.status(401).json({ ok: false, error: 'Invalid or expired token' });
 
+    // If token references a ledger billId, read and return bytes from Fabric
+    if (info.billId) {
+      const billRes = await readBillFromFabric(info.billId);
+      if (!billRes.success || !billRes.bill || !billRes.bill.documentContent) return res.status(404).json({ ok: false, error: 'Bill document not found' });
+      const buf = Buffer.from(billRes.bill.documentContent, 'base64');
+      try { await recordAuditLog({ actor: 'anonymous-token', role: 'system', action: 'DOWNLOAD_BILL', resourceType: 'Bill', resourceId: info.billId }); } catch (e) {}
+      res.setHeader('Content-Type', billRes.bill.documentMimeType || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${billRes.bill.documentName || info.billId}"`);
+      return res.send(buf);
+    }
+
+    // Legacy file path token
+    const filePath = info.filePath || null;
+    if (!filePath) return res.status(404).json({ ok: false, error: 'File not found' });
     const fs = require('fs');
     if (!fs.existsSync(filePath)) return res.status(404).json({ ok: false, error: 'File not found' });
-
     try { await recordAuditLog({ actor: 'anonymous-token', role: 'system', action: 'DOWNLOAD_BILL', resourceType: 'Bill', resourceId: require('path').basename(filePath) }); } catch (e) {}
-
     res.sendFile(filePath);
   } catch (err) {
     next(err);

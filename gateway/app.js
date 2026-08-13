@@ -3,7 +3,7 @@ const express = require("express");
 const path = require("path");
 const helmet = require("helmet");
 const cors = require("cors");
-const { authenticate } = require("../backend/middleware/auth");
+const { authenticate, authorize } = require("../backend/middleware/auth");
 const { register: authRegister, login, gmailAuth } = require("../backend/controllers/authController");
 const { seedDemoAdmin } = require("../backend/services/authService");
 const apiRoutes = require("../backend/routes");
@@ -57,7 +57,7 @@ app.get("/users/me", authenticate, (req, res) => {
   res.json({ ok: true, data: { id: req.user.sub, name: req.user.name, email: req.user.email, role: req.user.role, department: req.user.department } });
 });
 
-app.get(["/api/reports/:reportId/export", "/reports/:reportId/export"], authenticate, async (req, res) => {
+app.get(["/api/reports/:reportId/export", "/reports/:reportId/export"], authenticate, authorize(["Administrator", "AuditOfficer"]), async (req, res) => {
   try {
     const format = req.query.format || "pdf";
     const reportId = req.params.reportId;

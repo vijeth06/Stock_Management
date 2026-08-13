@@ -3,7 +3,7 @@ const path = require("path");
 const multer = require("multer");
 const router = express.Router();
 
-const upload = multer({ dest: path.join(__dirname, "../../uploads/bills") });
+const upload = multer({ storage: multer.memoryStorage() });
 // Conditional multer middleware: only apply when request is multipart/form-data
 function conditionalUpload(req, res, next) {
   const ct = req.headers['content-type'] || '';
@@ -25,7 +25,7 @@ const reportController = require("../controllers/reportController");
 
 router.use(authenticate);
 
-router.get("/departments", authorize(["Administrator", "AuditOfficer"]), departmentController.getDepartments);
+router.get("/departments", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), departmentController.getDepartments);
 router.get("/departments/:id", authorize(["Administrator", "AuditOfficer"]), departmentController.getDepartment);
 router.get("/departments/:id/summary", authorize(["Administrator", "AuditOfficer"]), departmentController.getDepartmentSummary);
 router.post("/departments", authorize(["Administrator"]), departmentController.createDepartment);
@@ -94,14 +94,15 @@ router.get("/proforma/consumable/condemnation/:recordId/export", authorize(["Adm
 
 router.post("/transfers", authorize(["Administrator", "DepartmentUser"]), assetController.transferAsset);
 router.get("/transfers", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), assetController.getTransfers);
-router.get("/reports/financial", authorize(["Administrator", "AuditOfficer"]), reportController.getFinancialReport);
+router.get("/reports/financial", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.getFinancialReport);
 router.get("/dashboard", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.getDashboard);
-router.get("/reports", authorize(["Administrator", "AuditOfficer"]), reportController.getReports);
-router.get("/reports/department-valuation", authorize(["Administrator", "AuditOfficer"]), reportController.getDepartmentValuation);
+router.get("/reports", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.getReports);
+router.get("/reports/department-valuation", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.getDepartmentValuation);
+router.get("/reports/export", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.exportFullYearlyReport);
 router.get("/reports/:reportId/export", authorize(["Administrator", "AuditOfficer"]), reportController.exportReport);
 router.get("/reports/:reportId", authorize(["Administrator", "AuditOfficer"]), reportController.getReport);
 router.post("/reports", authorize(["Administrator", "AuditOfficer"]), reportController.generateYearlyReport);
-router.get("/summary/:year", authorize(["Administrator", "AuditOfficer"]), reportController.getAnnualSummary);
+router.get("/summary/:year", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.getAnnualSummary);
 
 const { listAuditLogs } = require("../services/auditService");
 router.get("/audit-logs", authorize(["Administrator", "AuditOfficer"]), async (req, res, next) => {

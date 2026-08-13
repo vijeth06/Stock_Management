@@ -177,6 +177,52 @@ async function generatePdfBuffer(reportData) {
         });
       }
 
+      // Bills Summary
+      doc
+        .fontSize(14)
+        .font("Helvetica-Bold")
+        .fillColor("#1e3a8a")
+        .text("4. Financial / Bills Summary", 40, y);
+
+      y += 20;
+
+      doc.fillColor("#0f172a").fontSize(10).font("Helvetica-Bold");
+      doc.text(`Total Bills`, 50, y);
+      doc.fillColor("#1e40af").text(String(reportData.totalBills || 0), 200, y);
+      y += 18;
+      doc.fillColor("#0f172a").fontSize(10).font("Helvetica-Bold");
+      doc.text(`Total Bill Value`, 50, y);
+      doc.fillColor("#1e40af").text(`INR ${Number(reportData.totalBillValue || 0).toLocaleString()}`, 200, y);
+      y += 40;
+
+      // Maintenance Summary
+      doc
+        .fontSize(14)
+        .font("Helvetica-Bold")
+        .fillColor("#1e3a8a")
+        .text("5. Maintenance Summary", 40, y);
+
+      y += 20;
+
+      doc.fillColor("#0f172a").fontSize(10).font("Helvetica-Bold");
+      doc.text(`Total Maintenance Records`, 50, y);
+      doc.fillColor("#1e40af").text(String(reportData.totalMaintenance || 0), 200, y);
+      y += 40;
+
+      // Transfers Summary
+      doc
+        .fontSize(14)
+        .font("Helvetica-Bold")
+        .fillColor("#1e3a8a")
+        .text("6. Transfers Summary", 40, y);
+
+      y += 20;
+
+      doc.fillColor("#0f172a").fontSize(10).font("Helvetica-Bold");
+      doc.text(`Total Transfers`, 50, y);
+      doc.fillColor("#1e40af").text(String(reportData.totalTransfers || 0), 200, y);
+      y += 40;
+
       // Detailed Asset Table if provided
       if (Array.isArray(reportData.assetsList) && reportData.assetsList.length > 0) {
         doc.addPage();
@@ -185,7 +231,7 @@ async function generatePdfBuffer(reportData) {
           .fontSize(14)
           .font("Helvetica-Bold")
           .fillColor("#1e3a8a")
-          .text("4. Asset Registry Details", 40, pageY);
+          .text("7. Asset Registry Details", 40, pageY);
 
         pageY += 25;
         doc.rect(40, pageY, 515, 20).fill("#1e40af");
@@ -212,6 +258,76 @@ async function generatePdfBuffer(reportData) {
           doc.text(String(ast.status || ""), 435, pageY + 4, { width: 55 });
           doc.text(Number(ast.purchaseValue || 0).toLocaleString(), 495, pageY + 4);
           pageY += 18;
+        });
+      }
+
+      // Bills Detail Table
+      if (Array.isArray(reportData.billsList) && reportData.billsList.length > 0) {
+        doc.addPage();
+        let billY = 40;
+        doc
+          .fontSize(14)
+          .font("Helvetica-Bold")
+          .fillColor("#1e3a8a")
+          .text("8. Bills / Purchase Records", 40, billY);
+
+        billY += 25;
+        doc.rect(40, billY, 515, 20).fill("#1e40af");
+        doc.fillColor("#ffffff").fontSize(8).font("Helvetica-Bold");
+        doc.text("Bill ID", 45, billY + 6);
+        doc.text("Asset ID", 145, billY + 6);
+        doc.text("Vendor", 245, billY + 6);
+        doc.text("Invoice", 365, billY + 6);
+        doc.text("Amount (INR)", 445, billY + 6);
+        doc.text("Status", 500, billY + 6);
+
+        billY += 20;
+        reportData.billsList.forEach((bill) => {
+          if (billY > 750) { doc.addPage(); billY = 40; }
+          doc.rect(40, billY, 515, 18).stroke("#f1f5f9");
+          doc.fillColor("#0f172a").fontSize(7).font("Helvetica");
+          doc.text(String(bill.billId || bill.id || ""), 45, billY + 4, { width: 95 });
+          doc.text(String(bill.assetId || ""), 145, billY + 4, { width: 95 });
+          doc.text(String(bill.vendor || ""), 245, billY + 4, { width: 115 });
+          doc.text(String(bill.invoiceNumber || ""), 365, billY + 4, { width: 75 });
+          doc.text(Number(bill.amount || 0).toLocaleString(), 445, billY + 4);
+          doc.text(String(bill.paymentStatus || "Paid"), 500, billY + 4);
+          billY += 18;
+        });
+      }
+
+      // Transfers Detail Table
+      if (Array.isArray(reportData.transfersList) && reportData.transfersList.length > 0) {
+        doc.addPage();
+        let trY = 40;
+        doc
+          .fontSize(14)
+          .font("Helvetica-Bold")
+          .fillColor("#1e3a8a")
+          .text("9. Asset Transfers", 40, trY);
+
+        trY += 25;
+        doc.rect(40, trY, 515, 20).fill("#1e40af");
+        doc.fillColor("#ffffff").fontSize(8).font("Helvetica-Bold");
+        doc.text("Transfer ID", 45, trY + 6);
+        doc.text("Asset ID", 145, trY + 6);
+        doc.text("From Dept", 255, trY + 6);
+        doc.text("To Dept", 335, trY + 6);
+        doc.text("Date", 425, trY + 6);
+        doc.text("Status", 485, trY + 6);
+
+        trY += 20;
+        reportData.transfersList.forEach((tr) => {
+          if (trY > 750) { doc.addPage(); trY = 40; }
+          doc.rect(40, trY, 515, 18).stroke("#f1f5f9");
+          doc.fillColor("#0f172a").fontSize(7).font("Helvetica");
+          doc.text(String(tr.transferId || ""), 45, trY + 4, { width: 95 });
+          doc.text(String(tr.assetId || ""), 145, trY + 4, { width: 105 });
+          doc.text(String(tr.fromDepartment || ""), 255, trY + 4, { width: 75 });
+          doc.text(String(tr.toDepartment || ""), 335, trY + 4, { width: 85 });
+          doc.text(String(tr.date || tr.createdAt || ""), 425, trY + 4, { width: 55 });
+          doc.text(String(tr.status || "Completed"), 485, trY + 4);
+          trY += 18;
         });
       }
 
@@ -312,6 +428,56 @@ async function generateExcelBuffer(reportData) {
         purchaseDate: ast.purchaseDate || "",
         purchaseValue: ast.purchaseValue || 0,
         serialNumber: ast.serialNumber || ""
+      });
+    });
+  }
+
+  // Sheet 3: Bills / Purchase Records
+  if (Array.isArray(reportData.billsList) && reportData.billsList.length > 0) {
+    const billSheet = workbook.addWorksheet("Bills");
+    billSheet.columns = [
+      { header: "Bill ID", key: "billId", width: 20 },
+      { header: "Asset ID", key: "assetId", width: 15 },
+      { header: "Vendor", key: "vendor", width: 30 },
+      { header: "Invoice Number", key: "invoiceNumber", width: 20 },
+      { header: "Amount (₹)", key: "amount", width: 15 },
+      { header: "Payment Status", key: "paymentStatus", width: 15 }
+    ];
+    billSheet.getRow(1).font = { bold: true, color: { argb: "FFFFFF" } };
+    billSheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "1E40AF" } };
+    reportData.billsList.forEach((bill) => {
+      billSheet.addRow({
+        billId: bill.billId || bill.id || "",
+        assetId: bill.assetId || "",
+        vendor: bill.vendor || "",
+        invoiceNumber: bill.invoiceNumber || "",
+        amount: bill.amount || 0,
+        paymentStatus: bill.paymentStatus || "Paid"
+      });
+    });
+  }
+
+  // Sheet 4: Transfers
+  if (Array.isArray(reportData.transfersList) && reportData.transfersList.length > 0) {
+    const transferSheet = workbook.addWorksheet("Transfers");
+    transferSheet.columns = [
+      { header: "Transfer ID", key: "transferId", width: 25 },
+      { header: "Asset ID", key: "assetId", width: 15 },
+      { header: "From Department", key: "fromDepartment", width: 20 },
+      { header: "To Department", key: "toDepartment", width: 20 },
+      { header: "Date", key: "date", width: 20 },
+      { header: "Status", key: "status", width: 15 }
+    ];
+    transferSheet.getRow(1).font = { bold: true, color: { argb: "FFFFFF" } };
+    transferSheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "1E40AF" } };
+    reportData.transfersList.forEach((tr) => {
+      transferSheet.addRow({
+        transferId: tr.transferId || "",
+        assetId: tr.assetId || "",
+        fromDepartment: tr.fromDepartment || "",
+        toDepartment: tr.toDepartment || "",
+        date: tr.date || tr.createdAt || "",
+        status: tr.status || "Completed"
       });
     });
   }

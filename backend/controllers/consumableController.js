@@ -171,7 +171,10 @@ async function deleteConsumable(req, res, next) {
     const consumableId = req.params.consumableId;
     const consRes = await readConsumableFromFabric(consumableId);
     if (!consRes.success || !consRes.consumable) {
-      return res.status(404).json({ ok: false, error: 'Consumable not found' });
+      return res.status(404).json({ ok: false, error: 'Consumable not found on ledger' });
+    }
+    if (req.user && !checkDepartmentAccess(req.user, consRes.consumable.department)) {
+      return res.status(403).json({ ok: false, error: 'Access denied to another department\'s consumable' });
     }
 
     const fabricResult = await deleteConsumableFromFabric(consumableId);

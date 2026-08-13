@@ -222,7 +222,7 @@ class AssetManagementContract extends Contract {
     // BILL MANAGEMENT FUNCTIONS
     // ==========================================
 
-    async CreateBill(ctx, billId, assetId, department, vendor, invoiceNumber, amount, documentHash, paymentStatus, documentKey) {
+    async CreateBill(ctx, billId, assetId, department, vendor, invoiceNumber, amount, documentHash, paymentStatus, documentKey, documentContent, documentMimeType, documentName) {
         console.info(`=== CreateBill: Recording bill ${billId} ===`);
         const billKey = `BILL_${billId}`;
         const billObj = {
@@ -236,6 +236,9 @@ class AssetManagementContract extends Contract {
             documentHash: documentHash || '',
             billHash: documentHash || '',
             documentKey: documentKey || '',
+            documentContent: documentContent || '',
+            documentMimeType: documentMimeType || '',
+            documentName: documentName || '',
             verified: true,
             paymentStatus: paymentStatus || 'Paid',
             createdAt: new Date().toISOString()
@@ -455,6 +458,21 @@ class AssetManagementContract extends Contract {
         return JSON.stringify(records);
     }
 
+    async ApproveEquipmentCondemnation(ctx, recordId, approvedBy) {
+        console.info(`=== ApproveEquipmentCondemnation: Approving ${recordId} ===`);
+        const recordBytes = await ctx.stub.getState(`EQC_${recordId}`);
+        if (!recordBytes || recordBytes.length === 0) {
+            throw new Error(`Equipment condemnation record ${recordId} not found`);
+        }
+        const record = JSON.parse(recordBytes.toString());
+        record.status = 'Approved';
+        record.approvedBy = approvedBy || 'Admin';
+        record.approvedAt = new Date().toISOString();
+        await ctx.stub.putState(`EQC_${recordId}`, Buffer.from(JSON.stringify(record)));
+        try { ctx.stub.setEvent('CONDEMNATION_APPROVED', Buffer.from(JSON.stringify(record))); } catch(e) {}
+        return JSON.stringify(record);
+    }
+
     async CreateConsumableVerification(ctx, payloadJson) {
         const payload = JSON.parse(payloadJson);
         const recordId = payload.recordId || `CNV-${Date.now()}`;
@@ -513,6 +531,21 @@ class AssetManagementContract extends Contract {
             }
         }
         return JSON.stringify(records);
+    }
+
+    async ApproveConsumableCondemnation(ctx, recordId, approvedBy) {
+        console.info(`=== ApproveConsumableCondemnation: Approving ${recordId} ===`);
+        const recordBytes = await ctx.stub.getState(`CNC_${recordId}`);
+        if (!recordBytes || recordBytes.length === 0) {
+            throw new Error(`Consumable condemnation record ${recordId} not found`);
+        }
+        const record = JSON.parse(recordBytes.toString());
+        record.status = 'Approved';
+        record.approvedBy = approvedBy || 'Admin';
+        record.approvedAt = new Date().toISOString();
+        await ctx.stub.putState(`CNC_${recordId}`, Buffer.from(JSON.stringify(record)));
+        try { ctx.stub.setEvent('CONDEMNATION_APPROVED', Buffer.from(JSON.stringify(record))); } catch(e) {}
+        return JSON.stringify(record);
     }
 
     // ==========================================
@@ -852,6 +885,24 @@ class AssetManagementContract extends Contract {
         return jsonStr;
     }
 
+    async GetAllAuditEvents(ctx) {
+        const iterator = await ctx.stub.getStateByRange('AUDIT_', 'AUDIT_\uffff');
+        const events = [];
+
+        const res_items = await getAllResults(iterator);
+        for (const res of res_items) {
+            if (res.value.toString().length > 0) {
+                try {
+                    const event = JSON.parse(res.value.toString());
+                    if (event.recordId || event.id) {
+                        events.push(event);
+                    }
+                } catch (e) {}
+            }
+        }
+        return JSON.stringify(events);
+    }
+
     async UpdateConsumableStock(ctx, consumableId, action, quantity, details) {
         console.info(`=== UpdateConsumableStock: ${action} ${quantity} of ${consumableId} ===`);
 
@@ -991,27 +1042,25 @@ class AssetManagementContract extends Contract {
     validateLifecycleTransition(prevStatus, newStatus) {
         if (prevStatus === newStatus) return;
 
+        const prevStatusNorm = String(prevStatus || '').toUpperCase();
+        const newStatusNorm = String(newStatus || '').toUpperCase();
+
         const validTransitions = {
             'PURCHASED': ['ACTIVE', 'DISPOSED'],
             'ACTIVE': ['UNDER_MAINTENANCE', 'NOT_WORKING', 'CONDEMNATION_REQUESTED', 'CONDEMNED', 'DISPOSED'],
             'UNDER_MAINTENANCE': ['ACTIVE', 'NOT_WORKING', 'CONDEMNATION_REQUESTED', 'CONDEMNED', 'DISPOSED'],
             'NOT_WORKING': ['UNDER_MAINTENANCE', 'CONDEMNATION_REQUESTED', 'CONDEMNED', 'DISPOSED'],
             'CONDEMNATION_REQUESTED': ['CONDEMNED', 'ACTIVE', 'NOT_WORKING', 'UNDER_MAINTENANCE'],
-            'CONDEMNED': ['DISPOSED', 'Disposed'],
-            'DISPOSED': [],
-            'Active': ['UNDER_MAINTENANCE', 'NOT_WORKING', 'CONDEMNATION_REQUESTED', 'CONDEMNED', 'DISPOSED'],
-            'Maintenance': ['Active', 'NOT_WORKING', 'CONDEMNATION_REQUESTED', 'CONDEMNED', 'DISPOSED'],
-            'Condemned': ['DISPOSED', 'Disposed'],
-            'Retired': [],
-            'Condemnation Requested': ['Condemned', 'Active']
+            'CONDEMNED': ['DISPOSED'],
+            'DISPOSED': []
         };
-        const allowed = validTransitions[prevStatus] || [];
-        if (!allowed.includes(newStatus)) {
+        const allowed = validTransitions[prevStatusNorm] || validTransitions[prevStatus] || [];
+        if (!allowed.includes(newStatusNorm) && !allowed.includes(newStatus)) {
             throw new Error(`Invalid lifecycle transition: '${prevStatus}' cannot transition to '${newStatus}'`);
         }
     }
 
-     async DeleteAsset(ctx, assetId) {
+    async DeleteAsset(ctx, assetId) {
         console.info(`=== DeleteAsset: Deleting asset ${assetId} ===`);
 
         const exists = await this.AssetExists(ctx, assetId);
@@ -1057,6 +1106,7 @@ class AssetManagementContract extends Contract {
                 ts = String(ts);
             }
             allChanges.push({
+                txId: change.txId || '',
                 timestamp: ts,
                 isDelete: change.isDelete,
                 value: change.value.toString('utf8')
@@ -1064,6 +1114,41 @@ class AssetManagementContract extends Contract {
         }
 
         return JSON.stringify(allChanges);
+    }
+
+    async GetAllTransfers(ctx) {
+        console.info('=== GetAllTransfers: Getting all transfer records ===');
+        const allAssetsStr = await this.GetAllAssets(ctx);
+        const assets = JSON.parse(allAssetsStr || '[]');
+        const transfers = [];
+        for (const asset of assets) {
+            const iterator = await ctx.stub.getHistoryForKey(asset.assetId);
+            const history = await getAllResults(iterator);
+            for (let i = 1; i < history.length; i++) {
+                try {
+                    const prevVal = typeof history[i-1].value === 'string' ? history[i-1].value : history[i-1].value.toString('utf8');
+                    const currVal = typeof history[i].value === 'string' ? history[i].value : history[i].value.toString('utf8');
+                    const prev = prevVal ? JSON.parse(prevVal) : null;
+                    const curr = currVal ? JSON.parse(currVal) : null;
+                    if (prev && curr && prev.department && curr.department && prev.department !== curr.department) {
+                        let ts = history[i].timestamp;
+                        if (ts && typeof ts.toISOString === 'function') ts = ts.toISOString();
+                        else if (ts) ts = ts.toString();
+                        else ts = new Date().toISOString();
+                        transfers.push({
+                            transferId: `XFR-${history[i].txId || ''}-${transfers.length}`,
+                            assetId: asset.assetId,
+                            fromDepartment: prev.department,
+                            toDepartment: curr.department,
+                            status: "Completed",
+                            date: ts,
+                            createdAt: ts
+                        });
+                    }
+                } catch(e) { continue; }
+            }
+        }
+        return JSON.stringify(transfers);
     }
 
     async QueryAssetsByDepartment(ctx, department) {
@@ -1134,10 +1219,10 @@ class AssetManagementContract extends Contract {
             totalAssets: assets.length,
             totalPurchaseValue: assets.reduce((sum, a) => sum + (a.purchaseValue || 0), 0),
             categorySummary: {},
-            activeAssets: assets.filter(a => a.status === 'Active').length,
-            maintenanceAssets: assets.filter(a => (a.maintenanceCount || 0) > 0 || a.status === 'Maintenance').length,
-            condemnedAssets: assets.filter(a => a.status === 'Condemned').length,
-            disposedAssets: assets.filter(a => a.status === 'Disposed').length,
+            activeAssets: assets.filter(a => String(a.status || '').toUpperCase() === 'ACTIVE' || String(a.status || '').toUpperCase() === 'PURCHASED').length,
+            maintenanceAssets: assets.filter(a => String(a.status || '').toUpperCase() === 'UNDER_MAINTENANCE' || String(a.status || '').toUpperCase() === 'MAINTENANCE' || String(a.status || '').toUpperCase() === 'IN_MAINTENANCE' || (a.maintenanceCount || 0) > 0).length,
+            condemnedAssets: assets.filter(a => String(a.status || '').toUpperCase() === 'CONDEMNED' || String(a.status || '').toUpperCase() === 'CONDEMNATION_REQUESTED').length,
+            disposedAssets: assets.filter(a => String(a.status || '').toUpperCase() === 'DISPOSED' || String(a.status || '').toUpperCase() === 'RETIRED').length,
             departmentSummary: {},
             generatedAt: new Date().toISOString()
         };
@@ -1179,10 +1264,10 @@ class AssetManagementContract extends Contract {
                 totalAssets: deptAssets.length,
                 totalPurchaseValue: deptAssets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0),
                 netBookValue: deptAssets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0) * 0.7,
-                activeAssets: deptAssets.filter(a => a.status === 'Active').length,
-                maintenanceAssets: deptAssets.filter(a => a.status === 'Maintenance').length,
-                condemnedAssets: deptAssets.filter(a => a.status === 'Condemned').length,
-                disposedAssets: deptAssets.filter(a => a.status === 'Disposed' || a.status === 'Retired').length
+                activeAssets: deptAssets.filter(a => String(a.status || '').toUpperCase() === 'ACTIVE' || String(a.status || '').toUpperCase() === 'PURCHASED').length,
+                maintenanceAssets: deptAssets.filter(a => String(a.status || '').toUpperCase() === 'UNDER_MAINTENANCE' || String(a.status || '').toUpperCase() === 'MAINTENANCE' || String(a.status || '').toUpperCase() === 'IN_MAINTENANCE').length,
+                condemnedAssets: deptAssets.filter(a => String(a.status || '').toUpperCase() === 'CONDEMNED' || String(a.status || '').toUpperCase() === 'CONDEMNATION_REQUESTED').length,
+                disposedAssets: deptAssets.filter(a => String(a.status || '').toUpperCase() === 'DISPOSED' || String(a.status || '').toUpperCase() === 'RETIRED').length
             };
         });
 
@@ -1430,15 +1515,18 @@ class AssetManagementContract extends Contract {
                 }
 
                 const asset = JSON.parse(assetJSON.toString());
-                if (['Condemned', 'Disposed', 'Retired'].includes(asset.status)) {
+                const normStatus = String(asset.status || '').toUpperCase();
+                if (['CONDEMNED', 'DISPOSED', 'RETIRED', 'CONDEMNATION_REQUESTED'].includes(normStatus)) {
                     results.push({ assetId, success: false, error: `Cannot transfer asset in ${asset.status} state` });
                     continue;
                 }
 
+                const fromDept = asset.department;
                 asset.department = dept;
                 asset.updatedAt = new Date().toISOString();
                 await ctx.stub.putState(assetId, Buffer.from(JSON.stringify(asset)));
-                results.push({ assetId, success: true, fromDepartment: asset.department, toDepartment: dept });
+                try { ctx.stub.setEvent('AssetTransferred', Buffer.from(JSON.stringify({ assetId, fromDepartment: fromDept, toDepartment: dept }))); } catch(e) {}
+                results.push({ assetId, success: true, fromDepartment: fromDept, toDepartment: dept });
             } catch (e) {
                 results.push({ assetId, success: false, error: e.message });
             }

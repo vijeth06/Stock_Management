@@ -141,6 +141,14 @@ module.exports = {
         return await invokeChaincode("RecordAuditEvent", [JSON.stringify(eventData)]);
     },
 
+    getAllAuditEventsFromFabric: async function() {
+        const res = await invokeChaincode("GetAllAuditEvents", [], true);
+        if (res.success) {
+            return { success: true, events: Array.isArray(res.result) ? res.result : [] };
+        }
+        return { success: false, events: [], error: res.error };
+    },
+
     readAssetFromFabric: async function(assetId) {
         const res = await invokeChaincode("ReadAsset", [assetId], true);
         if (res.success) {
@@ -155,6 +163,14 @@ module.exports = {
             return { success: true, assets: Array.isArray(res.result) ? res.result : [] };
         }
         return { success: false, assets: [], error: res.error };
+    },
+
+    getAllTransfersFromFabric: async function() {
+        const res = await invokeChaincode("GetAllTransfers", [], true);
+        if (res.success) {
+            return { success: true, transfers: Array.isArray(res.result) ? res.result : [] };
+        }
+        return { success: false, transfers: [], error: res.error };
     },
 
     getAssetHistoryFromFabric: async function(assetId) {
@@ -245,7 +261,10 @@ module.exports = {
             billData.amount || 0,
             billData.documentHash || billData.billHash || "",
             billData.paymentStatus || "Paid",
-            billData.documentKey || ""
+            billData.documentKey || "",
+            billData.documentContent || "",
+            billData.documentMimeType || "",
+            billData.documentName || ""
         ];
         return await invokeChaincode("CreateBill", args);
     },
@@ -376,6 +395,18 @@ module.exports = {
             return { success: true, records: Array.isArray(res.result) ? res.result : [] };
         }
         return { success: false, records: [], error: res.error };
+    },
+
+    approveEquipmentCondemnationOnFabric: async function(recordId, approvedBy) {
+        return await invokeChaincode("ApproveEquipmentCondemnation", [recordId, approvedBy || "Admin"]);
+    },
+
+    rejectEquipmentCondemnationOnFabric: async function(recordId, rejectedBy) {
+        return await invokeChaincode("RejectEquipmentCondemnation", [recordId, rejectedBy || "Admin"]);
+    },
+
+    approveConsumableCondemnationOnFabric: async function(recordId, approvedBy) {
+        return await invokeChaincode("ApproveConsumableCondemnation", [recordId, approvedBy || "Admin"]);
     },
 
     // REPORT API

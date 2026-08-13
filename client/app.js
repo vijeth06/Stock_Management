@@ -267,7 +267,27 @@ function updateUserChip() {
     sessionBadge.textContent = 'Not signed in';
     if (signOutBtn) signOutBtn.classList.add('hidden');
   }
-  loadPendingUsers();
+  updateNavVisibility();
+  loadDashboardPendingUsers();
+}
+
+function updateNavVisibility() {
+  const navItems = document.querySelectorAll('.nav-item');
+  navItems.forEach(nav => {
+    const page = nav.getAttribute('data-page');
+    const isAdmin = currentUser && (currentUser.role === 'Administrator' || currentUser.role === 'Admin');
+    const adminOnlyPages = ['users', 'valuation', 'lifecycle', 'departments'];
+    if (adminOnlyPages.includes(page)) {
+      nav.style.display = isAdmin ? '' : 'none';
+    } else {
+      nav.style.display = '';
+    }
+  });
+
+  const generateReportBtn = document.getElementById('generateReportBtn');
+  if (generateReportBtn) {
+    generateReportBtn.style.display = isAdmin ? '' : 'none';
+  }
 }
 
 document.getElementById('signOutBtn')?.addEventListener('click', () => {
@@ -296,11 +316,11 @@ async function loadDashboard() {
     }
     renderDashboardSummary(dashboardData);
   }
-  await loadPendingUsers();
+  await loadDashboardPendingUsers();
   showResult(res);
 }
 
-async function loadPendingUsers() {
+async function loadDashboardPendingUsers() {
   const panel = document.getElementById('adminPendingUsersPanel');
   const container = document.getElementById('pendingUsersList');
   if (!panel || !container) return;
@@ -546,9 +566,14 @@ async function loadAssets() {
   if (tabsContainer && deptsRes.ok && deptsRes.data) {
     const blockchainDepts = deptsRes.data.filter(d => !d.isDefault && d.isActive !== false);
     let tabsHtml = '<button type="button" class="tab-btn active" data-dept="ALL">All Departments</button>';
-    blockchainDepts.forEach(d => {
-      tabsHtml += `<button type="button" class="tab-btn" data-dept="${escapeHtml(d.code)}">${escapeHtml(d.name)} (${escapeHtml(d.code)})</button>`;
-    });
+    const isDeptUser = currentUser && currentUser.role === 'DepartmentUser';
+    if (isDeptUser) {
+      tabsHtml = '<button type="button" class="tab-btn active" data-dept="ALL">My Department</button>';
+    } else {
+      blockchainDepts.forEach(d => {
+        tabsHtml += `<button type="button" class="tab-btn" data-dept="${escapeHtml(d.code)}">${escapeHtml(d.name)} (${escapeHtml(d.code)})</button>`;
+      });
+    }
     tabsContainer.innerHTML = tabsHtml;
 
     // Add click handlers
@@ -1015,7 +1040,16 @@ async function loadTransfers() {
   setLoading('Loading asset transfers...');
   const res = await requestJson('/api/transfers');
   if (res.ok) {
-    renderTransfers(res.data || []);
+    let transfers = res.data || [];
+    if (currentUser && currentUser.role === 'DepartmentUser' && currentUser.department) {
+      const dept = currentUser.department.toUpperCase();
+      transfers = transfers.filter(t => {
+        const fromDept = (t.fromDepartment || '').toUpperCase();
+        const toDept = (t.toDepartment || '').toUpperCase();
+        return fromDept === dept || toDept === dept;
+      });
+    }
+    renderTransfers(transfers);
   }
   showResult(res);
 }
@@ -1382,7 +1416,7 @@ function renderReports(reports) {
 window.exportReport = async function(reportId, format) {
   setLoading(`Downloading ${format.toUpperCase()} report...`);
   try {
-    const response = await fetch(`/api/reports/${encodeURIComponent(reportId)}/export?format=${format}`, {
+    const response = await fetch(`/api/reports/export?format=${format}`, {
       headers: authToken ? { Authorization: `Bearer ${authToken}` } : {}
     });
     if (!response.ok) {
@@ -1393,7 +1427,7 @@ window.exportReport = async function(reportId, format) {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${reportId}.${format === 'excel' ? 'xlsx' : 'pdf'}`;
+    a.download = `${reportId || 'report'}.${format === 'excel' ? 'xlsx' : 'pdf'}`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1742,7 +1776,9 @@ async function loadAuditLogs() {
   setLoading('Loading system audit logs...');
   const res = await requestJson('/api/audit-logs');
   if (res.ok) renderAuditLogs(res.data || []);
-  showResult(res);
+  if (res.ok === false && res.error && !res.error.includes('403')) {
+    showResult(res);
+  }
 }
 
 function renderAuditLogs(logs) {
@@ -2652,7 +2688,9 @@ async function loadPendingUsers() {
     renderUsersTable(res.data, 'pending');
   } else {
     renderUsersTable([], 'pending');
-    showResult(res);
+    if (res.ok === false && res.error && !res.error.includes('403')) {
+      showResult(res);
+    }
   }
 }
 
@@ -2663,7 +2701,9 @@ async function loadActiveUsers() {
     renderUsersTable(res.data, 'active');
   } else {
     renderUsersTable([], 'active');
-    showResult(res);
+    if (res.ok === false && res.error && !res.error.includes('403')) {
+      showResult(res);
+    }
   }
 }
 
