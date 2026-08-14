@@ -12,7 +12,7 @@ const {
   getAllConsumablesFromFabric,
   getAllTransfersFromFabric
 } = require("../services/fabricService");
-const { generatePdfBuffer, generateExcelBuffer, generateProformaIPdf, generateProformaIIExcel, generateProformaIIIExcel, generateProformaIVExcel } = require("../services/reportExportService");
+const { generatePdfBuffer, generateExcelBuffer, generateProformaIPdf, generateProformaIIPdf, generateProformaIIIPdf, generateProformaIVPdf, generateProformaIIExcel, generateProformaIIIExcel, generateProformaIVExcel } = require("../services/reportExportService");
 
 async function generateYearlyReport(req, res, next) {
   try {
@@ -307,6 +307,8 @@ async function exportReport(req, res, next) {
     const mntRes = await getAllMaintenanceRecordsFromFabric();
     const valuationRes = await getDepartmentValuationOnFabric();
     const transfersRes = await getAllTransfersFromFabric();
+    const consumablesRes = await getAllConsumablesFromFabric();
+    const condemnationRes = await getAllCondemnationRecordsFromFabric();
 
     const assets = assetsRes.assets || [];
 
@@ -359,6 +361,7 @@ async function exportReport(req, res, next) {
       totalBills: filteredBills.length,
       totalBillValue: filteredBills.reduce((sum, b) => sum + (Number(b.amount) || 0), 0),
       totalMaintenance: filteredMaintenance.length,
+      totalMaintenanceCost: filteredMaintenance.reduce((sum, m) => sum + (Number(m.cost) || 0), 0),
       totalTransfers: filteredTransfers.length,
       departmentSummary: deptSummary,
       valuationData: valuationRes.valuation || {},
@@ -366,6 +369,8 @@ async function exportReport(req, res, next) {
       billsList: filteredBills,
       maintenanceList: filteredMaintenance,
       transfersList: filteredTransfers,
+      consumablesList: consumablesRes.consumables || [],
+      condemnationList: condemnationRes.records || [],
       generatedAt: new Date().toISOString()
     };
 
@@ -436,6 +441,14 @@ async function getAnnualSummary(req, res, next) {
           maintenanceAssets: deptAssets.filter(a => ['UNDER_MAINTENANCE', 'MAINTENANCE', 'IN_MAINTENANCE'].includes(String(a.status || '').toUpperCase())).length,
           condemnedAssets: deptAssets.filter(a => ['CONDEMNED', 'CONDEMNATION_REQUESTED'].includes(String(a.status || '').toUpperCase())).length,
           disposedAssets: deptAssets.filter(a => ['DISPOSED', 'RETIRED'].includes(String(a.status || '').toUpperCase())).length,
+          categorySummary: (() => {
+            const cats = {};
+            deptAssets.forEach(a => {
+              const cat = a.category || 'Unknown';
+              cats[cat] = (cats[cat] || 0) + 1;
+            });
+            return cats;
+          })(),
           totalBills: bills.length,
           totalBillValue: bills.reduce((sum, b) => sum + (Number(b.amount) || 0), 0),
           departmentSummary: deptSummary,
@@ -496,6 +509,8 @@ async function exportFullYearlyReport(req, res, next) {
     const mntRes = await getAllMaintenanceRecordsFromFabric();
     const valuationRes = await getDepartmentValuationOnFabric();
     const transfersRes = await getAllTransfersFromFabric();
+    const consumablesRes = await getAllConsumablesFromFabric();
+    const condemnationRes = await getAllCondemnationRecordsFromFabric();
 
     const assets = assetsRes.assets || [];
 
@@ -548,6 +563,7 @@ async function exportFullYearlyReport(req, res, next) {
       totalBills: filteredBills.length,
       totalBillValue: filteredBills.reduce((sum, b) => sum + (Number(b.amount) || 0), 0),
       totalMaintenance: filteredMaintenance.length,
+      totalMaintenanceCost: filteredMaintenance.reduce((sum, m) => sum + (Number(m.cost) || 0), 0),
       totalTransfers: filteredTransfers.length,
       departmentSummary: deptSummary,
       valuationData: valuationRes.valuation || {},
@@ -555,6 +571,8 @@ async function exportFullYearlyReport(req, res, next) {
       billsList: filteredBills,
       maintenanceList: filteredMaintenance,
       transfersList: filteredTransfers,
+      consumablesList: consumablesRes.consumables || [],
+      condemnationList: condemnationRes.records || [],
       generatedAt: new Date().toISOString()
     };
 
@@ -673,9 +691,16 @@ async function exportEquipmentCondemnationReport(req, res, next) {
       }
     }
 
-    const buffer = await generateProformaIIExcel(record);
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename=proforma-II-${recordId}.xlsx`);
+    if (format === "excel") {
+      const xlsxBuffer = await generateProformaIIExcel(record);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename=proforma-II-${recordId}.xlsx`);
+      return res.send(xlsxBuffer);
+    }
+
+    const buffer = await generateProformaIIPdf(record);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=proforma-II-${recordId}.pdf`);
     return res.send(buffer);
   } catch (err) {
     next(err);
@@ -701,9 +726,16 @@ async function exportConsumableVerificationReport(req, res, next) {
       }
     }
 
-    const buffer = await generateProformaIIIExcel(record);
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename=proforma-III-${recordId}.xlsx`);
+    if (format === "excel") {
+      const xlsxBuffer = await generateProformaIIIExcel(record);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename=proforma-III-${recordId}.xlsx`);
+      return res.send(xlsxBuffer);
+    }
+
+    const buffer = await generateProformaIIIPdf(record);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=proforma-III-${recordId}.pdf`);
     return res.send(buffer);
   } catch (err) {
     next(err);
@@ -729,9 +761,16 @@ async function exportConsumableCondemnationReport(req, res, next) {
       }
     }
 
-    const buffer = await generateProformaIVExcel(record);
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename=proforma-IV-${recordId}.xlsx`);
+    if (format === "excel") {
+      const xlsxBuffer = await generateProformaIVExcel(record);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename=proforma-IV-${recordId}.xlsx`);
+      return res.send(xlsxBuffer);
+    }
+
+    const buffer = await generateProformaIVPdf(record);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=proforma-IV-${recordId}.pdf`);
     return res.send(buffer);
   } catch (err) {
     next(err);
