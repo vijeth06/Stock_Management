@@ -1,253 +1,529 @@
 const PDFDocument = require("pdfkit");
 const ExcelJS = require("exceljs");
 
-// ---------------------------------------------------------------------------
-// Layout constants
-// ---------------------------------------------------------------------------
-const PAGE_WIDTH = 595;
-const PAGE_HEIGHT = 842;
-const MARGIN_LEFT = 50;
-const MARGIN_RIGHT = 50;
-const MARGIN_TOP = 50;
-const MARGIN_BOTTOM = 60;
+// ===========================================================================
+// Layout Constants — A4 portrait with professional college document margins
+// All measurements in points (1 inch = 72 points, 1 mm = 2.8346 points)
+// ===========================================================================
+const PAGE_WIDTH = 595;   // A4 width
+const PAGE_HEIGHT = 842;  // A4 height
+const MARGIN_LEFT = 55;   // ~20mm
+const MARGIN_RIGHT = 55;  // ~20mm
+const MARGIN_TOP = 60;    // ~25mm (first page has header)
+const MARGIN_BOTTOM = 60; // ~25mm
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
-const LINE_HEIGHT = 1.4;
+const PRINTABLE_BOTTOM = PAGE_HEIGHT - MARGIN_BOTTOM;
 
 const COLORS = {
-  primary: "#1e3a8a",
-  primaryDark: "#1e40af",
-  secondary: "#0f172a",
-  text: "#0f172a",
-  muted: "#64748b",
-  border: "#cbd5e1",
-  borderLight: "#e2e8f0",
-  headerBg: "#1e40af",
-  headerText: "#ffffff",
-  tableHeaderBg: "#f1f5f9",
-  tableHeaderText: "#334155",
-  altRow: "#f8fafc",
-  footerBg: "#f8fafc",
+  primary: "#1e3a8a",        // Deep blue for headers and accents
+  primaryDark: "#152c5a",    // Darker blue for important values
+  secondary: "#0f172a",      // Near-black for body text
+  text: "#111827",           // Primary text
+  muted: "#6b7280",          // Gray for secondary labels
+  border: "#9ca3af",         // Light gray for table borders
+  borderLight: "#d1d5db",    // Very light border
+  headerBg: "#1e3a8a",       // Blue header background
+  headerText: "#ffffff",     // White text in headers
+  tableHeaderBg: "#f3f4f6",  // Gray header for tables
+  tableHeaderText: "#1f2937",
+  altRow: "#f9fafb",         // Alternating row background
+  footerBg: "#f9fafb",
   success: "#16a34a",
   warning: "#d97706",
   danger: "#dc2626",
 };
 
-// ---------------------------------------------------------------------------
-// Helper: format date string safely
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Formatting Helpers
+// ===========================================================================
+
 function formatDate(dateStr) {
   try {
-    return new Date(dateStr || Date.now()).toLocaleDateString("en-US", {
+    const d = new Date(dateStr || Date.now());
+    if (isNaN(d.getTime())) return "N/A";
+    return d.toLocaleDateString("en-GB", {
       year: "numeric",
       month: "short",
       day: "numeric",
     });
   } catch {
-    return new Date().toLocaleDateString();
+    return "N/A";
   }
 }
 
-// ---------------------------------------------------------------------------
-// Helper: format currency
-// ---------------------------------------------------------------------------
+function formatDateDDMMYYYY(dateStr) {
+  try {
+    const d = new Date(dateStr || Date.now());
+    if (isNaN(d.getTime())) return "N/A";
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
+  } catch {
+    return "N/A";
+  }
+}
+
 function formatCurrency(value) {
   const num = Number(value) || 0;
+  if (num === 0) return "INR 0.00";
   return `INR ${num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-// ---------------------------------------------------------------------------
-// Helper: draw the organization header banner
-// ---------------------------------------------------------------------------
-function drawHeaderBanner(doc, title, subtitle) {
-  doc.rect(MARGIN_LEFT, MARGIN_TOP - 10, CONTENT_WIDTH, 55).fill(COLORS.headerBg);
-  doc.fillColor(COLORS.headerText).fontSize(18).font("Helvetica-Bold")
-    .text(title, MARGIN_LEFT + 10, MARGIN_TOP + 5);
-  doc.fillColor(COLORS.headerText).fontSize(10).font("Helvetica")
-    .text(subtitle, MARGIN_LEFT + 10, MARGIN_TOP + 22);
-  doc.moveDown();
-  return MARGIN_TOP + 55;
+function safeValue(val, fallback = "N/A") {
+  if (val === undefined || val === null || val === "") return fallback;
+  return String(val);
 }
 
-// ---------------------------------------------------------------------------
-// Helper: draw a styled section heading
-// ---------------------------------------------------------------------------
-function sectionHeading(doc, text, number) {
-  doc.fillColor(COLORS.primary).fontSize(13).font("Helvetica-Bold")
-    .text(`${number}. ${text}`, MARGIN_LEFT, doc.y);
-  const titleWidth = doc.widthOfString(`${number}. ${text}`, { fontSize: 13 });
-  doc.rect(MARGIN_LEFT, doc.y - 4, Math.max(titleWidth, 60), 1.5).fill(COLORS.primary);
-  doc.moveDown(0.6);
+function safeNumber(val) {
+  const n = Number(val);
+  return isNaN(n) ? 0 : n;
 }
 
-// ---------------------------------------------------------------------------
-// Helper: add footer with page number to every page
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Page Setup & Footer Helper
+// ===========================================================================
+
+function initPage(doc, pageNumber) {
+  addFooter(doc, pageNumber);
+}
+
 function addFooter(doc, pageNumber) {
   const origY = doc.y;
-  const footerTop = PAGE_HEIGHT - MARGIN_BOTTOM + 10;
-  doc.rect(MARGIN_LEFT, footerTop - 5, CONTENT_WIDTH, 0.5).strokeColor(COLORS.borderLight);
-  doc.fillColor(COLORS.muted).fontSize(8).font("Helvetica-Oblique")
-    .text("ChainTrack Asset Management  |  Hyperledger Fabric Blockchain Verified",
-      MARGIN_LEFT, footerTop);
-  doc.fillColor(COLORS.muted).fontSize(8).font("Helvetica")
+  const footerTop = PAGE_HEIGHT - MARGIN_BOTTOM + 12;
+
+  // Footer separator line
+  doc
+    .moveTo(MARGIN_LEFT, footerTop - 4)
+    .lineTo(PAGE_WIDTH - MARGIN_RIGHT, footerTop - 4)
+    .strokeColor(COLORS.borderLight)
+    .lineWidth(0.5)
+    .stroke();
+
+  doc
+    .fillColor(COLORS.muted)
+    .fontSize(7.5)
+    .font("Helvetica-Oblique")
+    .text("ChainTrack Asset Management System", MARGIN_LEFT, footerTop);
+
+  doc
+    .fillColor(COLORS.muted)
+    .fontSize(7.5)
+    .font("Helvetica")
     .text(`Page ${pageNumber}`, PAGE_WIDTH - MARGIN_RIGHT - 30, footerTop, { align: "right" });
+
   doc.y = origY;
 }
 
-// ---------------------------------------------------------------------------
-// Helper: draw a row of KPI badges
-// ---------------------------------------------------------------------------
-function drawKpis(doc, kpis) {
-  const rowHeight = 24;
-  const colCount = 3;
-  const badgeWidth = Math.floor(CONTENT_WIDTH / colCount) - 8;
-  const colGap = 8;
+// ===========================================================================
+// Header Helper — College/department banner
+// ===========================================================================
+
+function drawHeader(doc, collegeName, deptName, reportTitle, subtitle, financialYear) {
+  let y = MARGIN_TOP;
+
+  // Top rule line
+  doc
+    .moveTo(MARGIN_LEFT, y)
+    .lineTo(PAGE_WIDTH - MARGIN_RIGHT, y)
+    .strokeColor(COLORS.primary)
+    .lineWidth(1)
+    .stroke();
+  y += 4;
+
+  doc
+    .fillColor(COLORS.primary)
+    .fontSize(15)
+    .font("Helvetica-Bold")
+    .text(collegeName, MARGIN_LEFT, y, { align: "center" });
+  y += 18;
+
+  if (deptName) {
+    doc
+      .fillColor(COLORS.primaryDark)
+      .fontSize(11)
+      .font("Helvetica-Bold")
+      .text(deptName, MARGIN_LEFT, y, { align: "center" });
+    y += 15;
+  }
+
+  // Report title — centered, bold, large
+  doc
+    .fillColor(COLORS.secondary)
+    .fontSize(16)
+    .font("Helvetica-Bold")
+    .text(reportTitle, MARGIN_LEFT, y, { align: "center" });
+  y += 18;
+
+  if (financialYear) {
+    doc
+      .fillColor(COLORS.muted)
+      .fontSize(10)
+      .font("Helvetica-Oblique")
+      .text(`Financial Year: ${financialYear}`, MARGIN_LEFT, y, { align: "center" });
+    y += 14;
+  }
+
+  if (subtitle) {
+    doc
+      .fillColor(COLORS.muted)
+      .fontSize(9)
+      .font("Helvetica")
+      .text(subtitle, MARGIN_LEFT, y, { align: "center" });
+    y += 16;
+  }
+
+  // Bottom separator line
+  doc
+    .moveTo(MARGIN_LEFT, y)
+    .lineTo(PAGE_WIDTH - MARGIN_RIGHT, y)
+    .strokeColor(COLORS.borderLight)
+    .lineWidth(0.5)
+    .stroke();
+  y += 12;
+
+  return y;
+}
+
+// ===========================================================================
+// Section Heading Helper
+// ===========================================================================
+
+function sectionHeading(doc, text, number) {
+  const label = number ? `${number}. ${text}` : text;
+  const fullWidth = doc.widthOfString(label, { fontSize: 12 });
+  const boxWidth = Math.max(fullWidth + 16, 120);
+
+  const startX = MARGIN_LEFT;
+  const startY = doc.y + 4;
+
+  doc
+    .fillColor(COLORS.primary)
+    .rect(startX, startY, boxWidth, 16)
+    .fill(COLORS.primary);
+
+  doc
+    .fillColor(COLORS.headerText)
+    .fontSize(11)
+    .font("Helvetica-Bold")
+    .text(label, startX + 8, startY + 3);
+
+  doc.moveDown(1);
+}
+
+// ===========================================================================
+// Metadata Grid Helper — two-column label:value layout
+// ===========================================================================
+
+function drawMetaGrid(doc, labelValuePairs, startY, labelWidth = 160, valueXOffset = 170) {
+  let y = startY;
+  const lineHeight = 14;
+  const itemsPerCol = Math.ceil(labelValuePairs.length / 2);
+
+  doc.fillColor(COLORS.text).fontSize(8.5).font("Helvetica");
+
+  labelValuePairs.forEach((pair, idx) => {
+    const col = idx < itemsPerCol ? 0 : 1;
+    const row = col === 0 ? idx : idx - itemsPerCol;
+    const x = MARGIN_LEFT + col * (CONTENT_WIDTH / 2);
+
+    doc.fillColor(COLORS.secondary).font("Helvetica-Bold");
+    doc.text(`${pair[0]}:`, x, y + row * lineHeight);
+    doc.fillColor(COLORS.text).font("Helvetica");
+    doc.text(safeValue(pair[1]), x + valueXOffset, y + row * lineHeight);
+  });
+
+  return y + itemsPerCol * lineHeight + 6;
+}
+
+// ===========================================================================
+// KPI Summary Cards Helper
+// ===========================================================================
+
+function drawKpis(doc, kpis, columns = 3) {
+  const rowHeight = 22;
+  const gap = 6;
+  const totalGap = (columns - 1) * gap;
+  const badgeWidth = Math.floor((CONTENT_WIDTH - totalGap) / columns);
+  const startY = doc.y;
 
   kpis.forEach((kpi, idx) => {
-    const col = idx % colCount;
-    const row = Math.floor(idx / colCount);
-    const x = MARGIN_LEFT + col * (badgeWidth + colGap);
-    const y = doc.y + row * (rowHeight + 6);
+    const col = idx % columns;
+    const row = Math.floor(idx / columns);
+    const x = MARGIN_LEFT + col * (badgeWidth + gap);
+    const y = startY + row * (rowHeight + gap);
 
-    doc.rect(x, y, badgeWidth, rowHeight).fill(COLORS.altRow).stroke(COLORS.borderLight);
-    doc.fillColor(COLORS.muted).fontSize(7.5).font("Helvetica")
-      .text(kpi.label, x + 6, y + 3, { width: badgeWidth - 12 });
-    doc.fillColor(COLORS.secondary).fontSize(11).font("Helvetica-Bold")
-      .text(kpi.value, x + 6, y + 12, { width: badgeWidth - 12 });
+    // Card background with border
+    doc
+      .rect(x, y, badgeWidth, rowHeight)
+      .fill(COLORS.footerBg)
+      .stroke(COLORS.borderLight);
+
+    // Label
+    doc
+      .fillColor(COLORS.muted)
+      .fontSize(7)
+      .font("Helvetica-Oblique")
+      .text(kpi.label, x + 5, y + 3, { width: badgeWidth - 10, align: "center" });
+
+    // Value
+    doc
+      .fillColor(COLORS.primaryDark)
+      .fontSize(10)
+      .font("Helvetica-Bold")
+      .text(kpi.value, x + 5, y + 10, { width: badgeWidth - 10, align: "center" });
   });
 
-  doc.moveDown(kpis.length > colCount ? 2 : 1);
+  doc.y = startY + Math.floor((kpis.length - 1) / columns) * (rowHeight + gap) + rowHeight + gap;
 }
 
-// ---------------------------------------------------------------------------
-// Helper: draw a 3-column summary table
-// ---------------------------------------------------------------------------
-function drawSummaryTable(doc, headers, rows, startY, fontSize = 8, rowHeight = 18) {
-  let docY = startY;
-  const colWidths = [
-    Math.floor(CONTENT_WIDTH * 0.38),
-    Math.floor(CONTENT_WIDTH * 0.22),
-    CONTENT_WIDTH - Math.floor(CONTENT_WIDTH * 0.38) - Math.floor(CONTENT_WIDTH * 0.22),
-  ];
+// ===========================================================================
+// Table Helper — robust table with header repetition across pages
+// ===========================================================================
 
-  function drawHeader() {
-    doc.rect(MARGIN_LEFT, docY, CONTENT_WIDTH, rowHeight).fill(COLORS.headerBg);
-    doc.fillColor(COLORS.headerText).fontSize(fontSize).font("Helvetica-Bold");
-    let startX = MARGIN_LEFT;
-    headers.forEach((h, i) => {
-      doc.text(h, startX, docY + 5, { width: colWidths[i], align: "left" });
-      startX += colWidths[i];
-    });
-    docY += rowHeight;
-  }
+function drawTable(doc, headers, rows, startY, colWidths, options = {}) {
+  const fontSize = options.fontSize || 8;
+  const rowHeight = options.rowHeight || 18;
+  const headerHeight = 20;
+  const font = options.font || "Helvetica";
+  const alignMap = options.align || {};
 
-  drawHeader();
-
-  rows.forEach((row, ri) => {
-    const rowY = docY + ri * rowHeight;
-
-    if (rowY + rowHeight > PAGE_HEIGHT - MARGIN_BOTTOM - 15) {
-      doc.addPage();
-      docY = MARGIN_TOP;
-      addFooter(doc, doc.bufferedPageRange().start + 2);
-      drawHeader();
-      ri = -1;
-    }
-
-    if ((ri + 1) % 2 === 0) {
-      doc.rect(MARGIN_LEFT, rowY, CONTENT_WIDTH, rowHeight).fill(COLORS.altRow);
-    }
-
-    doc.fillColor(COLORS.text).fontSize(fontSize).font("Helvetica");
-    let cx = MARGIN_LEFT;
-    row.forEach((cell, ci) => {
-      doc.text(String(cell), cx, rowY + 4, { width: colWidths[ci], align: "left" });
-      cx += colWidths[ci];
-    });
-  });
-
-  return docY + rows.length * rowHeight;
-}
-
-// ---------------------------------------------------------------------------
-// Helper: draw a detail table with many columns
-// ---------------------------------------------------------------------------
-function drawDetailTable(doc, headers, colWidths, rows, startY, fontSize = 7, rowHeight = 16) {
   let docY = startY;
   const totalTableWidth = colWidths.reduce((a, b) => a + b, 0);
-  const startX = MARGIN_LEFT + Math.max(0, (CONTENT_WIDTH - totalTableWidth) / 2);
+  const startX = MARGIN_LEFT + Math.max(0, Math.floor((CONTENT_WIDTH - totalTableWidth) / 2));
 
-  function drawHeader() {
-    doc.rect(startX, docY, totalTableWidth, rowHeight + 4).fill(COLORS.headerBg);
-    doc.fillColor(COLORS.headerText).fontSize(fontSize + 1).font("Helvetica-Bold");
+  function renderHeader() {
+    doc
+      .rect(startX, docY, totalTableWidth, headerHeight)
+      .fill(COLORS.primary);
+
+    doc
+      .fillColor(COLORS.headerText)
+      .fontSize(fontSize)
+      .font("Helvetica-Bold");
+
     let cx = startX;
     headers.forEach((h, i) => {
-      doc.text(h, cx, docY + 5, { width: colWidths[i], align: "center" });
+      doc.text(h, cx, docY + 5, {
+        width: colWidths[i] - 1,
+        align: "center",
+        valign: "center",
+      });
       cx += colWidths[i];
     });
-    docY += rowHeight + 4;
+
+    docY += headerHeight;
   }
 
-  drawHeader();
+  renderHeader();
 
   rows.forEach((row, ri) => {
     const rowY = docY;
 
-    if (rowY + rowHeight > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
+    // Page break check — if the row won't fit, start a new page and repeat header
+    if (rowY + rowHeight > PRINTABLE_BOTTOM) {
       doc.addPage();
       docY = MARGIN_TOP;
-      addFooter(doc, doc.bufferedPageRange().start + 2);
-      drawHeader();
+      initPage(doc, doc.bufferedPageRange().start + 2);
+      renderHeader();
     }
 
+    // Alternating row background
     if (ri % 2 === 0) {
-      doc.rect(startX, docY, totalTableWidth, rowHeight).fill(COLORS.altRow);
+      doc
+        .rect(startX, docY, totalTableWidth, rowHeight)
+        .fill(COLORS.altRow);
     }
 
-    doc.fillColor(COLORS.text).fontSize(fontSize).font("Helvetica");
+    // Cell borders
+    doc
+      .rect(startX, docY, totalTableWidth, rowHeight)
+      .strokeColor(COLORS.borderLight)
+      .lineWidth(0.25)
+      .stroke();
+
+    doc
+      .fillColor(COLORS.text)
+      .fontSize(fontSize)
+      .font(font);
+
     let tx = startX;
     row.forEach((cell, ci) => {
-      doc.text(String(cell), tx, docY + 3, { width: colWidths[ci] - 2, align: "left" });
+      const align = alignMap[ci] || "left";
+      doc.text(String(cell), tx, docY + 3, {
+        width: colWidths[ci] - 2,
+        align: align,
+      });
       tx += colWidths[ci];
     });
 
     docY += rowHeight;
   });
 
-  return docY + 10;
+  // Bottom border
+  doc
+    .moveTo(startX, docY)
+    .lineTo(startX + totalTableWidth, docY)
+    .strokeColor(COLORS.border)
+    .lineWidth(0.5)
+    .stroke();
+
+  return docY + 12;
 }
 
-// ---------------------------------------------------------------------------
-// Helper: check if we need a page break and optionally add one
-// ---------------------------------------------------------------------------
-function ensureSpace(doc, needed, sectionTitle) {
-  const pageNum = doc.bufferedPageRange().start + 1;
-  if (doc.y + needed > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
-    doc.addPage();
-    addFooter(doc, pageNum + 1);
-    if (sectionTitle) {
-      doc.fillColor(COLORS.primary).fontSize(13).font("Helvetica-Bold")
-        .text(sectionTitle, MARGIN_LEFT, doc.y);
-      doc.moveDown(0.3);
+// ===========================================================================
+// Table Helper — 3-column wide summary table with header repetition
+// ===========================================================================
+
+function drawWideSummaryTable(doc, headers, colWidths, rows, startY, fontSize = 8, rowHeight = 18) {
+  let docY = startY;
+  const totalTableWidth = colWidths.reduce((a, b) => a + b, 0);
+  const startX = MARGIN_LEFT;
+
+  function renderHeader() {
+    doc
+      .rect(startX, docY, totalTableWidth, rowHeight)
+      .fill(COLORS.primary);
+
+    doc
+      .fillColor(COLORS.headerText)
+      .fontSize(fontSize)
+      .font("Helvetica-Bold");
+
+    let cx = startX;
+    headers.forEach((h, i) => {
+      doc.text(h, cx, docY + 4, { width: colWidths[i] - 2, align: "left" });
+      cx += colWidths[i];
+    });
+
+    docY += rowHeight;
+  }
+
+  renderHeader();
+
+  rows.forEach((row, ri) => {
+    const rowY = docY;
+
+    if (rowY + rowHeight > PRINTABLE_BOTTOM) {
+      doc.addPage();
+      docY = MARGIN_TOP;
+      initPage(doc, doc.bufferedPageRange().start + 2);
+      renderHeader();
     }
+
+    if (ri % 2 === 0) {
+      doc
+        .rect(startX, rowY, totalTableWidth, rowHeight)
+        .fill(COLORS.altRow);
+    }
+
+    doc
+      .rect(startX, rowY, totalTableWidth, rowHeight)
+      .strokeColor(COLORS.borderLight)
+      .lineWidth(0.25)
+      .stroke();
+
+    doc
+      .fillColor(COLORS.text)
+      .fontSize(fontSize)
+      .font("Helvetica");
+
+    let cx = startX;
+    row.forEach((cell, ci) => {
+      doc.text(String(cell), cx, rowY + 3, { width: colWidths[ci] - 2, align: "left" });
+      cx += colWidths[ci];
+    });
+
+    docY += rowHeight;
+  });
+
+  doc
+    .moveTo(startX, docY)
+    .lineTo(startX + totalTableWidth, docY)
+    .strokeColor(COLORS.border)
+    .lineWidth(0.5)
+    .stroke();
+
+  return docY + 12;
+}
+
+// ===========================================================================
+// Ensure Space Helper — adds page break if needed
+// ===========================================================================
+
+function ensureSpace(doc, needed) {
+  if (doc.y + needed > PRINTABLE_BOTTOM) {
+    doc.addPage();
+    const newPageNum = doc.bufferedPageRange().start + 2;
+    initPage(doc, newPageNum);
+    doc.y = MARGIN_TOP;
     return doc.y;
   }
   return doc.y;
 }
 
-// ---------------------------------------------------------------------------
-// Helper: draw a metadata field row (label + value)
-// ---------------------------------------------------------------------------
-function drawMetaRow(doc, label, value, labelX, valueX, y) {
-  doc.fillColor(COLORS.secondary).fontSize(8.5).font("Helvetica-Bold");
-  doc.text(`${label}:`, labelX, y);
-  doc.fillColor(COLORS.text).font("Helvetica").text(String(value || "N/A"), valueX, y);
-  return y + 13;
+// ===========================================================================
+// Signature Area Helper — 3-column signature block
+// ===========================================================================
+
+function drawSignatures(doc, signers) {
+  ensureSpace(doc, 55);
+  doc.moveDown(0.3);
+
+  const boxWidth = CONTENT_WIDTH / signers.length;
+  const boxY = doc.y;
+  const boxHeight = 50;
+
+  // Box outline
+  doc
+    .rect(MARGIN_LEFT, boxY, CONTENT_WIDTH, boxHeight)
+    .fillAndStroke(COLORS.footerBg, COLORS.borderLight);
+
+  signers.forEach((signer, idx) => {
+    const x = MARGIN_LEFT + idx * boxWidth;
+
+    if (idx > 0) {
+      // Vertical divider
+      doc
+        .moveTo(x, boxY + 5)
+        .lineTo(x, boxY + boxHeight - 5)
+        .strokeColor(COLORS.borderLight)
+        .lineWidth(0.5)
+        .stroke();
+    }
+
+    doc
+      .fillColor(COLORS.secondary)
+      .fontSize(8)
+      .font("Helvetica-Bold")
+      .text(signer.title, x + 8, boxY + 6, { width: boxWidth - 16, align: "center" });
+
+    doc
+      .fillColor(COLORS.text)
+      .fontSize(6.5)
+      .font("Helvetica")
+      .text("Name: " + safeValue(signer.name, ""), x + 8, boxY + 18, { width: boxWidth - 16, align: "center" });
+
+    doc
+      .fillColor(COLORS.text)
+      .fontSize(6.5)
+      .font("Helvetica")
+      .text("Date: " + formatDateDDMMYYYY(signer.date), x + 8, boxY + 28, { width: boxWidth - 16, align: "center" });
+
+    doc
+      .fillColor(COLORS.text)
+      .fontSize(11)
+      .font("Helvetica")
+      .text("__________________", x + 8, boxY + 38, { width: boxWidth - 16, align: "center" });
+  });
+
+  return boxY + boxHeight + 10;
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Generate Annual Audit Report PDF
-// ---------------------------------------------------------------------------
+// ===========================================================================
+
 async function generatePdfBuffer(reportData) {
   return new Promise((resolve, reject) => {
     try {
@@ -259,49 +535,51 @@ async function generatePdfBuffer(reportData) {
       doc.on("error", (err) => reject(err));
 
       let pageNumber = 1;
-      addFooter(doc, pageNumber);
+      initPage(doc, pageNumber);
 
       // ==============================
       // Cover Page
       // ==============================
-      doc.rect(MARGIN_LEFT, MARGIN_TOP - 10, CONTENT_WIDTH, 70).fill(COLORS.headerBg);
+      drawHeader(
+        doc,
+        "KONGU ENGINEERING COLLEGE",
+        "",
+        "ANNUAL ASSET AUDIT & INVENTORY REPORT",
+        "",
+        reportData.year || new Date().getFullYear()
+      );
 
-      doc.fillColor(COLORS.headerText).fontSize(20).font("Helvetica-Bold")
-        .text("CHAINTRACK ASSET MANAGEMENT", MARGIN_LEFT + 10, MARGIN_TOP + 12);
-      doc.fillColor(COLORS.headerText).fontSize(12).font("Helvetica")
-        .text(`Annual Audit & Inventory Report (${reportData.year || new Date().getFullYear()})`,
-          MARGIN_LEFT + 10, MARGIN_TOP + 36);
+      let y = doc.y + 10;
 
-      let y = MARGIN_TOP + 70;
+      // Report Info section
+      doc
+        .fillColor(COLORS.secondary)
+        .fontSize(12)
+        .font("Helvetica-Bold")
+        .text("Report Information", MARGIN_LEFT, y);
+      y += 18;
 
-      // Metadata Box
-      doc.rect(MARGIN_LEFT, y, CONTENT_WIDTH, 50).fillAndStroke(COLORS.altRow, COLORS.border);
-      doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold");
-      doc.text("Report ID:", MARGIN_LEFT + 8, y + 8);
-      doc.fillColor(COLORS.text).font("Helvetica")
-        .text(reportData.reportId || `REP-${reportData.year}`, MARGIN_LEFT + 60, y + 8);
+      const infoPairs = [
+        ["Report ID", reportData.reportId || `REP-${reportData.year}`],
+        ["Audit Officer", reportData.auditOfficer || "Administrator"],
+        ["Audit Period", reportData.auditPeriod || `FY ${reportData.year || new Date().getFullYear()}`],
+        ["Report Date", formatDateDDMMYYYY(reportData.auditDate || reportData.generatedAt)],
+        ["Generated At", formatDate(reportData.generatedAt)],
+      ];
+      y = drawMetaGrid(doc, infoPairs, y);
 
-      doc.fillColor(COLORS.secondary).font("Helvetica-Bold");
-      doc.text("Audit Officer:", MARGIN_LEFT + 8, y + 24);
-      doc.fillColor(COLORS.text).font("Helvetica")
-        .text(reportData.auditOfficer || "Administrator", MARGIN_LEFT + 72, y + 24);
-
-      doc.fillColor(COLORS.secondary).font("Helvetica-Bold");
-      doc.text("Audit Period:", MARGIN_LEFT + 210, y + 8);
-      doc.fillColor(COLORS.text).font("Helvetica")
-        .text(reportData.auditPeriod || `FY ${reportData.year || new Date().getFullYear()}`,
-          MARGIN_LEFT + 285, y + 8);
-
-      doc.fillColor(COLORS.secondary).font("Helvetica-Bold");
-      doc.text("Generated On:", MARGIN_LEFT + 210, y + 24);
-      doc.fillColor(COLORS.text).font("Helvetica")
-        .text(formatDate(reportData.auditDate || reportData.generatedAt),
-          MARGIN_LEFT + 285, y + 24);
-
-      y += 62;
+      // Blockchain verification note
+      doc
+        .fillColor(COLORS.muted)
+        .fontSize(8)
+        .font("Helvetica-Oblique")
+        .text("This report is generated from data recorded on the Hyperledger Fabric blockchain ledger.",
+          MARGIN_LEFT, y, { width: CONTENT_WIDTH, align: "center" });
+      y += 16;
 
       // Executive Summary
       sectionHeading(doc, "Executive Asset Summary", 1);
+
       const kpis = [
         { label: "Total Asset Count", value: String(reportData.totalAssets || 0) },
         { label: "Portfolio Value", value: formatCurrency(reportData.totalPurchaseValue || 0) },
@@ -310,118 +588,147 @@ async function generatePdfBuffer(reportData) {
         { label: "Condemned Assets", value: String(reportData.condemnedAssets || 0) },
         { label: "Disposed / Retired", value: String(reportData.disposedAssets || 0) },
       ];
-      drawKpis(doc, kpis);
+      drawKpis(doc, kpis, 3);
 
       // Department Breakdown
       sectionHeading(doc, "Departmental Breakdown", 2);
       const deptSummary = reportData.departmentSummary || {};
       const deptKeys = Object.keys(deptSummary);
+
       if (deptKeys.length === 0) {
         doc.fillColor(COLORS.muted).fontSize(9).font("Helvetica").text("No department summary available", MARGIN_LEFT, doc.y);
-        doc.moveDown(1);
+        doc.moveDown(0.8);
       } else {
         const deptHeaders = ["Department", "Asset Count", "Total Value (INR)"];
+        const deptColWidths = [Math.floor(CONTENT_WIDTH * 0.45), Math.floor(CONTENT_WIDTH * 0.25), CONTENT_WIDTH - Math.floor(CONTENT_WIDTH * 0.45) - Math.floor(CONTENT_WIDTH * 0.25)];
         const deptRows = deptKeys.map((dept) => {
           const item = typeof deptSummary[dept] === "object"
             ? deptSummary[dept]
             : { totalAssets: deptSummary[dept], totalPurchaseValue: 0 };
-          return [dept, String(item.totalAssets || item.count || 0), formatCurrency(item.totalPurchaseValue || item.totalValue || 0)];
+          return [
+            safeValue(dept),
+            String(item.totalAssets || item.count || 0),
+            formatCurrency(item.totalPurchaseValue || item.totalValue || 0),
+          ];
         });
-        drawSummaryTable(doc, deptHeaders, deptRows, doc.y);
-        doc.moveDown(1);
+        y = drawWideSummaryTable(doc, deptHeaders, deptColWidths, deptRows, doc.y);
       }
 
       // Category Breakdown
       sectionHeading(doc, "Category Summary", 3);
+
+      // Build category totals from assetsList for correct value mapping
+      const catValueMap = {};
+      if (Array.isArray(reportData.assetsList)) {
+        reportData.assetsList.forEach(a => {
+          const cat = a.category || "Unknown";
+          if (!catValueMap[cat]) catValueMap[cat] = { count: 0, value: 0 };
+          catValueMap[cat].count += 1;
+          catValueMap[cat].value += Number(a.purchaseValue) || 0;
+        });
+      }
+      // Merge with provided categorySummary (which may have counts from blockchain)
       const catSummary = reportData.categorySummary || {};
-      const catKeys = Object.keys(catSummary);
+      const catKeys = Object.keys(catValueMap).length > 0
+        ? Object.keys(catValueMap)
+        : Object.keys(catSummary);
+
       if (catKeys.length === 0) {
         doc.fillColor(COLORS.muted).fontSize(9).font("Helvetica").text("No category summary available", MARGIN_LEFT, doc.y);
-        doc.moveDown(1);
+        doc.moveDown(0.8);
       } else {
         const catHeaders = ["Category", "Asset Count", "Total Value (INR)"];
+        const catColWidths = [Math.floor(CONTENT_WIDTH * 0.45), Math.floor(CONTENT_WIDTH * 0.25), CONTENT_WIDTH - Math.floor(CONTENT_WIDTH * 0.45) - Math.floor(CONTENT_WIDTH * 0.25)];
         const catRows = catKeys.map((cat) => {
-          const item = typeof catSummary[cat] === "object"
-            ? catSummary[cat]
-            : { totalAssets: catSummary[cat], totalPurchaseValue: 0 };
-          return [cat, String(item.totalAssets || item.count || 0), formatCurrency(item.totalPurchaseValue || item.totalValue || 0)];
+          let count = 0;
+          let value = 0;
+          if (catValueMap[cat]) {
+            count = catValueMap[cat].count;
+            value = catValueMap[cat].value;
+          } else {
+            const item = typeof catSummary[cat] === "object"
+              ? catSummary[cat]
+              : { totalAssets: catSummary[cat], totalPurchaseValue: 0 };
+            count = item.totalAssets || item.count || 0;
+            value = item.totalPurchaseValue || item.totalValue || 0;
+          }
+          return [
+            safeValue(cat),
+            String(count),
+            formatCurrency(value),
+          ];
         });
-        drawSummaryTable(doc, catHeaders, catRows, doc.y);
-        doc.moveDown(1);
+        y = drawWideSummaryTable(doc, catHeaders, catColWidths, catRows, doc.y);
       }
 
       // Valuation Summary
       sectionHeading(doc, "Department Valuation Summary", 4);
       const valuation = reportData.valuationData || {};
       const valKeys = Object.keys(valuation);
+
       if (valKeys.length === 0) {
         doc.fillColor(COLORS.muted).fontSize(9).font("Helvetica").text("No valuation data available", MARGIN_LEFT, doc.y);
-        doc.moveDown(1);
+        doc.moveDown(0.8);
       } else {
         const valHeaders = ["Department", "Total Assets", "Total Value (INR)", "Net Book Value (INR)"];
+        const valColWidths = [Math.floor(CONTENT_WIDTH * 0.35), Math.floor(CONTENT_WIDTH * 0.18), Math.floor(CONTENT_WIDTH * 0.23), CONTENT_WIDTH - Math.floor(CONTENT_WIDTH * 0.35) - Math.floor(CONTENT_WIDTH * 0.18) - Math.floor(CONTENT_WIDTH * 0.23)];
         const valRows = valKeys.map((key) => {
           const v = valuation[key] || {};
           return [
-            v.name || key,
+            safeValue(v.name || key),
             String(v.totalAssets || 0),
             formatCurrency(v.totalPurchaseValue || 0),
             formatCurrency(v.netBookValue || 0),
           ];
         });
-        drawSummaryTable(doc, valHeaders, valRows, doc.y);
-        doc.moveDown(1);
+        drawWideSummaryTable(doc, valHeaders, valColWidths, valRows, doc.y);
       }
 
-      // Financial / Bills Summary
+      // Financial Summary
       sectionHeading(doc, "Financial / Bills Summary", 5);
-      doc.fillColor(COLORS.secondary).fontSize(10).font("Helvetica-Bold");
-      doc.text("Total Bills:", MARGIN_LEFT, doc.y);
-      doc.fillColor(COLORS.primaryDark).text(String(reportData.totalBills || 0), MARGIN_LEFT + 80, doc.y);
-      doc.moveDown(0.5);
-
-      doc.fillColor(COLORS.secondary).font("Helvetica-Bold");
-      doc.text("Total Bill Value:", MARGIN_LEFT, doc.y);
-      doc.fillColor(COLORS.primaryDark).text(formatCurrency(reportData.totalBillValue || 0), MARGIN_LEFT + 100, doc.y);
-      doc.moveDown(0.5);
-
-      doc.fillColor(COLORS.secondary).font("Helvetica-Bold");
-      doc.text("Total Maintenance Cost:", MARGIN_LEFT, doc.y);
-      doc.fillColor(COLORS.primaryDark).text(formatCurrency(reportData.totalMaintenanceCost || 0), MARGIN_LEFT + 115, doc.y);
-      doc.moveDown(1);
+      const finPairs = [
+        ["Total Bills", String(reportData.totalBills || 0)],
+        ["Total Bill Value", formatCurrency(reportData.totalBillValue || 0)],
+        ["Total Maintenance Records", String(reportData.totalMaintenance || 0)],
+        ["Total Maintenance Cost", formatCurrency(reportData.totalMaintenanceCost || 0)],
+        ["Total Transfers", String(reportData.totalTransfers || 0)],
+        ["Total Consumables Tracked", String((reportData.consumablesList || []).length)],
+      ];
+      y = drawMetaGrid(doc, finPairs, doc.y);
 
       // Maintenance Summary
       sectionHeading(doc, "Maintenance Summary", 6);
-      doc.fillColor(COLORS.secondary).fontSize(10).font("Helvetica-Bold");
-      doc.text("Total Maintenance Records:", MARGIN_LEFT, doc.y);
-      doc.fillColor(COLORS.primaryDark).text(String(reportData.totalMaintenance || 0), MARGIN_LEFT + 140, doc.y);
-      doc.moveDown(1);
+      const mntSummaryPairs = [
+        ["Total Maintenance Records", String(reportData.totalMaintenance || 0)],
+        ["Total Maintenance Cost", formatCurrency(reportData.totalMaintenanceCost || 0)],
+      ];
+      drawMetaGrid(doc, mntSummaryPairs, doc.y);
 
       // Transfers Summary
       sectionHeading(doc, "Transfers Summary", 7);
-      doc.fillColor(COLORS.secondary).fontSize(10).font("Helvetica-Bold");
-      doc.text("Total Transfers:", MARGIN_LEFT, doc.y);
-      doc.fillColor(COLORS.primaryDark).text(String(reportData.totalTransfers || 0), MARGIN_LEFT + 90, doc.y);
+      doc
+        .fillColor(COLORS.secondary).fontSize(10).font("Helvetica-Bold")
+        .text("Total Transfers:", MARGIN_LEFT, doc.y);
+      doc.fillColor(COLORS.primaryDark).fontSize(10).font("Helvetica-Bold")
+        .text(String(reportData.totalTransfers || 0), MARGIN_LEFT + 80, doc.y);
+      doc.moveDown(0.8);
 
-      // Sign-off / Signatures
-      ensureSpace(doc, 90);
-      doc.moveDown(0.5);
+      // Important Totals — highlighted
+      const totals = [
+        { label: "Total Assets", value: String(reportData.totalAssets || 0) },
+        { label: "Total Portfolio Value", value: formatCurrency(reportData.totalPurchaseValue || 0) },
+        { label: "Total Bill Value", value: formatCurrency(reportData.totalBillValue || 0) },
+        { label: "Total Maintenance Cost", value: formatCurrency(reportData.totalMaintenanceCost || 0) },
+      ];
+      drawKpis(doc, totals, 2);
 
-      doc.rect(MARGIN_LEFT, doc.y, CONTENT_WIDTH, 75).fillAndStroke(COLORS.footerBg, COLORS.borderLight);
-
-      doc.fillColor(COLORS.secondary).fontSize(10).font("Helvetica-Bold")
-        .text("Audit Sign-off & Blockchain Verification", MARGIN_LEFT + 8, doc.y + 8);
-
-      doc.fillColor(COLORS.muted).fontSize(8).font("Helvetica")
-        .text("This document is verified and recorded on the Hyperledger Fabric ledger.",
-          MARGIN_LEFT + 8, doc.y + 10);
-
-      doc.fillColor(COLORS.text).fontSize(8).font("Helvetica")
-        .text("_________________________", MARGIN_LEFT + 8, doc.y + 22);
-      doc.text("Audit Officer Signature", MARGIN_LEFT + 8, doc.y);
-
-      doc.fillColor(COLORS.text).fontSize(8).font("Helvetica")
-        .text("_________________________", MARGIN_LEFT + 200, doc.y - 12);
-      doc.text("Department Head Approval", MARGIN_LEFT + 200, doc.y);
+      // Signatures
+      const auditDate = formatDateDDMMYYYY(reportData.auditDate || reportData.generatedAt);
+      drawSignatures(doc, [
+        { title: "Prepared By", name: reportData.auditOfficer || "Audit Officer", date: auditDate },
+        { title: "Verified By", name: reportData.auditOfficer || "Audit Officer", date: auditDate },
+        { title: "Approved By", name: "Department Head", date: auditDate },
+      ]);
 
       // ==============================
       // Detail Tables (subsequent pages)
@@ -431,124 +738,145 @@ async function generatePdfBuffer(reportData) {
       if (Array.isArray(reportData.assetsList) && reportData.assetsList.length > 0) {
         doc.addPage();
         pageNumber += 1;
-        addFooter(doc, pageNumber);
-        sectionHeading(doc, "Asset Registry Details", 8);
+        initPage(doc, pageNumber);
 
-        const assetHeaders = ["Asset ID", "Name", "Department", "Category", "Status", "Value (INR)"];
-        const assetColWidths = [85, 150, 90, 85, 70, 75];
+        drawHeader(doc, "KONGU ENGINEERING COLLEGE", "", "ASSET REGISTRY DETAILS",
+          `Report: ${reportData.reportId || ""}`, reportData.year || new Date().getFullYear());
+
+        const assetHeaders = ["Asset ID", "Name", "Department", "Category", "Status", "Purchase Value (INR)"];
+        const assetColWidths = [75, 125, 75, 70, 65, 75];
         const assetRows = reportData.assetsList.map((ast) => [
-          String(ast.assetId || ""),
-          String(ast.name || ""),
-          String(ast.department || ""),
-          String(ast.category || ""),
-          String(ast.status || ""),
+          safeValue(ast.assetId),
+          safeValue(ast.name),
+          safeValue(ast.department),
+          safeValue(ast.category),
+          safeValue(ast.status),
           formatCurrency(ast.purchaseValue || 0),
         ]);
-        drawDetailTable(doc, assetHeaders, assetColWidths, assetRows, doc.y, 7, 16);
+        drawTable(doc, assetHeaders, assetRows, doc.y, assetColWidths, { fontSize: 8, rowHeight: 18 });
       }
 
       // Maintenance Detail Table
       if (Array.isArray(reportData.maintenanceList) && reportData.maintenanceList.length > 0) {
         doc.addPage();
         pageNumber += 1;
-        addFooter(doc, pageNumber);
-        sectionHeading(doc, "Maintenance Records", 9);
+        initPage(doc, pageNumber);
+
+        drawHeader(doc, "KONGU ENGINEERING COLLEGE", "", "MAINTENANCE RECORDS",
+          `Report: ${reportData.reportId || ""}`, reportData.year || new Date().getFullYear());
 
         const mntHeaders = ["Record ID", "Asset ID", "Technician", "Date", "Cost (INR)", "Status", "Description"];
-        const mntColWidths = [80, 90, 80, 75, 65, 60, 115];
+        const mntColWidths = [75, 75, 65, 65, 55, 55, 140];
         const mntRows = reportData.maintenanceList.map((m) => [
-          String(m.recordId || m.id || ""),
-          String(m.assetId || ""),
-          String(m.technician || ""),
-          formatDate(m.maintenanceDate || m.createdAt),
+          safeValue(m.recordId || m.id),
+          safeValue(m.assetId),
+          safeValue(m.technician),
+          formatDateDDMMYYYY(m.maintenanceDate || m.createdAt),
           formatCurrency(m.cost || 0),
-          String(m.status || "Completed"),
-          String(m.description || ""),
+          safeValue(m.status || "Completed"),
+          safeValue(m.description),
         ]);
-        drawDetailTable(doc, mntHeaders, mntColWidths, mntRows, doc.y, 6, 16);
+        drawTable(doc, mntHeaders, mntRows, doc.y, mntColWidths, { fontSize: 7, rowHeight: 18 });
       }
 
       // Bills Detail Table
       if (Array.isArray(reportData.billsList) && reportData.billsList.length > 0) {
         doc.addPage();
         pageNumber += 1;
-        addFooter(doc, pageNumber);
-        sectionHeading(doc, "Bills / Purchase Records", 10);
+        initPage(doc, pageNumber);
+
+        drawHeader(doc, "KONGU ENGINEERING COLLEGE", "", "BILLS / PURCHASE RECORDS",
+          `Report: ${reportData.reportId || ""}`, reportData.year || new Date().getFullYear());
 
         const billHeaders = ["Bill ID", "Asset ID", "Vendor", "Invoice", "Amount (INR)", "Status"];
-        const billColWidths = [90, 90, 100, 80, 65, 55];
+        const billColWidths = [75, 75, 100, 75, 60, 55];
         const billRows = reportData.billsList.map((bill) => [
-          String(bill.billId || bill.id || ""),
-          String(bill.assetId || ""),
-          String(bill.vendor || ""),
-          String(bill.invoiceNumber || ""),
+          safeValue(bill.billId || bill.id),
+          safeValue(bill.assetId),
+          safeValue(bill.vendor),
+          safeValue(bill.invoiceNumber),
           formatCurrency(bill.amount || 0),
-          String(bill.paymentStatus || "Paid"),
+          safeValue(bill.paymentStatus || "Paid"),
         ]);
-        drawDetailTable(doc, billHeaders, billColWidths, billRows, doc.y, 7, 16);
+        drawTable(doc, billHeaders, billRows, doc.y, billColWidths, { fontSize: 7, rowHeight: 18 });
       }
 
       // Transfers Detail Table
       if (Array.isArray(reportData.transfersList) && reportData.transfersList.length > 0) {
         doc.addPage();
         pageNumber += 1;
-        addFooter(doc, pageNumber);
-        sectionHeading(doc, "Asset Transfers", 11);
+        initPage(doc, pageNumber);
+
+        drawHeader(doc, "KONGU ENGINEERING COLLEGE", "", "ASSET TRANSFERS",
+          `Report: ${reportData.reportId || ""}`, reportData.year || new Date().getFullYear());
 
         const trHeaders = ["Transfer ID", "Asset ID", "From Dept", "To Dept", "Date", "Status"];
-        const trColWidths = [90, 90, 75, 75, 85, 60];
+        const trColWidths = [85, 75, 70, 70, 70, 55];
         const trRows = reportData.transfersList.map((tr) => [
-          String(tr.transferId || ""),
-          String(tr.assetId || ""),
-          String(tr.fromDepartment || ""),
-          String(tr.toDepartment || ""),
-          formatDate(tr.date || tr.createdAt),
-          String(tr.status || "Completed"),
+          safeValue(tr.transferId),
+          safeValue(tr.assetId),
+          safeValue(tr.fromDepartment),
+          safeValue(tr.toDepartment),
+          formatDateDDMMYYYY(tr.date || tr.createdAt),
+          safeValue(tr.status || "Completed"),
         ]);
-        drawDetailTable(doc, trHeaders, trColWidths, trRows, doc.y, 7, 16);
+        drawTable(doc, trHeaders, trRows, doc.y, trColWidths, { fontSize: 7, rowHeight: 18 });
       }
 
       // Consumables Detail Table
       if (Array.isArray(reportData.consumablesList) && reportData.consumablesList.length > 0) {
         doc.addPage();
         pageNumber += 1;
-        addFooter(doc, pageNumber);
-        sectionHeading(doc, "Consumables Inventory", 12);
+        initPage(doc, pageNumber);
+
+        drawHeader(doc, "KONGU ENGINEERING COLLEGE", "", "CONSUMABLES INVENTORY",
+          `Report: ${reportData.reportId || ""}`, reportData.year || new Date().getFullYear());
 
         const consHeaders = ["Consumable ID", "Name", "Department", "Unit", "Current Stock", "Purchase Value (INR)", "Location"];
-        const consColWidths = [85, 120, 85, 55, 65, 75, 80];
+        const consColWidths = [70, 90, 65, 45, 55, 65, 70];
         const consRows = reportData.consumablesList.map((c) => [
-          String(c.consumableId || ""),
-          String(c.name || ""),
-          String(c.department || ""),
-          String(c.unit || ""),
-          String(c.currentStock !== undefined ? c.currentStock : ""),
+          safeValue(c.consumableId),
+          safeValue(c.name),
+          safeValue(c.department),
+          safeValue(c.unit),
+          safeValue(c.currentStock !== undefined ? c.currentStock : ""),
           formatCurrency(c.purchaseValue || 0),
-          String(c.location || ""),
+          safeValue(c.location),
         ]);
-        drawDetailTable(doc, consHeaders, consColWidths, consRows, doc.y, 6, 16);
+        drawTable(doc, consHeaders, consRows, doc.y, consColWidths, { fontSize: 7, rowHeight: 18 });
       }
 
       // Condemnation Records Table
       if (Array.isArray(reportData.condemnationList) && reportData.condemnationList.length > 0) {
         doc.addPage();
         pageNumber += 1;
-        addFooter(doc, pageNumber);
-        sectionHeading(doc, "Condemnation Records", 13);
+        initPage(doc, pageNumber);
+
+        drawHeader(doc, "KONGU ENGINEERING COLLEGE", "", "CONDEMNATION RECORDS",
+          `Report: ${reportData.reportId || ""}`, reportData.year || new Date().getFullYear());
 
         const condHeaders = ["Record ID", "Asset ID", "Department", "Reason", "Status", "Requested By", "Created At"];
-        const condColWidths = [80, 90, 75, 100, 65, 70, 75];
+        const condColWidths = [65, 65, 55, 100, 55, 65, 65];
         const condRows = reportData.condemnationList.map((c) => [
-          String(c.recordId || c.id || ""),
-          String(c.assetId || ""),
-          String(c.department || ""),
-          String(c.reason || ""),
-          String(c.status || "Pending"),
-          String(c.requestedBy || ""),
-          formatDate(c.createdAt || c.requestedAt),
+          safeValue(c.recordId || c.id),
+          safeValue(c.assetId),
+          safeValue(c.department),
+          safeValue(c.reason),
+          safeValue(c.status || "Pending"),
+          safeValue(c.requestedBy),
+          formatDateDDMMYYYY(c.createdAt || c.requestedAt),
         ]);
-        drawDetailTable(doc, condHeaders, condColWidths, condRows, doc.y, 6, 16);
+        drawTable(doc, condHeaders, condRows, doc.y, condColWidths, { fontSize: 6, rowHeight: 18 });
       }
+
+      // Blockchain verification footer note on last page
+      doc.moveDown(0.5);
+      doc
+        .fillColor(COLORS.muted)
+        .fontSize(7)
+        .font("Helvetica-Oblique")
+        .text("Document generated from Hyperledger Fabric blockchain ledger. All data is cryptographically verified and immutable.",
+          MARGIN_LEFT, doc.y, { width: CONTENT_WIDTH, align: "center" });
 
       doc.end();
     } catch (err) {
@@ -557,9 +885,10 @@ async function generatePdfBuffer(reportData) {
   });
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Generate Proforma-I (Equipment Verification) PDF
-// ---------------------------------------------------------------------------
+// ===========================================================================
+
 async function generateProformaIPdf(data) {
   return new Promise((resolve, reject) => {
     try {
@@ -570,142 +899,161 @@ async function generateProformaIPdf(data) {
       doc.on("error", (err) => reject(err));
 
       let pageNumber = 1;
-      addFooter(doc, pageNumber);
+      initPage(doc, pageNumber);
 
-      // Header Banner
-      drawHeaderBanner(doc, "KONGU ENGINEERING COLLEGE", "Departmental Stock Verification - Proforma-I");
+      drawHeader(
+        doc,
+        "KONGU ENGINEERING COLLEGE",
+        data.department || "",
+        "DEPARTMENTAL STOCK VERIFICATION",
+        "Proforma-I",
+        data.auditYear || data.financialYear || new Date().getFullYear()
+      );
 
-      let y = MARGIN_TOP + 55;
+      let y = doc.y;
 
-      // Metadata section
-      const metaFields = [
-        ["Financial Year", data.auditYear || data.financialYear || new Date().getFullYear()],
-        ["Department", data.department || "N/A"],
+      // Report Information
+      doc
+        .fillColor(COLORS.secondary)
+        .fontSize(12)
+        .font("Helvetica-Bold")
+        .text("Report Information", MARGIN_LEFT, y);
+      y += 18;
+
+      const infoPairs = [
+        ["Department", data.department || data.departmentName || "N/A"],
         ["Laboratory/Workshop", data.laboratory || data.workshop || "N/A"],
         ["Staff In-Charge", data.staffInCharge || "N/A"],
-        ["Verification Date", data.verificationDate || formatDate(data.createdAt || data.verifiedDate)],
+        ["Verification Date", formatDateDDMMYYYY(data.verificationDate || data.createdAt)],
+        ["Financial Year", data.auditYear || data.financialYear || new Date().getFullYear()],
         ["Status", data.status || "Completed"],
       ];
-      let my = y;
-      doc.fillColor(COLORS.secondary).fontSize(8.5).font("Helvetica-Bold");
-      metaFields.forEach(([label, val]) => {
-        my = drawMetaRow(doc, label, val, MARGIN_LEFT, MARGIN_LEFT + 100, my);
-      });
-      y = my + 5;
+      y = drawMetaGrid(doc, infoPairs, y);
 
       // Equipment Verification table
-      doc.fillColor(COLORS.primary).fontSize(13).font("Helvetica-Bold").text("Equipment Verification Details", MARGIN_LEFT, doc.y);
-      y = doc.y + 8;
+      sectionHeading(doc, "Equipment Verification Details", 1);
 
       const headers = [
         "Asset/Register No", "Equipment Description", "Book Stock", "Purchases",
         "Physical Stock", "Difference", "Prev Book Value", "Current Purchase",
         "Current Book", "Working Condition", "Outcome",
       ];
-      const numCols = headers.length;
-      const colWidth = Math.floor(CONTENT_WIDTH / numCols);
-      const colWidths = new Array(numCols).fill(colWidth);
-      colWidths[numCols - 1] = CONTENT_WIDTH - colWidth * (numCols - 1);
+      // Distribute columns to fit within page width
+      const colWidths = [70, 100, 45, 45, 45, 45, 55, 55, 55, 60, 60];
+      const totalW = colWidths.reduce((a, b) => a + b, 0);
+      const startX = MARGIN_LEFT + Math.max(0, Math.floor((CONTENT_WIDTH - totalW) / 2));
 
-      // Draw header row
-      doc.rect(MARGIN_LEFT, y, CONTENT_WIDTH, 20).fill(COLORS.headerBg);
-      doc.fillColor(COLORS.headerText).fontSize(7).font("Helvetica-Bold");
-      let cx = MARGIN_LEFT;
+      // Header row — uses the same pattern as drawTable for consistency
+      let docY = doc.y;
+      const headerHeight = 20;
+      doc.rect(startX, docY, totalW, headerHeight).fill(COLORS.primary);
+      doc.fillColor(COLORS.headerText).fontSize(6.5).font("Helvetica-Bold");
+      let cx = startX;
       headers.forEach((h, i) => {
-        doc.text(h, cx, y + 6, { width: colWidths[i], align: "center" });
+        doc.text(h, cx, docY + 5, { width: colWidths[i] - 1, align: "center" });
         cx += colWidths[i];
       });
-      y += 20;
+      docY += headerHeight;
+
+      const rowHeight = 16;
 
       if (Array.isArray(data.items) && data.items.length > 0) {
         doc.fillColor(COLORS.text).fontSize(6).font("Helvetica");
         data.items.forEach((item, idx) => {
-          if (y + 20 > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
+          const rowY = docY;
+
+          if (rowY + rowHeight > PRINTABLE_BOTTOM) {
             doc.addPage();
             pageNumber += 1;
-            addFooter(doc, pageNumber);
-            y = MARGIN_TOP;
-            doc.rect(MARGIN_LEFT, y, CONTENT_WIDTH, 20).fill(COLORS.headerBg);
-            doc.fillColor(COLORS.headerText).fontSize(7).font("Helvetica-Bold");
-            let hx = MARGIN_LEFT;
+            initPage(doc, pageNumber);
+            docY = MARGIN_TOP;
+            doc.rect(startX, docY, totalW, headerHeight).fill(COLORS.primary);
+            doc.fillColor(COLORS.headerText).fontSize(6.5).font("Helvetica-Bold");
+            let hx = startX;
             headers.forEach((h, i) => {
-              doc.text(h, hx, y + 6, { width: colWidths[i], align: "center" });
+              doc.text(h, hx, docY + 5, { width: colWidths[i] - 1, align: "center" });
               hx += colWidths[i];
             });
-            y += 20;
+            docY += headerHeight;
             doc.fillColor(COLORS.text).fontSize(6).font("Helvetica");
           }
 
           if (idx % 2 === 0) {
-            doc.rect(MARGIN_LEFT, y, CONTENT_WIDTH, 16).fill(COLORS.altRow);
+            doc.rect(startX, docY, totalW, rowHeight).fill(COLORS.altRow);
           }
+          doc.rect(startX, docY, totalW, rowHeight).strokeColor(COLORS.borderLight).lineWidth(0.25).stroke();
 
           const values = [
-            String(item.assetId || item.registerNumber || ""),
-            String(item.equipmentDescription || item.name || ""),
+            safeValue(item.assetId || item.registerNumber),
+            safeValue(item.equipmentDescription || item.name),
             String(item.bookStock || item.bookStockPreviousYear || 0),
             String(item.purchasesDuringYear || item.purchasedDuringYear || 0),
             String(item.physicalStock || item.actualPhysicalStock || 0),
             String(item.difference || ""),
-            String(item.previousBookValue || ""),
-            String(item.currentPurchaseValue || ""),
-            String(item.currentBookValue || ""),
-            String(item.workingCondition || ""),
-            String(item.outcome || ""),
+            safeValue(item.previousBookValue),
+            safeValue(item.currentPurchaseValue),
+            safeValue(item.currentBookValue),
+            safeValue(item.workingCondition),
+            safeValue(item.outcome),
           ];
 
-          let tx = MARGIN_LEFT;
+          const alignMap = {
+            2: "right", 3: "right", 4: "right", 5: "right",
+            6: "right", 7: "right", 8: "right"
+          };
+
+          let tx = startX;
           values.forEach((val, i) => {
-            const align = ["Book Stock", "Purchases", "Physical Stock", "Difference", "Prev Book Value", "Current Purchase", "Current Book"].includes(headers[i])
-              ? "right"
-              : "left";
-            doc.text(val, tx, y + 3, { width: colWidths[i] - 2, align });
+            doc.text(val, tx, docY + 3, { width: colWidths[i] - 2, align: alignMap[i] || "left" });
             tx += colWidths[i];
           });
-          y += 16;
+
+          docY += rowHeight;
         });
+        y = docY + 10;
       } else {
-        doc.fillColor(COLORS.muted).fontSize(9).font("Helvetica").text("No equipment items recorded", MARGIN_LEFT, y);
-        y += 20;
+        doc.fillColor(COLORS.muted).fontSize(9).font("Helvetica").text("No equipment items recorded", MARGIN_LEFT, docY);
+        y = docY + 20;
       }
 
-      y += 10;
-
       // Summary Totals
+      sectionHeading(doc, "Summary Totals", 2);
       if (Array.isArray(data.items) && data.items.length > 0) {
-        doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold").text("Totals:", MARGIN_LEFT, y);
-        const totalBookStock = data.items.reduce((s, i) => s + (Number(i.bookStock) || Number(i.bookStockPreviousYear) || 0), 0);
-        const totalPurchases = data.items.reduce((s, i) => s + (Number(i.purchasesDuringYear) || Number(i.purchasedDuringYear) || 0), 0);
-        const totalPhysical = data.items.reduce((s, i) => s + (Number(i.physicalStock) || Number(i.actualPhysicalStock) || 0), 0);
+        const totalBookStock = data.items.reduce((s, i) => s + safeNumber(i.bookStock || i.bookStockPreviousYear), 0);
+        const totalPurchases = data.items.reduce((s, i) => s + safeNumber(i.purchasesDuringYear || i.purchasedDuringYear), 0);
+        const totalPhysical = data.items.reduce((s, i) => s + safeNumber(i.physicalStock || i.actualPhysicalStock), 0);
         const totalDiff = totalBookStock + totalPurchases - totalPhysical;
-        const totalPrevBookValue = data.items.reduce((s, i) => s + (Number(i.previousBookValue) || 0), 0);
-        const totalCurrentBook = data.items.reduce((s, i) => s + (Number(i.currentBookValue) || 0), 0);
+        const totalPrevBookValue = data.items.reduce((s, i) => s + safeNumber(i.previousBookValue), 0);
+        const totalCurrentBook = data.items.reduce((s, i) => s + safeNumber(i.currentBookValue), 0);
 
-        let ty = y + 4;
-        ty = drawMetaRow(doc, "Total Book Stock", totalBookStock, MARGIN_LEFT, MARGIN_LEFT + 85, ty);
-        ty = drawMetaRow(doc, "Total Purchases", totalPurchases, MARGIN_LEFT, MARGIN_LEFT + 85, ty);
-        ty = drawMetaRow(doc, "Total Physical Stock", totalPhysical, MARGIN_LEFT, MARGIN_LEFT + 105, ty);
-        ty = drawMetaRow(doc, "Total Difference", totalDiff, MARGIN_LEFT, MARGIN_LEFT + 85, ty);
-        ty = drawMetaRow(doc, "Total Prev Book Value", formatCurrency(totalPrevBookValue), MARGIN_LEFT, MARGIN_LEFT + 110, ty);
-        ty = drawMetaRow(doc, "Total Current Book Value", formatCurrency(totalCurrentBook), MARGIN_LEFT, MARGIN_LEFT + 120, ty);
-        y = ty + 10;
+        const totalsHeaders = ["Metric", "Value"];
+        const totalsColWidths = [Math.floor(CONTENT_WIDTH * 0.45), CONTENT_WIDTH - Math.floor(CONTENT_WIDTH * 0.45)];
+        const totalsRows = [
+          ["Total Book Stock", String(totalBookStock)],
+          ["Total Purchases", String(totalPurchases)],
+          ["Total Physical Stock", String(totalPhysical)],
+          ["Total Difference", String(totalDiff)],
+          ["Total Prev Book Value", formatCurrency(totalPrevBookValue)],
+          ["Total Current Book Value", formatCurrency(totalCurrentBook)],
+        ];
+        drawWideSummaryTable(doc, totalsHeaders, totalsColWidths, totalsRows, doc.y);
+      } else {
+        doc.fillColor(COLORS.muted).fontSize(9).font("Helvetica").text("No totals to display.", MARGIN_LEFT, doc.y);
+        doc.moveDown(0.8);
       }
 
       // Verification Remarks
-      ensureSpace(doc, 80);
-      doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold").text("Verification Remarks:", MARGIN_LEFT, doc.y);
-      doc.moveDown(0.3);
-      doc.fillColor(COLORS.text).fontSize(8).font("Helvetica")
+      sectionHeading(doc, "Verification Remarks", 3);
+      doc
+        .fillColor(COLORS.text).fontSize(8.5).font("Helvetica")
         .text(data.remarks || "No remarks provided.", MARGIN_LEFT, doc.y, { width: CONTENT_WIDTH, align: "left" });
 
-      // Sign-off box
-      ensureSpace(doc, 60);
-      doc.rect(MARGIN_LEFT, doc.y, CONTENT_WIDTH, 55).fillAndStroke(COLORS.footerBg, COLORS.borderLight);
-      doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold").text("Auditor Sign-off", MARGIN_LEFT + 8, doc.y + 8);
-      doc.fillColor(COLORS.muted).fontSize(8).font("Helvetica")
-        .text("This verification is recorded on Hyperledger Fabric blockchain.", MARGIN_LEFT + 8, doc.y + 10);
-      doc.fillColor(COLORS.text).fontSize(8).font("Helvetica").text("_________________________", MARGIN_LEFT + 210, doc.y + 18);
-      doc.text("Audit Officer Signature", MARGIN_LEFT + 210, doc.y);
+      // Sign-off
+      const verifyDate = formatDateDDMMYYYY(data.createdAt);
+      drawSignatures(doc, [
+        { title: "Prepared By", name: data.staffInCharge || "Staff In-Charge", date: verifyDate },
+        { title: "Verified By", name: "Audit Officer", date: verifyDate },
+      ]);
 
       doc.end();
     } catch (err) {
@@ -714,9 +1062,10 @@ async function generateProformaIPdf(data) {
   });
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Generate Proforma-II (Equipment Condemnation) PDF
-// ---------------------------------------------------------------------------
+// ===========================================================================
+
 async function generateProformaIIPdf(data) {
   return new Promise((resolve, reject) => {
     try {
@@ -727,147 +1076,99 @@ async function generateProformaIIPdf(data) {
       doc.on("error", (err) => reject(err));
 
       let pageNumber = 1;
-      addFooter(doc, pageNumber);
+      initPage(doc, pageNumber);
 
-      drawHeaderBanner(doc, "KONGU ENGINEERING COLLEGE", "Equipment Condemnation - Proforma-II");
+      drawHeader(
+        doc,
+        "KONGU ENGINEERING COLLEGE",
+        data.department || "",
+        "EQUIPMENT CONDEMNATION REQUEST",
+        "Proforma-II",
+        data.auditYear || new Date().getFullYear()
+      );
 
-      let y = MARGIN_TOP + 55;
+      let y = doc.y;
 
-      // Metadata section
-      const metaFields = [
+      // Report Information
+      sectionHeading(doc, "Request Information", 1);
+      const infoPairs = [
         ["Record ID", data.recordId || ""],
         ["Financial Year", data.auditYear || new Date().getFullYear()],
         ["Department", data.department || "N/A"],
         ["Asset ID", data.assetId || ""],
         ["Equipment Description", data.equipmentDescription || ""],
         ["Quantity", data.quantity || 1],
-        ["Purchase Date", data.purchaseDate ? formatDate(data.purchaseDate) : "N/A"],
+        ["Purchase Date", formatDateDDMMYYYY(data.purchaseDate)],
         ["Purchase Value", data.purchaseValue ? formatCurrency(data.purchaseValue) : "N/A"],
         ["Book Value", data.bookValue ? formatCurrency(data.bookValue) : "N/A"],
         ["Condition", data.condition || ""],
         ["Status", data.status || "Pending"],
       ];
-      let my = y;
-      doc.fillColor(COLORS.secondary).fontSize(8.5).font("Helvetica-Bold");
-      metaFields.forEach(([label, val]) => {
-        my = drawMetaRow(doc, label, val, MARGIN_LEFT, MARGIN_LEFT + 110, my);
-      });
-      y = my + 5;
+      drawMetaGrid(doc, infoPairs, doc.y);
 
       // Reason for Condemnation
-      doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold").text("Reason for Condemnation:", MARGIN_LEFT, y);
-      doc.moveDown(0.2);
-      doc.fillColor(COLORS.text).fontSize(8).font("Helvetica")
+      sectionHeading(doc, "Reason for Condemnation", 2);
+      doc.fillColor(COLORS.text).fontSize(8.5).font("Helvetica")
         .text(data.reason || "No reason provided.", MARGIN_LEFT, doc.y, { width: CONTENT_WIDTH, align: "left" });
-      y = doc.y + 10;
 
       // Inspection Details
-      doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold").text("Inspection Details:", MARGIN_LEFT, y);
-      doc.moveDown(0.2);
-      doc.fillColor(COLORS.text).fontSize(8).font("Helvetica")
+      sectionHeading(doc, "Inspection Details", 3);
+      doc.fillColor(COLORS.text).fontSize(8.5).font("Helvetica")
         .text(data.inspectionDetails || "No inspection details provided.", MARGIN_LEFT, doc.y, { width: CONTENT_WIDTH, align: "left" });
-      y = doc.y + 10;
 
       // Loss Details
-      doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold").text("Loss Details:", MARGIN_LEFT, y);
-      doc.moveDown(0.2);
-      doc.fillColor(COLORS.text).fontSize(8).font("Helvetica")
+      sectionHeading(doc, "Loss Details", 4);
+      doc.fillColor(COLORS.text).fontSize(8.5).font("Helvetica")
         .text(data.lossDetails || "No loss details provided.", MARGIN_LEFT, doc.y, { width: CONTENT_WIDTH, align: "left" });
-      y = doc.y + 10;
 
       // Repair Cost
-      doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold");
-      doc.text("Repair Cost:", MARGIN_LEFT, y);
+      doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold")
+        .text("Repair Cost:", MARGIN_LEFT, doc.y);
       doc.fillColor(COLORS.text).fontSize(9).font("Helvetica")
-        .text(data.repairCost ? formatCurrency(data.repairCost) : "N/A", MARGIN_LEFT + 65, y);
-      y = doc.y + 10;
+        .text(data.repairCost ? formatCurrency(data.repairCost) : "N/A", MARGIN_LEFT + 70, doc.y);
+      doc.moveDown(0.8);
 
       // Approval Details
-      const approvalFields = [
+      sectionHeading(doc, "Approval Details", 5);
+      const approvalPairs = [
         ["Requested By", data.requestedBy || ""],
-        ["Requested At", data.createdAt ? formatDate(data.createdAt) : "N/A"],
+        ["Requested At", formatDateDDMMYYYY(data.createdAt)],
         ["Approved By", data.approvedBy || "N/A"],
-        ["Approved At", data.approvedAt ? formatDate(data.approvedAt) : "N/A"],
+        ["Approved At", formatDateDDMMYYYY(data.approvedAt)],
       ];
-      let ay = y;
-      doc.fillColor(COLORS.secondary).fontSize(8.5).font("Helvetica-Bold");
-      approvalFields.forEach(([label, val]) => {
-        ay = drawMetaRow(doc, label, val, MARGIN_LEFT, MARGIN_LEFT + 80, ay);
-      });
-      y = ay + 5;
+      drawMetaGrid(doc, approvalPairs, doc.y);
 
       // Items Table
+      sectionHeading(doc, "Condemnation Item Details", 6);
       if (Array.isArray(data.items) && data.items.length > 0) {
-        ensureSpace(doc, 200);
-        doc.fillColor(COLORS.primary).fontSize(13).font("Helvetica-Bold").text("Condemnation Item Details", MARGIN_LEFT, doc.y);
-        y = doc.y + 8;
-
         const headers = ["Asset ID", "Description", "Quantity", "Book Value (INR)", "Reason", "Condition"];
-        const colW = [90, 110, 65, 75, 110, 65];
-        const totalW = colW.reduce((a, b) => a + b, 0);
-
-        doc.rect(MARGIN_LEFT, y, totalW, 18).fill(COLORS.headerBg);
-        doc.fillColor(COLORS.headerText).fontSize(7).font("Helvetica-Bold");
-        let cx = MARGIN_LEFT;
-        headers.forEach((h, i) => {
-          doc.text(h, cx, y + 4, { width: colW[i], align: "center" });
-          cx += colW[i];
-        });
-        y += 18;
-
-        doc.fillColor(COLORS.text).fontSize(6).font(" Helvetica");
-        data.items.forEach((item, idx) => {
-          if (y + 16 > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
-            doc.addPage();
-            pageNumber += 1;
-            addFooter(doc, pageNumber);
-            y = MARGIN_TOP;
-            doc.rect(MARGIN_LEFT, y, totalW, 18).fill(COLORS.headerBg);
-            doc.fillColor(COLORS.headerText).fontSize(7).font("Helvetica-Bold");
-            let hx = MARGIN_LEFT;
-            headers.forEach((h, i) => {
-              doc.text(h, hx, y + 4, { width: colW[i], align: "center" });
-              hx += colW[i];
-            });
-            y += 18;
-            doc.fillColor(COLORS.text).fontSize(6).font("Helvetica");
-          }
-          if (idx % 2 === 0) {
-            doc.rect(MARGIN_LEFT, y, totalW, 14).fill(COLORS.altRow);
-          }
-          const vals = [
-            String(item.assetId || ""),
-            String(item.name || item.description || ""),
-            String(item.quantity || 1),
-            formatCurrency(item.bookValue || item.purchaseValue || 0),
-            String(item.reason || ""),
-            String(item.condition || ""),
-          ];
-          let tx = MARGIN_LEFT;
-          vals.forEach((v, i) => {
-            doc.text(v, tx, y + 2, { width: colW[i] - 2, align: i >= 2 && i <= 3 ? "right" : "left" });
-            tx += colW[i];
-          });
-          y += 14;
-        });
+        const colW = [80, 100, 55, 70, 100, 60];
+        const itemRows = data.items.map((item) => [
+          safeValue(item.assetId),
+          safeValue(item.name || item.description),
+          String(item.quantity || 1),
+          formatCurrency(item.bookValue || item.purchaseValue || 0),
+          safeValue(item.reason),
+          safeValue(item.condition),
+        ]);
+        drawTable(doc, headers, itemRows, doc.y, colW, { fontSize: 6, rowHeight: 16 });
+      } else {
+        doc.fillColor(COLORS.muted).fontSize(9).font("Helvetica").text("No items recorded.", MARGIN_LEFT, doc.y);
+        doc.moveDown(0.8);
       }
 
       // Remarks
-      y = doc.y + 10;
-      doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold").text("Remarks:", MARGIN_LEFT, y);
-      doc.moveDown(0.2);
-      doc.fillColor(COLORS.text).fontSize(8).font("Helvetica")
+      sectionHeading(doc, "Remarks", 7);
+      doc.fillColor(COLORS.text).fontSize(8.5).font("Helvetica")
         .text(data.remarks || "No remarks provided.", MARGIN_LEFT, doc.y, { width: CONTENT_WIDTH, align: "left" });
 
-      // Sign-off box
-      ensureSpace(doc, 60);
-      doc.rect(MARGIN_LEFT, doc.y, CONTENT_WIDTH, 55).fillAndStroke(COLORS.footerBg, COLORS.borderLight);
-      doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold").text("Authority Sign-off", MARGIN_LEFT + 8, doc.y + 8);
-      doc.fillColor(COLORS.muted).fontSize(8).font("Helvetica")
-        .text("This condemnation request is recorded on Hyperledger Fabric blockchain.",
-          MARGIN_LEFT + 8, doc.y + 10);
-      doc.fillColor(COLORS.text).fontSize(8).font("Helvetica").text("_________________________", MARGIN_LEFT + 210, doc.y + 18);
-      doc.text("Authorized Signatory", MARGIN_LEFT + 210, doc.y);
+      // Sign-off
+      const reqDate = formatDateDDMMYYYY(data.createdAt);
+      drawSignatures(doc, [
+        { title: "Requested By", name: data.requestedBy || "N/A", date: reqDate },
+        { title: "Approved By", name: data.approvedBy || "Awaiting Approval", date: formatDateDDMMYYYY(data.approvedAt) },
+        { title: "Department Head", name: "N/A", date: reqDate },
+      ]);
 
       doc.end();
     } catch (err) {
@@ -876,9 +1177,10 @@ async function generateProformaIIPdf(data) {
   });
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Generate Proforma-III (Consumable Verification) PDF
-// ---------------------------------------------------------------------------
+// ===========================================================================
+
 async function generateProformaIIIPdf(data) {
   return new Promise((resolve, reject) => {
     try {
@@ -889,75 +1191,85 @@ async function generateProformaIIIPdf(data) {
       doc.on("error", (err) => reject(err));
 
       let pageNumber = 1;
-      addFooter(doc, pageNumber);
+      initPage(doc, pageNumber);
 
-      drawHeaderBanner(doc, "KONGU ENGINEERING COLLEGE", "Consumable Verification - Proforma-III");
+      drawHeader(
+        doc,
+        "KONGU ENGINEERING COLLEGE",
+        data.department || "",
+        "CONSUMABLE STOCK VERIFICATION",
+        "Proforma-III",
+        data.auditYear || new Date().getFullYear()
+      );
 
-      let y = MARGIN_TOP + 55;
+      let y = doc.y;
 
-      // Metadata section
-      const metaFields = [
+      // Report Information
+      sectionHeading(doc, "Report Information", 1);
+      const infoPairs = [
         ["Record ID", data.recordId || ""],
         ["Financial Year", data.auditYear || new Date().getFullYear()],
         ["Department", data.department || "N/A"],
         ["Laboratory/Section", data.laboratory || "N/A"],
         ["Staff In-Charge", data.staffInCharge || "N/A"],
-        ["Verification Date", data.verificationDate || formatDate(data.createdAt)],
+        ["Verification Date", formatDateDDMMYYYY(data.verificationDate || data.createdAt)],
         ["Status", data.status || "Completed"],
       ];
-      let my = y;
-      doc.fillColor(COLORS.secondary).fontSize(8.5).font("Helvetica-Bold");
-      metaFields.forEach(([label, val]) => {
-        my = drawMetaRow(doc, label, val, MARGIN_LEFT, MARGIN_LEFT + 110, my);
-      });
-      y = my + 5;
+      drawMetaGrid(doc, infoPairs, doc.y);
 
       // Consumable Verification table
-      doc.fillColor(COLORS.primary).fontSize(13).font("Helvetica-Bold").text("Consumable Verification Details", MARGIN_LEFT, doc.y);
-      y = doc.y + 8;
+      sectionHeading(doc, "Consumable Verification Details", 2);
 
       const headers = [
         "Consumable ID", "Description", "Previous Stock", "Purchases", "Consumed",
         "Book Stock", "Physical Stock", "Difference", "Purchase Value (INR)", "Current Value (INR)", "Outcome",
       ];
-      const numCols = headers.length;
-      const colWidth = Math.floor(CONTENT_WIDTH / numCols);
-      const colWidths = new Array(numCols).fill(colWidth);
-      colWidths[numCols - 1] = CONTENT_WIDTH - colWidth * (numCols - 1);
+      const colWidths = [60, 85, 55, 45, 45, 55, 55, 50, 60, 60, 55];
+      const totalW = colWidths.reduce((a, b) => a + b, 0);
+      const startX = MARGIN_LEFT + Math.max(0, Math.floor((CONTENT_WIDTH - totalW) / 2));
 
-      doc.rect(MARGIN_LEFT, y, CONTENT_WIDTH, 20).fill(COLORS.headerBg);
-      doc.fillColor(COLORS.headerText).fontSize(6.5).font("Helvetica-Bold");
-      let cx = MARGIN_LEFT;
+      let docY = doc.y;
+      const headerHeight = 20;
+      doc.rect(startX, docY, totalW, headerHeight).fill(COLORS.primary);
+      doc.fillColor(COLORS.headerText).fontSize(6).font("Helvetica-Bold");
+      let cx = startX;
       headers.forEach((h, i) => {
-        doc.text(h, cx, y + 5, { width: colWidths[i], align: "center" });
+        doc.text(h, cx, docY + 5, { width: colWidths[i] - 1, align: "center" });
         cx += colWidths[i];
       });
-      y += 20;
+      docY += headerHeight;
+
+      const rowHeight = 16;
 
       if (Array.isArray(data.items) && data.items.length > 0) {
-        doc.fillColor(COLORS.text).fontSize(6).font("Helvetica");
+        doc.fillColor(COLORS.text).fontSize(5.5).font("Helvetica");
         data.items.forEach((item, idx) => {
-          if (y + 20 > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
+          const rowY = docY;
+
+          if (rowY + rowHeight > PRINTABLE_BOTTOM) {
             doc.addPage();
             pageNumber += 1;
-            addFooter(doc, pageNumber);
-            y = MARGIN_TOP;
-            doc.rect(MARGIN_LEFT, y, CONTENT_WIDTH, 20).fill(COLORS.headerBg);
-            doc.fillColor(COLORS.headerText).fontSize(6.5).font("Helvetica-Bold");
-            let hx = MARGIN_LEFT;
+            initPage(doc, pageNumber);
+            docY = MARGIN_TOP;
+            doc.rect(startX, docY, totalW, headerHeight).fill(COLORS.primary);
+            doc.fillColor(COLORS.headerText).fontSize(6).font("Helvetica-Bold");
+            let hx = startX;
             headers.forEach((h, i) => {
-              doc.text(h, hx, y + 5, { width: colWidths[i], align: "center" });
+              doc.text(h, hx, docY + 5, { width: colWidths[i] - 1, align: "center" });
               hx += colWidths[i];
             });
-            y += 20;
-            doc.fillColor(COLORS.text).fontSize(6).font("Helvetica");
+            docY += headerHeight;
+            doc.fillColor(COLORS.text).fontSize(5.5).font("Helvetica");
           }
+
           if (idx % 2 === 0) {
-            doc.rect(MARGIN_LEFT, y, CONTENT_WIDTH, 16).fill(COLORS.altRow);
+            doc.rect(startX, docY, totalW, rowHeight).fill(COLORS.altRow);
           }
+          doc.rect(startX, docY, totalW, rowHeight).strokeColor(COLORS.borderLight).lineWidth(0.25).stroke();
+
           const values = [
-            String(item.consumableId || ""),
-            String(item.description || item.name || ""),
+            safeValue(item.consumableId),
+            safeValue(item.description || item.name),
             String(item.previousStock || 0),
             String(item.purchasedQuantity || item.purchases || 0),
             String(item.consumedQuantity || 0),
@@ -966,33 +1278,39 @@ async function generateProformaIIIPdf(data) {
             String(item.difference || ""),
             formatCurrency(item.purchaseValue || 0),
             formatCurrency(item.currentValue || item.bookValue || 0),
-            String(item.outcome || ""),
+            safeValue(item.outcome),
           ];
-          let tx = MARGIN_LEFT;
+
+          const alignMap = {
+            2: "right", 3: "right", 4: "right", 5: "right",
+            6: "right", 7: "right"
+          };
+
+          let tx = startX;
           values.forEach((val, i) => {
-            doc.text(val, tx, y + 3, { width: colWidths[i] - 2, align: "left" });
+            doc.text(val, tx, docY + 3, { width: colWidths[i] - 2, align: alignMap[i] || "left" });
             tx += colWidths[i];
           });
-          y += 16;
+
+          docY += rowHeight;
         });
+        y = docY + 10;
       } else {
-        doc.fillColor(COLORS.muted).fontSize(9).font("Helvetica").text("No consumable items recorded", MARGIN_LEFT, y);
-        y += 20;
+        doc.fillColor(COLORS.muted).fontSize(9).font("Helvetica").text("No consumable items recorded", MARGIN_LEFT, docY);
+        y = docY + 20;
       }
 
-      y += 10;
-      doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold").text("Verification Remarks:", MARGIN_LEFT, y);
-      doc.moveDown(0.3);
-      doc.fillColor(COLORS.text).fontSize(8).font("Helvetica")
+      // Verification Remarks
+      sectionHeading(doc, "Verification Remarks", 3);
+      doc.fillColor(COLORS.text).fontSize(8.5).font("Helvetica")
         .text(data.remarks || "No remarks provided.", MARGIN_LEFT, doc.y, { width: CONTENT_WIDTH, align: "left" });
 
-      ensureSpace(doc, 60);
-      doc.rect(MARGIN_LEFT, doc.y, CONTENT_WIDTH, 55).fillAndStroke(COLORS.footerBg, COLORS.borderLight);
-      doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold").text("Auditor Sign-off", MARGIN_LEFT + 8, doc.y + 8);
-      doc.fillColor(COLORS.muted).fontSize(8).font("Helvetica")
-        .text("This verification is recorded on Hyperledger Fabric blockchain.", MARGIN_LEFT + 8, doc.y + 10);
-      doc.fillColor(COLORS.text).fontSize(8).font("Helvetica").text("_________________________", MARGIN_LEFT + 210, doc.y + 18);
-      doc.text("Audit Officer Signature", MARGIN_LEFT + 210, doc.y);
+      // Sign-off
+      const verifyDate = formatDateDDMMYYYY(data.createdAt);
+      drawSignatures(doc, [
+        { title: "Prepared By", name: data.staffInCharge || "N/A", date: verifyDate },
+        { title: "Verified By", name: "Audit Officer", date: verifyDate },
+      ]);
 
       doc.end();
     } catch (err) {
@@ -1001,9 +1319,10 @@ async function generateProformaIIIPdf(data) {
   });
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Generate Proforma-IV (Consumable Condemnation) PDF
-// ---------------------------------------------------------------------------
+// ===========================================================================
+
 async function generateProformaIVPdf(data) {
   return new Promise((resolve, reject) => {
     try {
@@ -1014,13 +1333,22 @@ async function generateProformaIVPdf(data) {
       doc.on("error", (err) => reject(err));
 
       let pageNumber = 1;
-      addFooter(doc, pageNumber);
+      initPage(doc, pageNumber);
 
-      drawHeaderBanner(doc, "KONGU ENGINEERING COLLEGE", "Consumable Condemnation - Proforma-IV");
+      drawHeader(
+        doc,
+        "KONGU ENGINEERING COLLEGE",
+        data.department || "",
+        "CONSUMABLE CONDEMNATION REQUEST",
+        "Proforma-IV",
+        data.auditYear || new Date().getFullYear()
+      );
 
-      let y = MARGIN_TOP + 55;
+      let y = doc.y;
 
-      const metaFields = [
+      // Request Information
+      sectionHeading(doc, "Request Information", 1);
+      const infoPairs = [
         ["Record ID", data.recordId || ""],
         ["Financial Year", data.auditYear || new Date().getFullYear()],
         ["Department", data.department || "N/A"],
@@ -1031,117 +1359,63 @@ async function generateProformaIVPdf(data) {
         ["Book Stock", data.bookStock || ""],
         ["Physical Stock", data.physicalStock || ""],
         ["Difference", data.difference || ""],
-        ["Purchase Date", data.purchaseDate ? formatDate(data.purchaseDate) : "N/A"],
+        ["Purchase Date", formatDateDDMMYYYY(data.purchaseDate)],
         ["Book Value", data.bookValue ? formatCurrency(data.bookValue) : "N/A"],
         ["Status", data.status || "Pending"],
       ];
-      let my = y;
-      doc.fillColor(COLORS.secondary).fontSize(8.5).font("Helvetica-Bold");
-      metaFields.forEach(([label, val]) => {
-        my = drawMetaRow(doc, label, val, MARGIN_LEFT, MARGIN_LEFT + 110, my);
-      });
-      y = my + 5;
+      drawMetaGrid(doc, infoPairs, doc.y);
 
       // Condemnation/Loss Reason
-      doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold").text("Condemnation/Loss Reason:", MARGIN_LEFT, y);
-      doc.moveDown(0.2);
-      doc.fillColor(COLORS.text).fontSize(8).font("Helvetica")
+      sectionHeading(doc, "Condemnation/Loss Reason", 2);
+      doc.fillColor(COLORS.text).fontSize(8.5).font("Helvetica")
         .text(data.reason || "No reason provided.", MARGIN_LEFT, doc.y, { width: CONTENT_WIDTH, align: "left" });
-      y = doc.y + 10;
 
       // Verification Details
-      doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold").text("Verification Details:", MARGIN_LEFT, y);
-      doc.moveDown(0.2);
-      doc.fillColor(COLORS.text).fontSize(8).font("Helvetica")
+      sectionHeading(doc, "Verification Details", 3);
+      doc.fillColor(COLORS.text).fontSize(8.5).font("Helvetica")
         .text(data.verificationDetails || "No verification details provided.", MARGIN_LEFT, doc.y, { width: CONTENT_WIDTH, align: "left" });
-      y = doc.y + 10;
 
       // Approval Details
-      const approvalFields = [
+      sectionHeading(doc, "Approval Details", 4);
+      const approvalPairs = [
         ["Requested By", data.requestedBy || ""],
-        ["Requested At", data.createdAt ? formatDate(data.createdAt) : "N/A"],
+        ["Requested At", formatDateDDMMYYYY(data.createdAt)],
         ["Approved By", data.approvedBy || "N/A"],
-        ["Approved At", data.approvedAt ? formatDate(data.approvedAt) : "N/A"],
+        ["Approved At", formatDateDDMMYYYY(data.approvedAt)],
       ];
-      let ay = y;
-      doc.fillColor(COLORS.secondary).fontSize(8.5).font("Helvetica-Bold");
-      approvalFields.forEach(([label, val]) => {
-        ay = drawMetaRow(doc, label, val, MARGIN_LEFT, MARGIN_LEFT + 80, ay);
-      });
-      y = ay + 5;
+      drawMetaGrid(doc, approvalPairs, doc.y);
 
       // Items Table
+      sectionHeading(doc, "Condemnation Item Details", 5);
       if (Array.isArray(data.items) && data.items.length > 0) {
-        ensureSpace(doc, 200);
-        doc.fillColor(COLORS.primary).fontSize(13).font("Helvetica-Bold").text("Condemnation Item Details", MARGIN_LEFT, doc.y);
-        y = doc.y + 8;
-
         const headers = ["Consumable ID", "Description", "Book Stock", "Physical Stock", "Difference", "Reason"];
-        const colW = [85, 130, 65, 70, 60, 105];
-        const totalW = colW.reduce((a, b) => a + b, 0);
-
-        doc.rect(MARGIN_LEFT, y, totalW, 18).fill(COLORS.headerBg);
-        doc.fillColor(COLORS.headerText).fontSize(7).font("Helvetica-Bold");
-        let cx = MARGIN_LEFT;
-        headers.forEach((h, i) => {
-          doc.text(h, cx, y + 4, { width: colW[i], align: "center" });
-          cx += colW[i];
-        });
-        y += 18;
-
-        doc.fillColor(COLORS.text).fontSize(6).font("Helvetica");
-        data.items.forEach((item, idx) => {
-          if (y + 16 > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
-            doc.addPage();
-            pageNumber += 1;
-            addFooter(doc, pageNumber);
-            y = MARGIN_TOP;
-            doc.rect(MARGIN_LEFT, y, totalW, 18).fill(COLORS.headerBg);
-            doc.fillColor(COLORS.headerText).fontSize(7).font("Helvetica-Bold");
-            let hx = MARGIN_LEFT;
-            headers.forEach((h, i) => {
-              doc.text(h, hx, y + 4, { width: colW[i], align: "center" });
-              hx += colW[i];
-            });
-            y += 18;
-            doc.fillColor(COLORS.text).fontSize(6).font("Helvetica");
-          }
-          if (idx % 2 === 0) {
-            doc.rect(MARGIN_LEFT, y, totalW, 14).fill(COLORS.altRow);
-          }
-          const vals = [
-            String(item.consumableId || ""),
-            String(item.description || item.name || ""),
-            String(item.bookStock || ""),
-            String(item.actualStock || item.physicalStock || ""),
-            String(item.difference || ""),
-            String(item.reason || ""),
-          ];
-          let tx = MARGIN_LEFT;
-          vals.forEach((v, i) => {
-            doc.text(v, tx, y + 2, { width: colW[i] - 2, align: i >= 2 && i <= 4 ? "right" : "left" });
-            tx += colW[i];
-          });
-          y += 14;
-        });
+        const colW = [70, 100, 55, 60, 50, 100];
+        const itemRows = data.items.map((item) => [
+          safeValue(item.consumableId),
+          safeValue(item.description || item.name),
+          safeValue(item.bookStock || ""),
+          safeValue(item.actualStock || item.physicalStock || ""),
+          safeValue(item.difference || ""),
+          safeValue(item.reason || ""),
+        ]);
+        drawTable(doc, headers, itemRows, doc.y, colW, { fontSize: 6, rowHeight: 16 });
+      } else {
+        doc.fillColor(COLORS.muted).fontSize(9).font("Helvetica").text("No items recorded.", MARGIN_LEFT, doc.y);
+        doc.moveDown(0.8);
       }
 
       // Remarks
-      y = doc.y + 10;
-      doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold").text("Remarks:", MARGIN_LEFT, y);
-      doc.moveDown(0.2);
-      doc.fillColor(COLORS.text).fontSize(8).font("Helvetica")
+      sectionHeading(doc, "Remarks", 6);
+      doc.fillColor(COLORS.text).fontSize(8.5).font("Helvetica")
         .text(data.remarks || "No remarks provided.", MARGIN_LEFT, doc.y, { width: CONTENT_WIDTH, align: "left" });
 
-      // Sign-off box
-      ensureSpace(doc, 60);
-      doc.rect(MARGIN_LEFT, doc.y, CONTENT_WIDTH, 55).fillAndStroke(COLORS.footerBg, COLORS.borderLight);
-      doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold").text("Authority Sign-off", MARGIN_LEFT + 8, doc.y + 8);
-      doc.fillColor(COLORS.muted).fontSize(8).font("Helvetica")
-        .text("This condemnation request is recorded on Hyperledger Fabric blockchain.",
-          MARGIN_LEFT + 8, doc.y + 10);
-      doc.fillColor(COLORS.text).fontSize(8).font("Helvetica").text("_________________________", MARGIN_LEFT + 210, doc.y + 18);
-      doc.text("Authorized Signatory", MARGIN_LEFT + 210, doc.y);
+      // Sign-off
+      const reqDate = formatDateDDMMYYYY(data.createdAt);
+      drawSignatures(doc, [
+        { title: "Requested By", name: data.requestedBy || "N/A", date: reqDate },
+        { title: "Approved By", name: data.approvedBy || "Awaiting Approval", date: formatDateDDMMYYYY(data.approvedAt) },
+        { title: "Department Head", name: "N/A", date: reqDate },
+      ]);
 
       doc.end();
     } catch (err) {
@@ -1150,16 +1424,16 @@ async function generateProformaIVPdf(data) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Excel generators for Proformas II, III, IV
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Excel Generators for Proformas II, III, IV
+// ===========================================================================
 
 /**
  * Generate Excel buffer for Proforma-II (Equipment Condemnation)
  */
 async function generateProformaIIExcel(data) {
   const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet('Proforma-II - Equipment Condemnation');
+  const sheet = workbook.addWorksheet('P-II Equipment Condemnation');
   sheet.columns = [
     { header: 'Field', key: 'field', width: 35 },
     { header: 'Value', key: 'value', width: 50 }
@@ -1214,7 +1488,7 @@ async function generateProformaIIExcel(data) {
  */
 async function generateProformaIIIExcel(data) {
   const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet('Proforma-III - Consumable Verification');
+  const sheet = workbook.addWorksheet('P-III Consumable Verification');
   sheet.columns = [
     { header: 'Field', key: 'field', width: 35 },
     { header: 'Value', key: 'value', width: 50 }
@@ -1259,7 +1533,7 @@ async function generateProformaIIIExcel(data) {
  */
 async function generateProformaIVExcel(data) {
   const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet('Proforma-IV - Consumable Condemnation');
+  const sheet = workbook.addWorksheet('P-IV Consumable Condemnation');
   sheet.columns = [
     { header: 'Field', key: 'field', width: 35 },
     { header: 'Value', key: 'value', width: 50 }
@@ -1307,12 +1581,10 @@ async function generateProformaIVExcel(data) {
   return workbook.xlsx.writeBuffer();
 }
 
-// ---------------------------------------------------------------------------
-// Generate Audit Report Excel buffer
-// ---------------------------------------------------------------------------
-/**
- * Generate an Excel buffer for an audit report
- */
+// ===========================================================================
+// Generate Audit Report Excel Buffer
+// ===========================================================================
+
 async function generateExcelBuffer(reportData) {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "ChainTrack Asset Management";
@@ -1346,10 +1618,10 @@ async function generateExcelBuffer(reportData) {
     { metric: "Total Consumables", value: (reportData.consumablesList || []).length }
   ]);
 
+  // Department Breakdown
   summarySheet.addRow([]);
   const deptHeaderRow = summarySheet.addRow(["Department Breakdown", "Asset Count", "Total Value (₹)"]);
   deptHeaderRow.font = { bold: true };
-
   const deptSummary = reportData.departmentSummary || {};
   Object.keys(deptSummary).forEach((dept) => {
     const item = typeof deptSummary[dept] === "object" ? deptSummary[dept] : { count: deptSummary[dept], totalValue: 0 };
@@ -1496,9 +1768,10 @@ async function generateExcelBuffer(reportData) {
   return buffer;
 }
 
-// ---------------------------------------------------------------------------
-// Module exports
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Module Exports
+// ===========================================================================
+
 module.exports = {
   generatePdfBuffer,
   generateExcelBuffer,
