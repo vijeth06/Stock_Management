@@ -498,6 +498,82 @@ async function getFinancialReport(req, res, next) {
   }
 }
 
+async function exportFinancialReportPdf(req, res, next) {
+  try {
+    const assetsRes = await getAllAssetsFromFabric();
+    let assets = assetsRes.assets || [];
+
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department && req.user.department !== "ALL") {
+      const userDept = String(req.user.department).toUpperCase();
+      assets = assets.filter(a => (a.department || '').toUpperCase() === userDept);
+    }
+
+    const totalValuation = assets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0);
+    const netBookValue = totalValuation * 0.7;
+
+    const reportData = {
+      reportId: `FIN-${Date.now()}`,
+      year: new Date().getFullYear(),
+      auditOfficer: req.user?.name || req.user?.email || 'Administrator',
+      auditPeriod: `FY ${new Date().getFullYear()}`,
+      totalAssets: assets.length,
+      totalPurchaseValue: totalValuation,
+      netBookValue: netBookValue,
+      depreciationMethod: "Straight-Line",
+      assetsList: assets,
+      generatedAt: new Date().toISOString()
+    };
+
+    const buffer = await generatePdfBuffer(reportData);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=financial-report-${new Date().getFullYear()}.pdf`);
+    return res.send(buffer);
+  } catch (error) {
+    console.error("Export financial report PDF error:", error);
+    next(error);
+  }
+}
+
+async function exportDepartmentValuationPdf(req, res, next) {
+  try {
+    const valuationRes = await getDepartmentValuationOnFabric();
+    if (!valuationRes.success) {
+      return res.status(500).json({ ok: false, error: valuationRes.error });
+    }
+
+    const reqUser = req.user;
+    let valuation = valuationRes.valuation || {};
+
+    if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department) {
+      const userDept = String(reqUser.department).toUpperCase();
+      const filtered = {};
+      for (const [key, val] of Object.entries(valuation)) {
+        if (String(val.code || key).toUpperCase() === userDept) {
+          filtered[key] = val;
+        }
+      }
+      valuation = filtered;
+    }
+
+    const reportData = {
+      reportId: `VAL-${Date.now()}`,
+      year: new Date().getFullYear(),
+      auditOfficer: req.user?.name || req.user?.email || 'Administrator',
+      auditPeriod: `FY ${new Date().getFullYear()}`,
+      valuationData: valuation,
+      generatedAt: new Date().toISOString()
+    };
+
+    const buffer = await generatePdfBuffer(reportData);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=department-valuation-${new Date().getFullYear()}.pdf`);
+    return res.send(buffer);
+  } catch (error) {
+    console.error("Export department valuation PDF error:", error);
+    next(error);
+  }
+}
+
 async function exportFullYearlyReport(req, res, next) {
   try {
     const { year, format = "pdf" } = req.query;
@@ -603,6 +679,8 @@ module.exports = {
   exportReport,
   getAnnualSummary,
   getFinancialReport,
+  exportFinancialReportPdf,
+  exportDepartmentValuationPdf,
   getDepartmentValuation,
   exportEquipmentVerificationReport,
   exportEquipmentCondemnationReport,

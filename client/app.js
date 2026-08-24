@@ -170,7 +170,10 @@ function showResult(data) {
   const outputText = JSON.stringify(data, null, 2);
   if (output) output.textContent = outputText;
   if (data.ok === false) {
-    showToast(data.error || 'Operation failed', 'error');
+    const errorMsg = data.error || 'Operation failed';
+    if (!errorMsg.includes('403')) {
+      showToast(errorMsg, 'error');
+    }
   }
 }
 
@@ -273,12 +276,12 @@ function updateUserChip() {
 
 function updateNavVisibility() {
   const navItems = document.querySelectorAll('.nav-item');
+  const isAuthorized = currentUser && (currentUser.role === 'Administrator' || currentUser.role === 'Admin' || currentUser.role === 'AuditOfficer');
   navItems.forEach(nav => {
     const page = nav.getAttribute('data-page');
-    const isAdmin = currentUser && (currentUser.role === 'Administrator' || currentUser.role === 'Admin');
     const adminOnlyPages = ['users', 'valuation', 'lifecycle', 'departments'];
     if (adminOnlyPages.includes(page)) {
-      nav.style.display = isAdmin ? '' : 'none';
+      nav.style.display = isAuthorized ? '' : 'none';
     } else {
       nav.style.display = '';
     }
@@ -286,7 +289,7 @@ function updateNavVisibility() {
 
   const generateReportBtn = document.getElementById('generateReportBtn');
   if (generateReportBtn) {
-    generateReportBtn.style.display = isAdmin ? '' : 'none';
+    generateReportBtn.style.display = isAuthorized ? '' : 'none';
   }
 }
 
@@ -332,6 +335,8 @@ async function loadDashboardPendingUsers() {
     const res = await requestJson('/api/users/pending');
     if (res.ok && Array.isArray(res.data)) {
       renderPendingUsers(res.data);
+    } else if (res.ok === false && res.error && !res.error.includes('403')) {
+      console.warn('Pending users load error:', res.error);
     }
   } else {
     panel.classList.add('hidden');
@@ -440,10 +445,12 @@ function renderAssetStatusChart(statusData) {
   const container = document.getElementById('assetStatusChart');
   if (!container) return;
 
-  const total = Object.values(statusData).reduce((sum, v) => sum + v, 0) || 1;
-  const colors = { Active: '#22c55e', Maintenance: '#f59e0b', Condemned: '#ef4444', Disposed: '#64748b' };
+  const colors = { Active: '#22c55e', Maintenance: '#f59e0b', Condemned: '#ef4444', Disposed: '#64748b', Retired: '#8b5cf6', Other: '#94a3b8' };
   
-  const entries = Object.entries(statusData);
+  // Filter out statuses with 0 count
+  const entries = Object.entries(statusData).filter(([_, count]) => count > 0);
+  const total = Object.values(statusData).reduce((sum, v) => sum + v, 0) || 1;
+  
   if (entries.length === 0) {
     container.innerHTML = '<div class="empty-state">No status data available</div>';
     return;
@@ -1241,6 +1248,32 @@ document.getElementById('exportFinancialCsvBtn')?.addEventListener('click', asyn
   }
 });
 
+document.getElementById('exportFinancialPdfBtn')?.addEventListener('click', async () => {
+  setLoading('Generating Financial Report PDF...');
+  try {
+    const token = authToken;
+    const res = await fetch('/api/reports/financial/export', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to generate PDF');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `financial-report-${new Date().getFullYear()}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast('Financial Report PDF exported successfully', 'success');
+  } catch (err) {
+    showToast(`PDF export failed: ${err.message}`, 'error');
+  }
+});
+
 // DEPARTMENTS & REPORTS & LOGIN & SEARCH
 async function loadDepartments() {
   setLoading('Loading departments...');
@@ -1468,7 +1501,7 @@ function renderBills(bills) {
       </div>
       <div>
             <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:11.5px; margin-right:6px;" onclick="requestBillDownload('${escapeHtml(b.billId)}')">Download</button>
-            <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:11.5px;" onclick="verifyBillDirect('${escapeHtml(b.billId)}', '${escapeHtml(b.documentHash || '')}')">Verify</button>
+            ${currentUser && (currentUser.role === 'Administrator' || currentUser.role === 'Admin' || currentUser.role === 'AuditOfficer') ? `<button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:11.5px;" onclick="verifyBillDirect('${escapeHtml(b.billId)}', '${escapeHtml(b.documentHash || '')}')">Verify</button>` : ''}
       </div>
     </div>
   `).join('');
@@ -1582,8 +1615,8 @@ function renderEquipmentVerifications(items) {
         </div>
       </div>
       <div style="margin-left:8px; display:flex; flex-direction:column; gap:4px;">
-         <a href="/api/proforma/equipment/verification/${escapeHtml(p.recordId || p._id)}/export?format=pdf&token=${auth.token}" target="_blank" class="btn btn-sm btn-outline">PDF</a>
-         <a href="/api/proforma/equipment/verification/${escapeHtml(p.recordId || p._id)}/export?format=excel&token=${auth.token}" target="_blank" class="btn btn-sm btn-outline">Excel</a>
+          <a href="/api/proforma/equipment/verification/${escapeHtml(p.recordId || p._id)}/export?format=pdf&token=${authToken}" target="_blank" class="btn btn-sm btn-outline">PDF</a>
+          <a href="/api/proforma/equipment/verification/${escapeHtml(p.recordId || p._id)}/export?format=excel&token=${authToken}" target="_blank" class="btn btn-sm btn-outline">Excel</a>
       </div>
     </div>
   `).join('');
@@ -1628,7 +1661,7 @@ function renderEquipmentCondemnations(items) {
         </div>
       </div>
       <div style="margin-left:8px; display:flex; flex-direction:column; gap:4px;">
-         <a href="/api/proforma/equipment/condemnation/${escapeHtml(p.recordId || p._id)}/export?format=excel&token=${auth.token}" target="_blank" class="btn btn-sm btn-outline">Excel</a>
+          <a href="/api/proforma/equipment/condemnation/${escapeHtml(p.recordId || p._id)}/export?format=excel&token=${authToken}" target="_blank" class="btn btn-sm btn-outline">Excel</a>
         ${(p.status === 'Pending') ? `
           <button type="button" class="btn btn-primary" style="padding:4px 8px; font-size:11.5px;" onclick="approveProforma2('${escapeHtml(p.recordId)}')">Approve</button>
           <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:var(--red-600);" onclick="rejectProforma2('${escapeHtml(p.recordId)}')">Reject</button>
@@ -1697,7 +1730,7 @@ function renderConsumableVerifications(items) {
         </div>
       </div>
       <div style="margin-left:8px; display:flex; flex-direction:column; gap:4px;">
-         <a href="/api/proforma/consumable/verification/${escapeHtml(p.recordId || p._id)}/export?format=excel&token=${auth.token}" target="_blank" class="btn btn-sm btn-outline">Excel</a>
+          <a href="/api/proforma/consumable/verification/${escapeHtml(p.recordId || p._id)}/export?format=excel&token=${authToken}" target="_blank" class="btn btn-sm btn-outline">Excel</a>
       </div>
     </div>
   `).join('');
@@ -1742,7 +1775,7 @@ function renderConsumableCondemnations(items) {
         </div>
       </div>
       <div style="margin-left:8px; display:flex; flex-direction:column; gap:4px;">
-         <a href="/api/proforma/consumable/condemnation/${escapeHtml(p.recordId || p._id)}/export?format=excel&token=${auth.token}" target="_blank" class="btn btn-sm btn-outline">Excel</a>
+          <a href="/api/proforma/consumable/condemnation/${escapeHtml(p.recordId || p._id)}/export?format=excel&token=${authToken}" target="_blank" class="btn btn-sm btn-outline">Excel</a>
         ${(p.status === 'Pending') ? `
           <button type="button" class="btn btn-primary" style="padding:4px 8px; font-size:11.5px;" onclick="approveProforma4('${escapeHtml(p.recordId)}')">Approve</button>
           <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11.5px; color:var(--red-600);" onclick="rejectProforma4('${escapeHtml(p.recordId)}')">Reject</button>
@@ -2535,7 +2568,6 @@ function renderValuationTable(valuation) {
     tbody.innerHTML = entries.map(([key, dept]) => {
       const nbv = dept.netBookValue || 0;
       const pw = dept.totalPurchaseValue || 0;
-      const depreciation = pw > 0 ? ((pw - nbv) / pw * 100) : 0;
       
       return `
       <tr>
@@ -2545,9 +2577,9 @@ function renderValuationTable(valuation) {
         <td>${dept.totalAssets || 0}</td>
         <td>₹${(pw).toLocaleString('en-IN')}</td>
         <td>₹${(nbv).toLocaleString('en-IN')}</td>
-        <td><span class="muted">${depreciation.toFixed(0)}%</span></td>
         <td>${dept.activeAssets || 0}</td>
         <td>${dept.maintenanceAssets || 0}</td>
+        <td>${dept.condemnedAssets || 0}</td>
         <td>${dept.disposedAssets || 0}</td>
       </tr>
       `;
@@ -2602,6 +2634,32 @@ function exportValuationExcel() {
       showToast('Failed to export valuation', 'error');
     }
   });
+}
+
+async function exportValuationPdf() {
+  setLoading('Generating Valuation Report PDF...');
+  try {
+    const token = authToken;
+    const res = await fetch('/api/reports/department-valuation/export', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to generate PDF');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `department-valuation-${new Date().getFullYear()}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast('Valuation Report PDF exported successfully', 'success');
+  } catch (err) {
+    showToast(`PDF export failed: ${err.message}`, 'error');
+  }
 }
 
 // ==========================================
@@ -2688,9 +2746,7 @@ async function loadPendingUsers() {
     renderUsersTable(res.data, 'pending');
   } else {
     renderUsersTable([], 'pending');
-    if (res.ok === false && res.error && !res.error.includes('403')) {
-      showResult(res);
-    }
+    showResult(res);
   }
 }
 
@@ -2701,9 +2757,7 @@ async function loadActiveUsers() {
     renderUsersTable(res.data, 'active');
   } else {
     renderUsersTable([], 'active');
-    if (res.ok === false && res.error && !res.error.includes('403')) {
-      showResult(res);
-    }
+    showResult(res);
   }
 }
 

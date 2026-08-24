@@ -1256,14 +1256,31 @@ class AssetManagementContract extends Contract {
         departments.forEach(dept => {
             const code = dept.code || dept.name;
             const deptAssets = assets.filter(a => (a.department || '').toUpperCase() === (code || '').toUpperCase());
+            const totalPurchaseValue = deptAssets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0);
+            let netBookValue = 0;
+            deptAssets.forEach(a => {
+                const val = Number(a.purchaseValue) || 0;
+                const status = String(a.status || '').toUpperCase();
+                if (status === 'ACTIVE' || status === 'PURCHASED') {
+                    netBookValue += val * 0.8;
+                } else if (status === 'UNDER_MAINTENANCE' || status === 'MAINTENANCE' || status === 'IN_MAINTENANCE') {
+                    netBookValue += val * 0.6;
+                } else if (status === 'CONDEMNED' || status === 'CONDEMNATION_REQUESTED') {
+                    netBookValue += val * 0.15;
+                } else if (status === 'DISPOSED' || status === 'RETIRED') {
+                    netBookValue += 0;
+                } else {
+                    netBookValue += val * 0.7;
+                }
+            });
             deptSummary[code] = {
                 code: dept.code,
                 name: dept.name,
                 isActive: dept.isActive !== false,
                 manager: dept.manager || '',
                 totalAssets: deptAssets.length,
-                totalPurchaseValue: deptAssets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0),
-                netBookValue: deptAssets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0) * 0.7,
+                totalPurchaseValue: totalPurchaseValue,
+                netBookValue: netBookValue,
                 activeAssets: deptAssets.filter(a => String(a.status || '').toUpperCase() === 'ACTIVE' || String(a.status || '').toUpperCase() === 'PURCHASED').length,
                 maintenanceAssets: deptAssets.filter(a => String(a.status || '').toUpperCase() === 'UNDER_MAINTENANCE' || String(a.status || '').toUpperCase() === 'MAINTENANCE' || String(a.status || '').toUpperCase() === 'IN_MAINTENANCE').length,
                 condemnedAssets: deptAssets.filter(a => String(a.status || '').toUpperCase() === 'CONDEMNED' || String(a.status || '').toUpperCase() === 'CONDEMNATION_REQUESTED').length,
