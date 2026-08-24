@@ -12,7 +12,7 @@ const {
   getAllConsumablesFromFabric,
   getAllTransfersFromFabric
 } = require("../services/fabricService");
-const { generatePdfBuffer, generateExcelBuffer, generateProformaIPdf, generateProformaIIPdf, generateProformaIIIPdf, generateProformaIVPdf, generateProformaIIExcel, generateProformaIIIExcel, generateProformaIVExcel } = require("../services/reportExportService");
+const { generatePdfBuffer, generateExcelBuffer, generateFinancialPdf, generateValuationPdf, generateProformaIPdf, generateProformaIIPdf, generateProformaIIIPdf, generateProformaIVPdf, generateProformaIIExcel, generateProformaIIIExcel, generateProformaIVExcel } = require("../services/reportExportService");
 
 async function generateYearlyReport(req, res, next) {
   try {
@@ -524,7 +524,7 @@ async function exportFinancialReportPdf(req, res, next) {
       generatedAt: new Date().toISOString()
     };
 
-    const buffer = await generatePdfBuffer(reportData);
+    const buffer = await generateFinancialPdf(reportData);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename=financial-report-${new Date().getFullYear()}.pdf`);
     return res.send(buffer);
@@ -564,7 +564,7 @@ async function exportDepartmentValuationPdf(req, res, next) {
       generatedAt: new Date().toISOString()
     };
 
-    const buffer = await generatePdfBuffer(reportData);
+    const buffer = await generateValuationPdf(reportData);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename=department-valuation-${new Date().getFullYear()}.pdf`);
     return res.send(buffer);
