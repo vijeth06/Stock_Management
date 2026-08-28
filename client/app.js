@@ -1248,32 +1248,6 @@ document.getElementById('exportFinancialCsvBtn')?.addEventListener('click', asyn
   }
 });
 
-document.getElementById('exportFinancialPdfBtn')?.addEventListener('click', async () => {
-  setLoading('Generating Financial Report PDF...');
-  try {
-    const token = authToken;
-    const res = await fetch('/api/reports/financial/export', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || 'Failed to generate PDF');
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `financial-report-${new Date().getFullYear()}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    showToast('Financial Report PDF exported successfully', 'success');
-  } catch (err) {
-    showToast(`PDF export failed: ${err.message}`, 'error');
-  }
-});
-
 // DEPARTMENTS & REPORTS & LOGIN & SEARCH
 async function loadDepartments() {
   setLoading('Loading departments...');
@@ -2634,32 +2608,6 @@ function exportValuationExcel() {
       showToast('Failed to export valuation', 'error');
     }
   });
-}
-
-async function exportValuationPdf() {
-  setLoading('Generating Valuation Report PDF...');
-  try {
-    const token = authToken;
-    const res = await fetch('/api/reports/department-valuation/export', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || 'Failed to generate PDF');
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `department-valuation-${new Date().getFullYear()}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    showToast('Valuation Report PDF exported successfully', 'success');
-  } catch (err) {
-    showToast(`PDF export failed: ${err.message}`, 'error');
-  }
 }
 
 // ==========================================

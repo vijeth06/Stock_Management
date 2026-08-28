@@ -294,6 +294,14 @@ async function transferAsset(req, res, next) {
       return res.status(403).json({ ok: false, error: 'Access denied to transfer this asset' });
     }
 
+    // DepartmentUser can only transfer assets within their own department
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const userDept = String(req.user.department).toUpperCase();
+      if (dept !== userDept) {
+        return res.status(403).json({ ok: false, error: 'Cannot transfer asset to another department' });
+      }
+    }
+
     const results = [];
     const transferRecords = [];
     const fromDept = String(fromDepartment || assetRes.asset.department || 'UNKNOWN').toUpperCase();

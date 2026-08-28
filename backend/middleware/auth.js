@@ -39,6 +39,10 @@ function authorize(allowedRoles) {
 }
 
 function checkDepartmentAccess(user, targetDepartment) {
+  // Consistent department-based access control for all controllers.
+  // Admin and AuditOfficer have full access to all departments.
+  // DepartmentUser can only access records belonging to their own department.
+  // Returns true if the user is authorized to access data for targetDepartment.
   if (!user) return false;
   if (user.role === "Administrator" || user.role === "AuditOfficer") {
     return true;

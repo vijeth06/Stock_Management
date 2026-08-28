@@ -212,17 +212,6 @@ async function verifyBill(req, res, next) {
       return res.status(400).json({ ok: false, error: 'billId and documentHash are required' });
     }
 
-    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
-      const billRes = await readBillFromFabric(billId);
-      if (billRes.success && billRes.bill && billRes.bill.department) {
-        const userDept = String(req.user.department).toUpperCase();
-        const billDept = String(billRes.bill.department).toUpperCase();
-        if (billDept !== userDept) {
-          return res.status(403).json({ ok: false, error: 'Access denied' });
-        }
-      }
-    }
-
     const fabricKey = assetId || billId;
     const result = await verifyBillOnFabric(fabricKey, documentHash).catch(e => ({ verified: false, error: e.message }));
     res.json({ ok: true, data: { billId, verified: !!result.verified, blockchain: result } });
