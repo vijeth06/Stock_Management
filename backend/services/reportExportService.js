@@ -979,6 +979,7 @@ async function generateValuationPdf(data) {
             doc.rect(startX, docY, totalW, rowHeight).fill(COLORS.altRow);
           }
           doc.rect(startX, docY, totalW, rowHeight).strokeColor(COLORS.borderLight).lineWidth(0.25).stroke();
+          doc.fillColor(COLORS.text).fontSize(6).font("Helvetica");
 
           const values = [
             safeValue(dept.name || dept.department || ""),
@@ -1348,10 +1349,11 @@ async function generateProformaIPdf(data) {
             doc.fillColor(COLORS.text).fontSize(6).font("Helvetica");
           }
 
-          if (idx % 2 === 0) {
+           if (idx % 2 === 0) {
             doc.rect(startX, docY, totalW, rowHeight).fill(COLORS.altRow);
           }
           doc.rect(startX, docY, totalW, rowHeight).strokeColor(COLORS.borderLight).lineWidth(0.25).stroke();
+          doc.fillColor(COLORS.text).fontSize(6).font("Helvetica");
 
           const values = [
             safeValue(item.assetId || item.registerNumber),
@@ -1683,6 +1685,7 @@ async function generateProformaIIIPdf(data) {
             doc.rect(startX, docY, totalW, rowHeight).fill(COLORS.altRow);
           }
           doc.rect(startX, docY, totalW, rowHeight).strokeColor(COLORS.borderLight).lineWidth(0.25).stroke();
+          doc.fillColor(COLORS.text).fontSize(5.5).font("Helvetica");
 
           const values = [
             safeValue(item.consumableId),
