@@ -2616,10 +2616,14 @@ function exportValuationExcel() {
       URL.revokeObjectURL(url);
       showToast('Valuation exported to CSV', 'success');
     } else {
-      showToast('Failed to export valuation', 'error');
-    }
-  });
+       showToast('Failed to export valuation', 'error');
+     }
+   });
 }
+
+document.getElementById('exportValuationPdfBtn')?.addEventListener('click', () => {
+  window.open(`/api/reports/department-valuation/export?format=pdf&token=${authToken}`, '_blank');
+});
 
 // ==========================================
 // ASSET LIFECYCLE

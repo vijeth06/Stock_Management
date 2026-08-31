@@ -12,7 +12,7 @@ const {
   getAllConsumablesFromFabric,
   getAllTransfersFromFabric
 } = require("../services/fabricService");
-const { generatePdfBuffer, generateExcelBuffer, generateFinancialReportPdf, generateFinancialReportExcel, generateProformaIPdf, generateProformaIExcel, generateProformaIIPdf, generateProformaIIIPdf, generateProformaIVPdf, generateProformaIIExcel, generateProformaIIIExcel, generateProformaIVExcel } = require("../services/reportExportService");
+const { generatePdfBuffer, generateExcelBuffer, generateFinancialReportPdf, generateFinancialReportExcel, generateValuationPdf, generateValuationExcel, generateProformaIPdf, generateProformaIExcel, generateProformaIIPdf, generateProformaIIIPdf, generateProformaIVPdf, generateProformaIIExcel, generateProformaIIIExcel, generateProformaIVExcel } = require("../services/reportExportService");
 
 async function generateYearlyReport(req, res, next) {
   try {
@@ -674,6 +674,7 @@ module.exports = {
   exportReport,
   exportFullYearlyReport,
   exportFinancialReportPdf,
+  exportValuationPdf,
   getReports,
   getReport,
   getDashboard,
@@ -709,6 +710,59 @@ async function getDepartmentValuation(req, res, next) {
     }
 
     res.json({ ok: true, data: valuation });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function exportValuationPdf(req, res, next) {
+  try {
+    const { format = "pdf" } = req.query;
+    const valuationRes = await getDepartmentValuationOnFabric();
+    if (!valuationRes.success) {
+      return res.status(500).json({ ok: false, error: valuationRes.error });
+    }
+
+    let valuation = valuationRes.valuation || {};
+
+    // Department access control
+    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+      const userDept = String(req.user.department).toUpperCase();
+      const filtered = {};
+      for (const [key, val] of Object.entries(valuation)) {
+        if (String(val.code || key).toUpperCase() === userDept) {
+          filtered[key] = val;
+        }
+      }
+      valuation = filtered;
+    }
+
+    const departments = Object.values(valuation);
+    const totalAssets = departments.reduce((s, d) => s + (Number(d.totalAssets) || 0), 0);
+    const totalPurchaseValue = departments.reduce((s, d) => s + (Number(d.totalPurchaseValue) || 0), 0);
+    const totalNetBookValue = departments.reduce((s, d) => s + (Number(d.netBookValue) || 0), 0);
+
+    const reportData = {
+      financialYear: new Date().getFullYear(),
+      departmentCount: departments.length,
+      totalAssets,
+      totalPurchaseValue,
+      netBookValue: totalNetBookValue,
+      departments,
+      generatedAt: new Date().toISOString()
+    };
+
+    if (format === "excel") {
+      const buffer = await generateValuationExcel(reportData);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename=department-valuation-${new Date().getFullYear()}.xlsx`);
+      return res.send(buffer);
+    }
+
+    const buffer = await generateValuationPdf(reportData);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename=department-valuation-${new Date().getFullYear()}.pdf`);
+    return res.send(buffer);
   } catch (err) {
     next(err);
   }

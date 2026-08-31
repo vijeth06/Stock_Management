@@ -59,9 +59,6 @@ app.get("/users/me", authenticate, (req, res) => {
 
 app.get(["/api/reports/:reportId/export", "/reports/:reportId/export"], authenticate, authorize(["Administrator", "AuditOfficer"]), async (req, res) => {
   const reportId = req.params.reportId;
-  if (reportId === "department-valuation") {
-    return res.status(404).json({ ok: false, error: "Not found" });
-  }
   try {
     if (reportId === "financial") {
       const { generateFinancialReportPdf, generateFinancialReportExcel } = require("../backend/services/reportExportService");
@@ -129,6 +126,57 @@ app.get(["/api/reports/:reportId/export", "/reports/:reportId/export"], authenti
       const buffer = await generateFinancialReportPdf(reportData);
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename=financial-report-${new Date().getFullYear()}.pdf`);
+      return res.send(buffer);
+    }
+
+    if (reportId === "department-valuation") {
+      const { generateValuationPdf, generateValuationExcel } = require("../backend/services/reportExportService");
+      const { getDepartmentValuationOnFabric } = require("../backend/services/fabricService");
+
+      const valuationRes = await getDepartmentValuationOnFabric();
+      if (!valuationRes.success) {
+        return res.status(500).json({ ok: false, error: valuationRes.error });
+      }
+
+      let valuation = valuationRes.valuation || {};
+
+      if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+        const userDept = String(req.user.department).toUpperCase();
+        const filtered = {};
+        for (const [key, val] of Object.entries(valuation)) {
+          if (String(val.code || key).toUpperCase() === userDept) {
+            filtered[key] = val;
+          }
+        }
+        valuation = filtered;
+      }
+
+      const departments = Object.values(valuation);
+      const totalAssets = departments.reduce((s, d) => s + (Number(d.totalAssets) || 0), 0);
+      const totalPurchaseValue = departments.reduce((s, d) => s + (Number(d.totalPurchaseValue) || 0), 0);
+      const totalNetBookValue = departments.reduce((s, d) => s + (Number(d.netBookValue) || 0), 0);
+
+      const reportData = {
+        financialYear: new Date().getFullYear(),
+        departmentCount: departments.length,
+        totalAssets,
+        totalPurchaseValue,
+        netBookValue: totalNetBookValue,
+        departments,
+        generatedAt: new Date().toISOString()
+      };
+
+      const format = req.query.format || "pdf";
+      if (format === "excel") {
+        const buffer = await generateValuationExcel(reportData);
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.setHeader("Content-Disposition", `attachment; filename=department-valuation-${new Date().getFullYear()}.xlsx`);
+        return res.send(buffer);
+      }
+
+      const buffer = await generateValuationPdf(reportData);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename=department-valuation-${new Date().getFullYear()}.pdf`);
       return res.send(buffer);
     }
 

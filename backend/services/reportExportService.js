@@ -886,6 +886,206 @@ async function generatePdfBuffer(reportData) {
 }
 
 // ===========================================================================
+// Generate Department Valuation Report PDF
+// ===========================================================================
+
+async function generateValuationPdf(data) {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ margin: 0, size: "A4", autoFirstPage: true });
+      const buffers = [];
+      doc.on("data", (chunk) => buffers.push(chunk));
+      doc.on("end", () => resolve(Buffer.concat(buffers)));
+      doc.on("error", (err) => reject(err));
+
+      let pageNumber = 1;
+      initPage(doc, pageNumber);
+
+      drawHeader(
+        doc,
+        "KONGU ENGINEERING COLLEGE",
+        "",
+        "DEPARTMENTAL VALUATION REPORT",
+        "",
+        data.financialYear || new Date().getFullYear()
+      );
+
+      let y = doc.y + 10;
+
+      sectionHeading(doc, "Report Information", 1);
+      const infoPairs = [
+        ["Report Date", formatDateDDMMYYYY(data.generatedAt || new Date())],
+        ["Financial Year", data.financialYear || new Date().getFullYear()],
+        ["Total Departments", String(data.departmentCount || 0)],
+        ["Total Assets", String(data.totalAssets || 0)],
+        ["Total Portfolio Value", formatCurrency(data.totalPurchaseValue || 0)],
+        ["Total Net Book Value", formatCurrency(data.netBookValue || 0)],
+      ];
+      y = drawMetaGrid(doc, infoPairs, y);
+
+      // KPIs
+      sectionHeading(doc, "Key Metrics", 2);
+      const kpis = [
+        { label: "Total Purchase Value", value: formatCurrency(data.totalPurchaseValue || 0) },
+        { label: "Net Book Value", value: formatCurrency(data.netBookValue || 0) },
+        { label: "Total Depreciation", value: formatCurrency((data.totalPurchaseValue || 0) - (data.netBookValue || 0)) },
+        { label: "Avg Depreciation %", value: data.totalPurchaseValue ? `${Math.round(((1 - data.netBookValue / data.totalPurchaseValue) * 100))}%` : "0%" },
+        { label: "Total Departments", value: String(data.departmentCount || 0) },
+        { label: "Total Assets", value: String(data.totalAssets || 0) },
+      ];
+      drawKpis(doc, kpis, 3);
+
+      // Department-wise valuation table
+      sectionHeading(doc, "Department-wise Valuation", 3);
+      const valuationData = Array.isArray(data.departments) ? data.departments : [];
+      if (valuationData.length > 0) {
+        const headers = ["Department", "Code", "Total Assets", "Purchase Value (INR)", "Net Book Value (INR)", "Active", "Maintenance", "Condemned", "Disposed"];
+        const colWidths = [55, 45, 45, 65, 65, 50, 55, 55, 50];
+        const totalW = colWidths.reduce((a, b) => a + b, 0);
+        const startX = MARGIN_LEFT + Math.max(0, Math.floor((CONTENT_WIDTH - totalW) / 2));
+
+        let docY = doc.y;
+        const headerHeight = 20;
+        doc.rect(startX, docY, totalW, headerHeight).fill(COLORS.primary);
+        doc.fillColor(COLORS.headerText).fontSize(6).font("Helvetica-Bold");
+        let cx = startX;
+        headers.forEach((h, i) => {
+          doc.text(h, cx, docY + 4, { width: colWidths[i] - 2, align: "center" });
+          cx += colWidths[i];
+        });
+        docY += headerHeight;
+
+        const rowHeight = 16;
+        doc.fillColor(COLORS.text).fontSize(6).font("Helvetica");
+        valuationData.forEach((dept, idx) => {
+          const rowY = docY;
+          if (rowY + rowHeight > PRINTABLE_BOTTOM) {
+            doc.addPage();
+            pageNumber += 1;
+            initPage(doc, pageNumber);
+            docY = MARGIN_TOP;
+            doc.rect(startX, docY, totalW, headerHeight).fill(COLORS.primary);
+            doc.fillColor(COLORS.headerText).fontSize(6).font("Helvetica-Bold");
+            let hx = startX;
+            headers.forEach((h, i) => {
+              doc.text(h, hx, docY + 4, { width: colWidths[i] - 2, align: "center" });
+              hx += colWidths[i];
+            });
+            docY += headerHeight;
+            doc.fillColor(COLORS.text).fontSize(6).font("Helvetica");
+          }
+
+          if (idx % 2 === 0) {
+            doc.rect(startX, docY, totalW, rowHeight).fill(COLORS.altRow);
+          }
+          doc.rect(startX, docY, totalW, rowHeight).strokeColor(COLORS.borderLight).lineWidth(0.25).stroke();
+
+          const values = [
+            safeValue(dept.name || dept.department || ""),
+            safeValue(dept.code || ""),
+            String(dept.totalAssets || 0),
+            formatCurrency(dept.totalPurchaseValue || 0),
+            formatCurrency(dept.netBookValue || 0),
+            String(dept.activeAssets || 0),
+            String(dept.maintenanceAssets || 0),
+            String(dept.condemnedAssets || 0),
+            String(dept.disposedAssets || 0),
+          ];
+
+          const alignMap = {
+            2: "right", 3: "right", 4: "right",
+            5: "center", 6: "center", 7: "center", 8: "center"
+          };
+          let tx = startX;
+          values.forEach((val, i) => {
+            doc.text(val, tx, docY + 3, { width: colWidths[i] - 2, align: alignMap[i] || "left" });
+            tx += colWidths[i];
+          });
+
+          docY += rowHeight;
+        });
+        y = docY + 15;
+      }
+
+      // Summary table
+      sectionHeading(doc, "Portfolio Summary", 4);
+      const summaryHeaders = ["Metric", "Amount (INR)"];
+      const summaryColWidths = [Math.floor(CONTENT_WIDTH * 0.4), CONTENT_WIDTH - Math.floor(CONTENT_WIDTH * 0.4)];
+      const summaryRows = [
+        ["Total Purchase Value", formatCurrency(data.totalPurchaseValue || 0)],
+        ["Total Net Book Value", formatCurrency(data.netBookValue || 0)],
+        ["Total Depreciation", formatCurrency((data.totalPurchaseValue || 0) - (data.netBookValue || 0))],
+        ["Number of Departments", String(data.departmentCount || 0)],
+        ["Number of Assets", String(data.totalAssets || 0)],
+      ];
+      drawWideSummaryTable(doc, summaryHeaders, summaryColWidths, summaryRows, doc.y);
+
+      doc.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+// ===========================================================================
+// Generate Department Valuation Report Excel
+// ===========================================================================
+
+async function generateValuationExcel(data) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Department Valuation');
+  sheet.columns = [
+    { header: 'Field', key: 'field', width: 35 },
+    { header: 'Value', key: 'value', width: 50 }
+  ];
+  sheet.getRow(1).font = { bold: true };
+
+  const rows = [
+    { field: 'Report Date', value: data.generatedAt || new Date().toISOString() },
+    { field: 'Financial Year', value: data.financialYear || new Date().getFullYear() },
+    { field: 'Total Departments', value: data.departmentCount || 0 },
+    { field: 'Total Assets', value: data.totalAssets || 0 },
+    { field: 'Total Purchase Value', value: data.totalPurchaseValue || 0 },
+    { field: 'Total Net Book Value', value: data.netBookValue || 0 },
+    { field: 'Total Depreciation', value: (data.totalPurchaseValue || 0) - (data.netBookValue || 0) },
+  ];
+  rows.forEach(r => sheet.addRow(r));
+
+  const valuationData = Array.isArray(data.departments) ? data.departments : [];
+  if (valuationData.length > 0) {
+    sheet.addRow([]);
+    const deptSheet = workbook.addWorksheet('Department Breakdown');
+    deptSheet.columns = [
+      { header: 'Department', key: 'name', width: 35 },
+      { header: 'Code', key: 'code', width: 10 },
+      { header: 'Total Assets', key: 'totalAssets', width: 15 },
+      { header: 'Purchase Value', key: 'purchaseValue', width: 18 },
+      { header: 'Net Book Value', key: 'netBookValue', width: 18 },
+      { header: 'Active', key: 'activeAssets', width: 10 },
+      { header: 'Maintenance', key: 'maintenanceAssets', width: 12 },
+      { header: 'Condemned', key: 'condemnedAssets', width: 12 },
+      { header: 'Disposed', key: 'disposedAssets', width: 10 },
+    ];
+    deptSheet.getRow(1).font = { bold: true };
+    valuationData.forEach(d => {
+      deptSheet.addRow({
+        name: d.name || d.department || '',
+        code: d.code || '',
+        totalAssets: d.totalAssets || 0,
+        purchaseValue: d.totalPurchaseValue || 0,
+        netBookValue: d.netBookValue || 0,
+        activeAssets: d.activeAssets || 0,
+        maintenanceAssets: d.maintenanceAssets || 0,
+        condemnedAssets: d.condemnedAssets || 0,
+        disposedAssets: d.disposedAssets || 0,
+      });
+    });
+  }
+
+  return workbook.xlsx.writeBuffer();
+}
+
+// ===========================================================================
 // Generate Financial Report PDF
 // ===========================================================================
 
@@ -2044,6 +2244,8 @@ module.exports = {
   generateExcelBuffer,
   generateFinancialReportPdf,
   generateFinancialReportExcel,
+  generateValuationPdf,
+  generateValuationExcel,
   generateProformaIPdf,
   generateProformaIExcel,
   generateProformaIIPdf,

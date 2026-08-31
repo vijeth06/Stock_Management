@@ -99,6 +99,7 @@ router.get("/reports/financial/export", authorize(["Administrator", "DepartmentU
 router.get("/dashboard", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.getDashboard);
 router.get("/reports", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.getReports);
 router.get("/reports/department-valuation", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.getDepartmentValuation);
+router.get("/reports/department-valuation/export", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.exportValuationPdf);
 router.get("/reports/export", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.exportFullYearlyReport);
 router.get("/reports/:reportId/export", authorize(["Administrator", "AuditOfficer"]), reportController.exportReport);
 router.get("/reports/:reportId", authorize(["Administrator", "AuditOfficer"]), reportController.getReport);
