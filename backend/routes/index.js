@@ -95,6 +95,7 @@ router.get("/proforma/consumable/condemnation/:recordId/export", authorize(["Adm
 router.post("/transfers", authorize(["Administrator", "DepartmentUser"]), assetController.transferAsset);
 router.get("/transfers", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), assetController.getTransfers);
 router.get("/reports/financial", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.getFinancialReport);
+router.get("/reports/financial/export", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.exportFinancialReportPdf);
 router.get("/dashboard", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.getDashboard);
 router.get("/reports", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.getReports);
 router.get("/reports/department-valuation", authorize(["Administrator", "DepartmentUser", "AuditOfficer"]), reportController.getDepartmentValuation);

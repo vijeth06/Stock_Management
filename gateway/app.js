@@ -59,10 +59,79 @@ app.get("/users/me", authenticate, (req, res) => {
 
 app.get(["/api/reports/:reportId/export", "/reports/:reportId/export"], authenticate, authorize(["Administrator", "AuditOfficer"]), async (req, res) => {
   const reportId = req.params.reportId;
-  if (reportId === "financial" || reportId === "department-valuation") {
+  if (reportId === "department-valuation") {
     return res.status(404).json({ ok: false, error: "Not found" });
   }
   try {
+    if (reportId === "financial") {
+      const { generateFinancialReportPdf, generateFinancialReportExcel } = require("../backend/services/reportExportService");
+      const { getAllAssetsFromFabric } = require("../backend/services/fabricService");
+      const assetsRes = await getAllAssetsFromFabric();
+      let assets = assetsRes.assets || [];
+
+      if (req.user && req.user.role === "DepartmentUser" && req.user.department && req.user.department !== "ALL") {
+        const userDept = String(req.user.department).toUpperCase();
+        assets = assets.filter(a => (a.department || "").toUpperCase() === userDept);
+      }
+
+      const totalPurchaseValue = assets.reduce((sum, a) => sum + (Number(a.purchaseValue) || 0), 0);
+      const netBookValue = totalPurchaseValue * 0.7;
+
+      const deptMap = {};
+      assets.forEach(a => {
+        const dept = a.department || "Unknown";
+        if (!deptMap[dept]) deptMap[dept] = { count: 0, value: 0 };
+        deptMap[dept].count += 1;
+        deptMap[dept].value += Number(a.purchaseValue) || 0;
+      });
+      const departments = Object.keys(deptMap).map(d => ({
+        department: d,
+        assetCount: deptMap[d].count,
+        totalPurchaseValue: deptMap[d].value,
+        netBookValue: deptMap[d].value * 0.7
+      }));
+
+      const catMap = {};
+      assets.forEach(a => {
+        const cat = a.category || "Uncategorized";
+        if (!catMap[cat]) catMap[cat] = { count: 0, value: 0 };
+        catMap[cat].count += 1;
+        catMap[cat].value += Number(a.purchaseValue) || 0;
+      });
+      const categories = Object.keys(catMap).map(c => ({
+        category: c,
+        assetCount: catMap[c].count,
+        totalPurchaseValue: catMap[c].value,
+        netBookValue: catMap[c].value * 0.7
+      }));
+
+      const reportData = {
+        financialYear: assets.length > 0 ? (assets[0].financialYear || new Date().getFullYear()) : new Date().getFullYear(),
+        department: req.user?.department || "All Departments",
+        assetCount: assets.length,
+        totalPurchaseValue,
+        netBookValue,
+        depreciationMethod: "Straight-Line (30%)",
+        departments,
+        categories,
+        assets,
+        generatedAt: new Date().toISOString()
+      };
+
+      const format = req.query.format || "pdf";
+      if (format === "excel") {
+        const buffer = await generateFinancialReportExcel(reportData);
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.setHeader("Content-Disposition", `attachment; filename=financial-report-${new Date().getFullYear()}.xlsx`);
+        return res.send(buffer);
+      }
+
+      const buffer = await generateFinancialReportPdf(reportData);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename=financial-report-${new Date().getFullYear()}.pdf`);
+      return res.send(buffer);
+    }
+
     const format = req.query.format || "pdf";
     const { generateYearlyReportOnFabric, getAllAssetsFromFabric } = require("../backend/services/fabricService");
 

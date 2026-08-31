@@ -886,6 +886,176 @@ async function generatePdfBuffer(reportData) {
 }
 
 // ===========================================================================
+// Generate Financial Report PDF
+// ===========================================================================
+
+async function generateFinancialReportPdf(data) {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ margin: 0, size: "A4", autoFirstPage: true });
+      const buffers = [];
+      doc.on("data", (chunk) => buffers.push(chunk));
+      doc.on("end", () => resolve(Buffer.concat(buffers)));
+      doc.on("error", (err) => reject(err));
+
+      let pageNumber = 1;
+      initPage(doc, pageNumber);
+
+      drawHeader(
+        doc,
+        "KONGU ENGINEERING COLLEGE",
+        "",
+        "FINANCIAL ASSET REPORT",
+        "",
+        data.financialYear || new Date().getFullYear()
+      );
+
+      let y = doc.y + 10;
+
+      sectionHeading(doc, "Report Information", 1);
+      const infoPairs = [
+        ["Report Date", formatDateDDMMYYYY(data.generatedAt || new Date())],
+        ["Financial Year", data.financialYear || new Date().getFullYear()],
+        ["Department", data.department || "All Departments"],
+        ["Total Assets", String(data.assetCount || 0)],
+      ];
+      y = drawMetaGrid(doc, infoPairs, y);
+
+      sectionHeading(doc, "Financial Summary", 2);
+      const kpis = [
+        { label: "Total Purchase Value", value: formatCurrency(data.totalPurchaseValue || 0) },
+        { label: "Net Book Value (70%)", value: formatCurrency(data.netBookValue || 0) },
+        { label: "Total Depreciation", value: formatCurrency((data.totalPurchaseValue || 0) - (data.netBookValue || 0)) },
+        { label: "Asset Count", value: String(data.assetCount || 0) },
+      ];
+      drawKpis(doc, kpis, 4);
+
+      // Department-wise breakdown
+      if (Array.isArray(data.departments) && data.departments.length > 0) {
+        sectionHeading(doc, "Department-wise Financial Breakdown", 3);
+        const headers = ["Department", "Asset Count", "Total Purchase (INR)", "Net Book Value (INR)"];
+        const colWidths = [Math.floor(CONTENT_WIDTH * 0.25), Math.floor(CONTENT_WIDTH * 0.18), Math.floor(CONTENT_WIDTH * 0.28), CONTENT_WIDTH - Math.floor(CONTENT_WIDTH * 0.25) - Math.floor(CONTENT_WIDTH * 0.18) - Math.floor(CONTENT_WIDTH * 0.28)];
+        const rows = data.departments.map(d => [
+          safeValue(d.department || d.name || ""),
+          String(d.assetCount || 0),
+          formatCurrency(d.totalPurchaseValue || d.purchaseValue || 0),
+          formatCurrency(d.netBookValue || ((d.totalPurchaseValue || 0) * 0.7)),
+        ]);
+        drawTable(doc, headers, rows, doc.y, colWidths, { fontSize: 7, rowHeight: 16 });
+      }
+
+      // Category-wise breakdown
+      if (Array.isArray(data.categories) && data.categories.length > 0) {
+        sectionHeading(doc, "Category-wise Financial Breakdown", 4);
+        const headers = ["Category", "Asset Count", "Total Purchase (INR)", "Net Book Value (INR)"];
+        const colWidths = [Math.floor(CONTENT_WIDTH * 0.30), Math.floor(CONTENT_WIDTH * 0.18), Math.floor(CONTENT_WIDTH * 0.25), CONTENT_WIDTH - Math.floor(CONTENT_WIDTH * 0.30) - Math.floor(CONTENT_WIDTH * 0.18) - Math.floor(CONTENT_WIDTH * 0.25)];
+        const rows = data.categories.map(c => [
+          safeValue(c.category || c.name || ""),
+          String(c.assetCount || 0),
+          formatCurrency(c.totalPurchaseValue || c.purchaseValue || 0),
+          formatCurrency(c.netBookValue || ((c.totalPurchaseValue || 0) * 0.7)),
+        ]);
+        drawTable(doc, headers, rows, doc.y, colWidths, { fontSize: 7, rowHeight: 16 });
+      }
+
+      // Asset listing
+      if (Array.isArray(data.assets) && data.assets.length > 0) {
+        sectionHeading(doc, "Asset Listing", 5);
+        const headers = ["Asset ID", "Name", "Department", "Category", "Purchase Value", "Status"];
+        const colWidths = [60, 90, 45, 55, 60, 55];
+        const rows = data.assets.map(a => [
+          safeValue(a.assetId || ""),
+          safeValue(a.name || ""),
+          safeValue(a.department || ""),
+          safeValue(a.category || ""),
+          formatCurrency(a.purchaseValue || 0),
+          safeValue(a.status || ""),
+        ]);
+        drawTable(doc, headers, rows, doc.y, colWidths, { fontSize: 6, rowHeight: 14 });
+      }
+
+      // Financial Summary table
+      sectionHeading(doc, "Financial Summary Table", 6);
+      const finHeaders = ["Metric", "Amount (INR)"];
+      const finColWidths = [Math.floor(CONTENT_WIDTH * 0.4), CONTENT_WIDTH - Math.floor(CONTENT_WIDTH * 0.4)];
+      const finRows = [
+        ["Total Purchase Value", formatCurrency(data.totalPurchaseValue || 0)],
+        ["Estimated Depreciation (30%)", formatCurrency((data.totalPurchaseValue || 0) * 0.3)],
+        ["Net Book Value (70%)", formatCurrency(data.netBookValue || 0)],
+        ["Total Asset Count", String(data.assetCount || 0)],
+      ];
+      drawWideSummaryTable(doc, finHeaders, finColWidths, finRows, doc.y);
+
+      doc.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+// ===========================================================================
+// Generate Financial Report Excel
+// ===========================================================================
+
+async function generateFinancialReportExcel(data) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Financial Report');
+  sheet.columns = [
+    { header: 'Field', key: 'field', width: 35 },
+    { header: 'Value', key: 'value', width: 50 }
+  ];
+  sheet.getRow(1).font = { bold: true };
+
+  const rows = [
+    { field: 'Report Date', value: data.generatedAt || new Date().toISOString() },
+    { field: 'Financial Year', value: data.financialYear || new Date().getFullYear() },
+    { field: 'Department', value: data.department || 'All Departments' },
+    { field: 'Total Assets', value: data.assetCount || 0 },
+    { field: 'Total Purchase Value', value: data.totalPurchaseValue || 0 },
+    { field: 'Net Book Value', value: data.netBookValue || 0 },
+    { field: 'Depreciation Method', value: 'Straight-Line (30%)' },
+  ];
+  rows.forEach(r => sheet.addRow(r));
+
+  if (Array.isArray(data.departments) && data.departments.length > 0) {
+    sheet.addRow([]);
+    sheet.addRow([]);
+    const deptSheet = workbook.addWorksheet('Department Breakdown');
+    deptSheet.columns = [
+      { header: 'Department', key: 'department', width: 25 },
+      { header: 'Asset Count', key: 'assetCount', width: 15 },
+      { header: 'Total Purchase (INR)', key: 'totalPurchaseValue', width: 20 },
+      { header: 'Net Book Value (INR)', key: 'netBookValue', width: 20 },
+    ];
+    deptSheet.getRow(1).font = { bold: true };
+    data.departments.forEach(d => {
+      deptSheet.addRow({
+        department: d.department || d.name || '',
+        assetCount: d.assetCount || 0,
+        totalPurchaseValue: d.totalPurchaseValue || d.purchaseValue || 0,
+        netBookValue: d.netBookValue || ((d.totalPurchaseValue || 0) * 0.7),
+      });
+    });
+  }
+
+  if (Array.isArray(data.assets) && data.assets.length > 0) {
+    const assetSheet = workbook.addWorksheet('Asset Listing');
+    assetSheet.columns = [
+      { header: 'Asset ID', key: 'assetId', width: 20 },
+      { header: 'Name', key: 'name', width: 30 },
+      { header: 'Department', key: 'department', width: 15 },
+      { header: 'Category', key: 'category', width: 20 },
+      { header: 'Purchase Value', key: 'purchaseValue', width: 15 },
+      { header: 'Status', key: 'status', width: 15 },
+    ];
+    assetSheet.getRow(1).font = { bold: true };
+    data.assets.forEach(a => assetSheet.addRow(a));
+  }
+
+  return workbook.xlsx.writeBuffer();
+}
+
+// ===========================================================================
 // Generate Proforma-I (Equipment Verification) PDF
 // ===========================================================================
 
@@ -922,8 +1092,8 @@ async function generateProformaIPdf(data) {
 
       const infoPairs = [
         ["Department", data.department || data.departmentName || "N/A"],
-        ["Laboratory/Workshop", data.laboratory || data.workshop || "N/A"],
-        ["Staff In-Charge", data.staffInCharge || "N/A"],
+        ["Asset ID / Register No", data.assetId || data.registerNumber || data.recordId || "N/A"],
+        ["Verifier", data.verifier || "N/A"],
         ["Verification Date", formatDateDDMMYYYY(data.verificationDate || data.createdAt)],
         ["Financial Year", data.auditYear || data.financialYear || new Date().getFullYear()],
         ["Status", data.status || "Completed"],
@@ -1014,6 +1184,37 @@ async function generateProformaIPdf(data) {
       } else {
         doc.fillColor(COLORS.muted).fontSize(9).font("Helvetica").text("No equipment items recorded", MARGIN_LEFT, docY);
         y = docY + 20;
+
+        const singleRow = [
+          safeValue(data.assetId || ""),
+          "N/A",
+          "0",
+          "0",
+          "1",
+          "0",
+          "N/A",
+          "N/A",
+          "N/A",
+          safeValue(data.condition || ""),
+          safeValue(data.status || ""),
+        ];
+        if (y + rowHeight <= PRINTABLE_BOTTOM) {
+          if (0 % 2 === 0) {
+            doc.rect(startX, y, totalW, rowHeight).fill(COLORS.altRow);
+          }
+          doc.rect(startX, y, totalW, rowHeight).strokeColor(COLORS.borderLight).lineWidth(0.25).stroke();
+          const alignMap = {
+            2: "right", 3: "right", 4: "right", 5: "right",
+            6: "right", 7: "right", 8: "right"
+          };
+          let tx = startX;
+          singleRow.forEach((val, i) => {
+            doc.fillColor(COLORS.text).fontSize(6).font("Helvetica")
+              .text(val, tx, y + 3, { width: colWidths[i] - 2, align: alignMap[i] || "left" });
+            tx += colWidths[i];
+          });
+          y += rowHeight + 10;
+        }
       }
 
       // Summary Totals
@@ -1038,20 +1239,36 @@ async function generateProformaIPdf(data) {
         ];
         drawWideSummaryTable(doc, totalsHeaders, totalsColWidths, totalsRows, doc.y);
       } else {
-        doc.fillColor(COLORS.muted).fontSize(9).font("Helvetica").text("No totals to display.", MARGIN_LEFT, doc.y);
-        doc.moveDown(0.8);
+        const totalsHeaders = ["Metric", "Value"];
+        const totalsColWidths = [Math.floor(CONTENT_WIDTH * 0.45), CONTENT_WIDTH - Math.floor(CONTENT_WIDTH * 0.45)];
+        const totalsRows = [
+          ["Asset ID / Register No", safeValue(data.assetId || data.registerNumber || data.recordId || "")],
+          ["Condition", safeValue(data.condition || "N/A")],
+          ["Verification Status", safeValue(data.status || "N/A")],
+          ["Verified", safeValue(data.verified ? "Yes" : "No")],
+        ];
+        drawWideSummaryTable(doc, totalsHeaders, totalsColWidths, totalsRows, doc.y);
       }
 
       // Verification Remarks
       sectionHeading(doc, "Verification Remarks", 3);
       doc
         .fillColor(COLORS.text).fontSize(8.5).font("Helvetica")
-        .text(data.remarks || "No remarks provided.", MARGIN_LEFT, doc.y, { width: CONTENT_WIDTH, align: "left" });
+        .text(data.verificationNotes || data.remarks || "No remarks provided.", MARGIN_LEFT, doc.y, { width: CONTENT_WIDTH, align: "left" });
+
+      // Recommendations
+      if (data.recommendations) {
+        doc.moveDown(0.5);
+        doc.fillColor(COLORS.secondary).fontSize(9).font("Helvetica-Bold")
+          .text("Recommendations:", MARGIN_LEFT, doc.y);
+        doc.fillColor(COLORS.text).fontSize(8.5).font("Helvetica")
+          .text(data.recommendations, MARGIN_LEFT, doc.y, { width: CONTENT_WIDTH, align: "left" });
+      }
 
       // Sign-off
       const verifyDate = formatDateDDMMYYYY(data.createdAt);
       drawSignatures(doc, [
-        { title: "Prepared By", name: data.staffInCharge || "Staff In-Charge", date: verifyDate },
+        { title: "Prepared By", name: data.verifier || "Staff In-Charge", date: verifyDate },
         { title: "Verified By", name: "Audit Officer", date: verifyDate },
       ]);
 
@@ -1429,6 +1646,52 @@ async function generateProformaIVPdf(data) {
 // ===========================================================================
 
 /**
+ * Generate Excel buffer for Proforma-I (Equipment Verification)
+ */
+async function generateProformaIExcel(data) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('P-I Equipment Verification');
+  sheet.columns = [
+    { header: 'Field', key: 'field', width: 35 },
+    { header: 'Value', key: 'value', width: 50 }
+  ];
+  sheet.getRow(1).font = { bold: true };
+
+  const rows = [
+    { field: 'Record ID', value: data.recordId || '' },
+    { field: 'Financial Year', value: data.auditYear || data.financialYear || '' },
+    { field: 'Department', value: data.department || '' },
+    { field: 'Asset ID', value: data.assetId || '' },
+    { field: 'Condition', value: data.condition || '' },
+    { field: 'Verification Date', value: data.verificationDate || '' },
+    { field: 'Verified', value: data.verified ? 'Yes' : 'No' },
+    { field: 'Verifier', value: data.verifier || '' },
+    { field: 'Status', value: data.status || 'Completed' },
+    { field: 'Verification Notes', value: data.verificationNotes || '' },
+    { field: 'Recommendations', value: data.recommendations || '' },
+    { field: 'Created At', value: data.createdAt || '' }
+  ];
+  rows.forEach(r => sheet.addRow({ field: r.field, value: r.value }));
+
+  if (Array.isArray(data.items) && data.items.length > 0) {
+    sheet.addRow([]);
+    const itemSheet = workbook.addWorksheet('Verification Items');
+    itemSheet.columns = [
+      { header: 'Asset ID', key: 'assetId', width: 20 },
+      { header: 'Description', key: 'name', width: 30 },
+      { header: 'Quantity', key: 'quantity', width: 10 },
+      { header: 'Book Value', key: 'bookValue', width: 15 },
+      { header: 'Condition', key: 'condition', width: 15 },
+      { header: 'Outcome', key: 'outcome', width: 20 }
+    ];
+    itemSheet.getRow(1).font = { bold: true };
+    data.items.forEach(item => itemSheet.addRow(item));
+  }
+
+  return workbook.xlsx.writeBuffer();
+}
+
+/**
  * Generate Excel buffer for Proforma-II (Equipment Condemnation)
  */
 async function generateProformaIIExcel(data) {
@@ -1779,7 +2042,10 @@ async function generateExcelBuffer(reportData) {
 module.exports = {
   generatePdfBuffer,
   generateExcelBuffer,
+  generateFinancialReportPdf,
+  generateFinancialReportExcel,
   generateProformaIPdf,
+  generateProformaIExcel,
   generateProformaIIPdf,
   generateProformaIIIPdf,
   generateProformaIVPdf,

@@ -1248,6 +1248,14 @@ document.getElementById('exportFinancialCsvBtn')?.addEventListener('click', asyn
   }
 });
 
+document.getElementById('exportFinancialPdfBtn')?.addEventListener('click', () => {
+  window.open(`/api/reports/financial/export?format=pdf&token=${authToken}`, '_blank');
+});
+
+document.getElementById('exportFinancialExcelBtn')?.addEventListener('click', () => {
+  window.open(`/api/reports/financial/export?format=excel&token=${authToken}`, '_blank');
+});
+
 // DEPARTMENTS & REPORTS & LOGIN & SEARCH
 async function loadDepartments() {
   setLoading('Loading departments...');
@@ -1635,6 +1643,7 @@ function renderEquipmentCondemnations(items) {
         </div>
       </div>
       <div style="margin-left:8px; display:flex; flex-direction:column; gap:4px;">
+          <a href="/api/proforma/equipment/condemnation/${escapeHtml(p.recordId || p._id)}/export?format=pdf&token=${authToken}" target="_blank" class="btn btn-sm btn-outline">PDF</a>
           <a href="/api/proforma/equipment/condemnation/${escapeHtml(p.recordId || p._id)}/export?format=excel&token=${authToken}" target="_blank" class="btn btn-sm btn-outline">Excel</a>
         ${(p.status === 'Pending') ? `
           <button type="button" class="btn btn-primary" style="padding:4px 8px; font-size:11.5px;" onclick="approveProforma2('${escapeHtml(p.recordId)}')">Approve</button>
@@ -1704,6 +1713,7 @@ function renderConsumableVerifications(items) {
         </div>
       </div>
       <div style="margin-left:8px; display:flex; flex-direction:column; gap:4px;">
+          <a href="/api/proforma/consumable/verification/${escapeHtml(p.recordId || p._id)}/export?format=pdf&token=${authToken}" target="_blank" class="btn btn-sm btn-outline">PDF</a>
           <a href="/api/proforma/consumable/verification/${escapeHtml(p.recordId || p._id)}/export?format=excel&token=${authToken}" target="_blank" class="btn btn-sm btn-outline">Excel</a>
       </div>
     </div>
@@ -1749,6 +1759,7 @@ function renderConsumableCondemnations(items) {
         </div>
       </div>
       <div style="margin-left:8px; display:flex; flex-direction:column; gap:4px;">
+          <a href="/api/proforma/consumable/condemnation/${escapeHtml(p.recordId || p._id)}/export?format=pdf&token=${authToken}" target="_blank" class="btn btn-sm btn-outline">PDF</a>
           <a href="/api/proforma/consumable/condemnation/${escapeHtml(p.recordId || p._id)}/export?format=excel&token=${authToken}" target="_blank" class="btn btn-sm btn-outline">Excel</a>
         ${(p.status === 'Pending') ? `
           <button type="button" class="btn btn-primary" style="padding:4px 8px; font-size:11.5px;" onclick="approveProforma4('${escapeHtml(p.recordId)}')">Approve</button>
