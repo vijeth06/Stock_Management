@@ -297,6 +297,10 @@ async function getDashboard(req, res, next) {
 }
 
 async function exportReport(req, res, next) {
+  const { reportId } = req.params;
+  if (reportId === "financial" || reportId === "department-valuation") {
+    return res.status(404).json({ ok: false, error: "Not found" });
+  }
   try {
     const { format = "pdf" } = req.query;
     const reportYear = new Date().getFullYear();

@@ -58,9 +58,12 @@ app.get("/users/me", authenticate, (req, res) => {
 });
 
 app.get(["/api/reports/:reportId/export", "/reports/:reportId/export"], authenticate, authorize(["Administrator", "AuditOfficer"]), async (req, res) => {
+  const reportId = req.params.reportId;
+  if (reportId === "financial" || reportId === "department-valuation") {
+    return res.status(404).json({ ok: false, error: "Not found" });
+  }
   try {
     const format = req.query.format || "pdf";
-    const reportId = req.params.reportId;
     const { generateYearlyReportOnFabric, getAllAssetsFromFabric } = require("../backend/services/fabricService");
 
     const reportRes = await generateYearlyReportOnFabric(new Date().getFullYear());
