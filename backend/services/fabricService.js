@@ -453,8 +453,24 @@ module.exports = {
         return res;
     },
 
-    bulkTransferAssetsOnFabric: async function(assetIds, toDepartment) {
-        const res = await invokeChaincode("BulkTransferAssets", [JSON.stringify(assetIds), toDepartment || "IT"]);
+    bulkTransferAssetsOnFabric: async function(assetIds, toDepartment, reason) {
+        const res = await invokeChaincode("BulkTransferAssets", [JSON.stringify(assetIds), toDepartment || "IT", reason || "Department transfer"]);
+        if (res.success) {
+            return { success: true, result: res.result };
+        }
+        return res;
+    },
+
+    approveTransferOnFabric: async function(transferId, approvedBy) {
+        const res = await invokeChaincode("ApproveTransferRequest", [transferId, approvedBy || "Admin"]);
+        if (res.success) {
+            return { success: true, result: res.result };
+        }
+        return res;
+    },
+
+    rejectTransferOnFabric: async function(transferId, rejectedBy) {
+        const res = await invokeChaincode("RejectTransferRequest", [transferId, rejectedBy || "Admin"]);
         if (res.success) {
             return { success: true, result: res.result };
         }

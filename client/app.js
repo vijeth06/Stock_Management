@@ -1070,24 +1070,73 @@ function renderTransfers(transfers) {
     return;
   }
 
-  container.innerHTML = transfers.map(t => `
+  container.innerHTML = transfers.map(t => {
+    const status = t.status || 'Completed';
+    const isPending = status === 'Pending';
+    let statusClass = 'ok';
+    if (status === 'Pending') statusClass = 'warn';
+    if (status === 'Rejected') statusClass = 'error';
+
+    let actionButtons = '';
+    if (isPending) {
+      const canApprove = (currentUser?.role === 'DepartmentUser' && String(t.toDepartment || '').toUpperCase() === String(currentUser?.department || '').toUpperCase())
+        || ['Administrator', 'AuditOfficer'].includes(currentUser?.role);
+      const canReject = (currentUser?.role === 'DepartmentUser' && 
+        (String(t.toDepartment || '') === String(currentUser?.department || '') || String(t.fromDepartment || '') === String(currentUser?.department || '')))
+        || ['Administrator', 'AuditOfficer'].includes(currentUser?.role);
+      
+      if (canApprove || canReject) {
+        actionButtons = `
+          <div style="margin-left:8px; display:flex; gap:4px;" id="transfer-actions-${escapeHtml(t.transferId)}">
+            ${canApprove ? `<button type="button" class="btn btn-sm btn-primary" style="padding:2px 8px; font-size:11px;" onclick="approveTransfer('${escapeHtml(t.transferId)}')">Approve</button>` : ''}
+            ${canReject ? `<button type="button" class="btn btn-sm btn-secondary" style="padding:2px 8px; font-size:11px; color:var(--red-600);" onclick="rejectTransfer('${escapeHtml(t.transferId)}')">Reject</button>` : ''}
+          </div>
+        `;
+      }
+    }
+
+    return `
     <div class="detail-row" style="padding:14px 10px; align-items:flex-start;">
       <div style="flex:1;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <strong>${escapeHtml(t.transferId || 'XFR')} — Asset ${escapeHtml(t.assetId)}</strong>
-          <span class="status-pill ok">${escapeHtml(t.status || 'Completed')}</span>
+          <span class="status-pill ${statusClass}">${escapeHtml(status)}</span>
         </div>
         <div style="margin-top:2px;">
           From <strong>${escapeHtml(t.fromDepartment || 'Origin')}</strong> &rarr; To <strong>${escapeHtml(t.toDepartment)}</strong>
-          ${t.newLocation ? ` | Location: ${escapeHtml(t.newLocation)}` : ''}
+          ${t.reason ? ` | Reason: ${escapeHtml(t.reason)}` : ''}
         </div>
         <div class="muted" style="margin-top:4px;">
-          Requested By: ${escapeHtml(t.requestedBy || 'User')} | Reason: ${escapeHtml(t.reason || 'N/A')}
+          Requested By: ${escapeHtml(t.requestedBy || 'User')} | Status: ${escapeHtml(status)}
           | Date: ${t.createdAt ? new Date(t.createdAt).toLocaleString() : new Date().toLocaleString()}
+          ${t.approvedBy ? ` | Approved By: ${escapeHtml(t.approvedBy)}` : ''}
+          ${t.rejectedBy ? ` | Rejected By: ${escapeHtml(t.rejectedBy)}` : ''}
         </div>
       </div>
+      ${actionButtons}
     </div>
-  `).join('');
+    `;
+  }).join('');
+}
+
+async function approveTransfer(transferId) {
+  setLoading('Approving transfer...');
+  const res = await requestJson(`/api/transfers/${transferId}/approve`, { method: 'POST' });
+  showResult(res);
+  if (res.ok) {
+    showToast('Transfer approved successfully', 'success');
+    loadTransfers();
+  }
+}
+
+async function rejectTransfer(transferId) {
+  setLoading('Rejecting transfer...');
+  const res = await requestJson(`/api/transfers/${transferId}/reject`, { method: 'POST' });
+  showResult(res);
+  if (res.ok) {
+    showToast('Transfer rejected', 'success');
+    loadTransfers();
+  }
 }
 
 document.getElementById('openTransferModalBtn')?.addEventListener('click', async () => {

@@ -1118,36 +1118,39 @@ class AssetManagementContract extends Contract {
 
     async GetAllTransfers(ctx) {
         console.info('=== GetAllTransfers: Getting all transfer records ===');
-        const allAssetsStr = await this.GetAllAssets(ctx);
-        const assets = JSON.parse(allAssetsStr || '[]');
+        
+        const results = await ctx.stub.getStateByRange('', '');
         const transfers = [];
-        for (const asset of assets) {
-            const iterator = await ctx.stub.getHistoryForKey(asset.assetId);
-            const history = await getAllResults(iterator);
-            for (let i = 1; i < history.length; i++) {
-                try {
-                    const prevVal = typeof history[i-1].value === 'string' ? history[i-1].value : history[i-1].value.toString('utf8');
-                    const currVal = typeof history[i].value === 'string' ? history[i].value : history[i].value.toString('utf8');
-                    const prev = prevVal ? JSON.parse(prevVal) : null;
-                    const curr = currVal ? JSON.parse(currVal) : null;
-                    if (prev && curr && prev.department && curr.department && prev.department !== curr.department) {
-                        let ts = history[i].timestamp;
-                        if (ts && typeof ts.toISOString === 'function') ts = ts.toISOString();
-                        else if (ts) ts = ts.toString();
-                        else ts = new Date().toISOString();
+        const items = await getAllResults(results);
+
+        for (const res of items) {
+            if (res.value && res.value.toString()) {
+                const key = res.key;
+                if (key.startsWith('TRF-')) {
+                    try {
+                        const transfer = JSON.parse(res.value.toString('utf8'));
                         transfers.push({
-                            transferId: `XFR-${history[i].txId || ''}-${transfers.length}`,
-                            assetId: asset.assetId,
-                            fromDepartment: prev.department,
-                            toDepartment: curr.department,
-                            status: "Completed",
-                            date: ts,
-                            createdAt: ts
+                            transferId: transfer.transferId,
+                            assetId: transfer.assetId,
+                            fromDepartment: transfer.fromDepartment,
+                            toDepartment: transfer.toDepartment,
+                            status: transfer.status || 'Pending',
+                            reason: transfer.reason || '',
+                            requestedBy: transfer.requestedBy || '',
+                            requestedAt: transfer.requestedAt || transfer.createdAt,
+                            approvedBy: transfer.approvedBy || null,
+                            approvedAt: transfer.approvedAt || null,
+                            rejectedBy: transfer.rejectedBy || null,
+                            rejectedAt: transfer.rejectedAt || null,
+                            createdAt: transfer.createdAt,
+                            updatedAt: transfer.updatedAt
                         });
-                    }
-                } catch(e) { continue; }
+                    } catch(e) { continue; }
+                }
             }
         }
+
+        transfers.sort((a, b) => new Date(b.createdAt || b.requestedAt) - new Date(a.createdAt || a.requestedAt));
         return JSON.stringify(transfers);
     }
 
@@ -1516,8 +1519,8 @@ class AssetManagementContract extends Contract {
         });
     }
 
-    async BulkTransferAssets(ctx, assetIdsJson, toDepartment) {
-        console.info(`=== BulkTransferAssets: Transferring assets to ${toDepartment} ===`);
+    async BulkTransferAssets(ctx, assetIdsJson, toDepartment, reason) {
+        console.info(`=== BulkTransferAssets: Creating transfer requests to ${toDepartment} ===`);
 
         const assetIds = JSON.parse(assetIdsJson);
         const dept = (toDepartment || 'IT').toUpperCase();
@@ -1539,11 +1542,27 @@ class AssetManagementContract extends Contract {
                 }
 
                 const fromDept = asset.department;
-                asset.department = dept;
-                asset.updatedAt = new Date().toISOString();
-                await ctx.stub.putState(assetId, Buffer.from(JSON.stringify(asset)));
-                try { ctx.stub.setEvent('AssetTransferred', Buffer.from(JSON.stringify({ assetId, fromDepartment: fromDept, toDepartment: dept }))); } catch(e) {}
-                results.push({ assetId, success: true, fromDepartment: fromDept, toDepartment: dept });
+                const transferId = `TRF-${Date.now()}-${results.length}`;
+                const now = new Date().toISOString();
+
+                const transferRequest = {
+                    transferId,
+                    assetId,
+                    fromDepartment: String(fromDept || 'UNKNOWN').toUpperCase(),
+                    toDepartment: dept,
+                    reason: reason || 'Department transfer',
+                    status: 'Pending',
+                    requestedBy: 'DepartmentUser',
+                    requestedAt: now,
+                    approvedBy: null,
+                    approvedAt: null,
+                    createdAt: now,
+                    updatedAt: now
+                };
+
+                await ctx.stub.putState(transferId, Buffer.from(JSON.stringify(transferRequest)));
+                try { ctx.stub.setEvent('TransferRequested', Buffer.from(JSON.stringify(transferRequest))); } catch(e) {}
+                results.push({ assetId, success: true, transferId, fromDepartment: fromDept, toDepartment: dept });
             } catch (e) {
                 results.push({ assetId, success: false, error: e.message });
             }
@@ -1554,6 +1573,76 @@ class AssetManagementContract extends Contract {
             failed: results.filter(r => !r.success).length,
             total: assetIds.length,
             results
+        });
+    }
+
+    async ApproveTransferRequest(ctx, transferId, approvedBy) {
+        console.info(`=== ApproveTransferRequest: Approving ${transferId} ===`);
+
+        const transferJSON = await ctx.stub.getState(transferId);
+        if (!transferJSON || transferJSON.length === 0) {
+            throw new Error('Transfer request not found');
+        }
+
+        const transfer = JSON.parse(transferJSON.toString());
+        if (transfer.status !== 'Pending') {
+            throw new Error(`Transfer request is in ${transfer.status} status, cannot approve`);
+        }
+
+        const assetJSON = await ctx.stub.getState(transfer.assetId);
+        if (!assetJSON || assetJSON.length === 0) {
+            throw new Error('Asset not found');
+        }
+
+        const asset = JSON.parse(assetJSON.toString());
+        const fromDept = asset.department;
+        asset.department = transfer.toDepartment;
+        asset.updatedAt = new Date().toISOString();
+        await ctx.stub.putState(transfer.assetId, Buffer.from(JSON.stringify(asset)));
+
+        transfer.status = 'Approved';
+        transfer.approvedBy = approvedBy || 'Admin';
+        transfer.approvedAt = new Date().toISOString();
+        transfer.updatedAt = transfer.approvedAt;
+        await ctx.stub.putState(transferId, Buffer.from(JSON.stringify(transfer)));
+
+        try { ctx.stub.setEvent('TransferApproved', Buffer.from(JSON.stringify(transfer))); } catch(e) {}
+
+        return JSON.stringify({
+            success: true,
+            transferId,
+            assetId: transfer.assetId,
+            fromDepartment: fromDept,
+            toDepartment: transfer.toDepartment,
+            approvedBy: transfer.approvedBy
+        });
+    }
+
+    async RejectTransferRequest(ctx, transferId, rejectedBy) {
+        console.info(`=== RejectTransferRequest: Rejecting ${transferId} ===`);
+
+        const transferJSON = await ctx.stub.getState(transferId);
+        if (!transferJSON || transferJSON.length === 0) {
+            throw new Error('Transfer request not found');
+        }
+
+        const transfer = JSON.parse(transferJSON.toString());
+        if (transfer.status !== 'Pending') {
+            throw new Error(`Transfer request is in ${transfer.status} status, cannot reject`);
+        }
+
+        transfer.status = 'Rejected';
+        transfer.rejectedBy = rejectedBy || 'Admin';
+        transfer.rejectedAt = new Date().toISOString();
+        transfer.updatedAt = transfer.rejectedAt;
+        await ctx.stub.putState(transferId, Buffer.from(JSON.stringify(transfer)));
+
+        try { ctx.stub.setEvent('TransferRejected', Buffer.from(JSON.stringify(transfer))); } catch(e) {}
+
+        return JSON.stringify({
+            success: true,
+            transferId,
+            rejectedBy: transfer.rejectedBy
         });
     }
 

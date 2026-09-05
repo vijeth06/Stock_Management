@@ -93,18 +93,8 @@ async function getDepartments(req, res, next) {
       departments = departments.map(d => ({ ...d, assetCount: 0 }));
     }
 
-    // DepartmentUser can only see their own department (full details)
-    if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
-      const userDept = String(req.user.department).toUpperCase();
-      departments = departments.map(d => ({
-        ...d,
-        assetCount: d.assetCount || 0
-      })).filter(d => {
-        const deptCode = (d.code || '').toUpperCase();
-        if (deptCode === userDept) return true;
-        return false;
-      });
-    }
+    // DepartmentUser can see all departments (needed for asset transfer destination selection)
+    // but asset listing endpoints will filter for their own department
 
     res.json({
       ok: true,

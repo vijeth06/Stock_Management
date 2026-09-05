@@ -1,4 +1,4 @@
-const { createAssetOnFabric, updateAssetOnFabric, readAssetFromFabric, getAllAssetsFromFabric, getAssetHistoryFromFabric, getAssetLifecycleOnFabric, getAssetAuditTrailOnFabric, bulkImportAssetsOnFabric, bulkTransferAssetsOnFabric, getAllCondemnationRecordsFromFabric, getAllTransfersFromFabric } = require('../services/fabricService');
+const { createAssetOnFabric, updateAssetOnFabric, readAssetFromFabric, getAllAssetsFromFabric, getAssetHistoryFromFabric, getAssetLifecycleOnFabric, getAssetAuditTrailOnFabric, bulkImportAssetsOnFabric, bulkTransferAssetsOnFabric, getAllCondemnationRecordsFromFabric, getAllTransfersFromFabric, approveTransferOnFabric, rejectTransferOnFabric } = require('../services/fabricService');
 const { checkDepartmentAccess } = require('../middleware/auth');
 
 function getUserDepartment(req) {
@@ -281,7 +281,7 @@ async function getAssetHistory(req, res, next) {
 
 async function transferAsset(req, res, next) {
   try {
-    const { assetId, toDepartment, newLocation, fromDepartment } = req.body || {};
+    const { assetId, toDepartment, newLocation, fromDepartment, reason } = req.body || {};
     if (!assetId || !toDepartment) return res.status(400).json({ ok: false, error: 'assetId and toDepartment required' });
     const dept = String(toDepartment).trim().toUpperCase();
 
@@ -294,39 +294,95 @@ async function transferAsset(req, res, next) {
       return res.status(403).json({ ok: false, error: 'Access denied to transfer this asset' });
     }
 
-    // DepartmentUser can only transfer assets within their own department
+    // DepartmentUser can only transfer assets from their own department and to another department (requires approval)
     if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
       const userDept = String(req.user.department).toUpperCase();
-      if (dept !== userDept) {
-        return res.status(403).json({ ok: false, error: 'Cannot transfer asset to another department' });
+      const fromDept = String(fromDepartment || assetRes.asset.department || 'UNKNOWN').toUpperCase();
+      if (fromDept !== userDept) {
+        return res.status(403).json({ ok: false, error: 'Cannot transfer asset from another department' });
       }
     }
 
-    const results = [];
-    const transferRecords = [];
     const fromDept = String(fromDepartment || assetRes.asset.department || 'UNKNOWN').toUpperCase();
 
-    // Record transfer only if department changes
-    if (dept !== fromDept) {
-      transferRecords.push({
-        transferId: `XFR-${Date.now()}`,
-        assetId,
-        fromDepartment: fromDept,
-        toDepartment: dept,
-        reason: req.body.reason || 'Department transfer',
-        createdAt: new Date().toISOString()
-      });
+    // Create transfer request on blockchain - requires approval
+    const transferRes = await bulkTransferAssetsOnFabric([assetId], dept, reason || 'Department transfer');
+    if (!transferRes.success) {
+      return res.status(500).json({ ok: false, error: transferRes.error });
     }
 
-    const dRes = await updateAssetOnFabric(assetId, { field: 'department', newValue: dept }).catch(e => ({ success: false, error: e.message }));
-    results.push({ field: 'department', result: dRes });
+    res.json({ ok: true, data: transferRes.result });
+  } catch (err) {
+    next(err);
+  }
+}
 
-    if (newLocation) {
-      const lRes = await updateAssetOnFabric(assetId, { field: 'location', newValue: newLocation }).catch(e => ({ success: false, error: e.message }));
-      results.push({ field: 'location', result: lRes });
+async function approveTransfer(req, res, next) {
+  try {
+    const { transferId } = req.params || req.body || {};
+    if (!transferId) return res.status(400).json({ ok: false, error: 'transferId required' });
+
+    // Get transfer details to check destination department
+    const transfersRes = await getAllTransfersFromFabric();
+    if (!transfersRes.success) return res.status(500).json({ ok: false, error: transfersRes.error });
+    const transfer = (transfersRes.transfers || []).find(t => t.transferId === transferId);
+    if (!transfer) return res.status(404).json({ ok: false, error: 'Transfer request not found' });
+
+    const reqUser = req.user;
+    const userDept = getUserDepartment(req);
+    const toDept = String(transfer.toDepartment || '').toUpperCase();
+
+    // Admin/AuditOfficer can approve any transfer
+    // DepartmentUser can approve transfers to their own department
+    if (userDept && reqUser?.role === "DepartmentUser") {
+      if (toDept !== userDept) {
+        return res.status(403).json({ ok: false, error: 'Only admin, audit officer, or the destination department can approve this transfer' });
+      }
     }
 
-    res.json({ ok: true, data: { assetId, results, transfers: transferRecords } });
+    const approvedBy = req.user?.email || req.user?.sub || 'Admin';
+    const result = await approveTransferOnFabric(transferId, approvedBy);
+    if (!result.success) {
+      return res.status(500).json({ ok: false, error: result.error });
+    }
+
+    res.json({ ok: true, data: result.result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function rejectTransfer(req, res, next) {
+  try {
+    const { transferId } = req.params || req.body || {};
+    if (!transferId) return res.status(400).json({ ok: false, error: 'transferId required' });
+
+    // Get transfer details to check both source and destination departments
+    const transfersRes = await getAllTransfersFromFabric();
+    if (!transfersRes.success) return res.status(500).json({ ok: false, error: transfersRes.error });
+    const transfer = (transfersRes.transfers || []).find(t => t.transferId === transferId);
+    if (!transfer) return res.status(404).json({ ok: false, error: 'Transfer request not found' });
+
+    const reqUser = req.user;
+    const userDept = getUserDepartment(req);
+    const fromDept = String(transfer.fromDepartment || '').toUpperCase();
+    const toDept = String(transfer.toDepartment || '').toUpperCase();
+
+    // Admin/AuditOfficer can reject any transfer
+    // DepartmentUser can reject transfers from their department (source) or to their department (destination)
+    if (userDept && reqUser?.role === "DepartmentUser") {
+      if (toDept !== userDept && fromDept !== userDept) {
+        return res.status(403).json({ ok: false, error: 'Only admin, audit officer, or the source/destination department can reject this transfer' });
+      }
+    }
+
+    const rejectedBy = req.user?.email || req.user?.sub || 'Admin';
+    const result = await rejectTransferOnFabric(transferId, rejectedBy);
+    if (!result.success) {
+      return res.status(500).json({ ok: false, error: result.error });
+    }
+
+    res.json({ ok: true, data: result.result });
   } catch (err) {
     next(err);
   }
@@ -517,6 +573,8 @@ module.exports = {
   deleteAsset,
   getAssetHistory,
   transferAsset,
+  approveTransfer,
+  rejectTransfer,
   getTransfers,
   getAssetLifecycle,
   getAssetAuditTrail,
