@@ -112,11 +112,11 @@ function showDataModal(title, content, options = {}) {
   openModal('dataModal');
 }
 
-document.querySelectorAll('[data-modal-close]').forEach(btn => {
-  btn.addEventListener('click', (e) => {
+document.addEventListener('click', (e) => {
+  if (e.target.hasAttribute('data-modal-close') || e.target.closest('[data-modal-close]')) {
     const backdrop = e.target.closest('.modal-backdrop');
     if (backdrop) backdrop.classList.add('hidden');
-  });
+  }
 });
 
 document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
@@ -685,17 +685,22 @@ window.showAssetHistory = async function(assetId) {
       if (!timeline || timeline.length === 0) {
         timelineContainer.innerHTML = '<div class="empty-state">No audit timeline entries recorded</div>';
       } else {
-        timelineContainer.innerHTML = timeline.map(entry => `
+        timelineContainer.innerHTML = timeline.map(entry => {
+          const hasChanges = entry.changedFields && entry.changedFields !== 'Record Updated (no field changes detected)';
+          const changeColor = hasChanges ? 'color:var(--blue-600);' : 'color:var(--gray-500);';
+          return `
           <div class="detail-row" style="padding:10px 0; border-bottom:1px dashed var(--gray-200);">
             <div>
               <strong>${escapeHtml(entry.event)}</strong>
               <div class="muted">${escapeHtml(entry.details)}</div>
+              ${entry.changedFields ? `<div class="muted" style="margin-top:4px; font-size:11px; ${hasChanges ? 'font-weight:600; ' + changeColor : ''}">Changed: ${escapeHtml(entry.changedFields)}</div>` : ''}
             </div>
             <div style="font-size:12px; color:var(--gray-500);">
               ${new Date(entry.date).toLocaleString()}
             </div>
           </div>
-        `).join('');
+        `;
+        }).join('');
       }
     }
     openModal('assetHistoryModal');

@@ -189,16 +189,56 @@ async function getAssetHistory(req, res, next) {
           if (typeof dateStr !== 'string' || dateStr === '[object Object]') {
             dateStr = val.updatedAt || val.createdAt || new Date().toISOString();
           }
+          
+          const prevVal = idx > 0 ? (() => { try { return JSON.parse(historyRes.history[idx - 1].value); } catch(e) { return null; } })() : null;
+          
+          let changes = [];
+          if (prevVal) {
+            if (val.status && val.status !== prevVal.status) {
+              changes.push(`Status: ${prevVal.status || 'N/A'} → ${val.status}`);
+            }
+            if (val.department && val.department !== prevVal.department) {
+              changes.push(`Department: ${prevVal.department || 'N/A'} → ${val.department}`);
+            }
+            if (val.location && val.location !== prevVal.location) {
+              changes.push(`Location: ${prevVal.location || 'N/A'} → ${val.location}`);
+            }
+            if (val.owner && val.owner !== prevVal.owner) {
+              changes.push(`Owner: ${prevVal.owner || 'N/A'} → ${val.owner}`);
+            }
+            if (val.name && val.name !== prevVal.name) {
+              changes.push(`Name: ${prevVal.name || 'N/A'} → ${val.name}`);
+            }
+            if (val.category && val.category !== prevVal.category) {
+              changes.push(`Category: ${prevVal.category || 'N/A'} → ${val.category}`);
+            }
+            if (val.purchaseValue && val.purchaseValue !== prevVal.purchaseValue) {
+              changes.push(`Purchase Value: ${prevVal.purchaseValue || 0} → ${val.purchaseValue}`);
+            }
+            if (val.warrantyExpiry && val.warrantyExpiry !== prevVal.warrantyExpiry) {
+              changes.push(`Warranty Expiry: ${prevVal.warrantyExpiry || 'N/A'} → ${val.warrantyExpiry || 'N/A'}`);
+            }
+            if (val.billHash && val.billHash !== prevVal.billHash) {
+              changes.push(`Bill Hash: updated`);
+            }
+            if (val.billHash && !prevVal.billHash) {
+              changes.push(`Bill Hash: added`);
+            }
+          }
+          const changedFields = val.updatedField || (changes.length > 0 ? changes.join(', ') : changes.length === 0 ? 'Record Updated (no field changes detected)' : 'Record Updated');
+          
           const eventData = {
             event: item.isDelete ? 'Asset Ledger Deleted' : 'Asset Ledger Update',
             type: val.status ? 'status_update' : 'ledger_update',
             action: 'update',
             date: dateStr,
-            details: `Ledger Status: ${val.status || 'Updated'}, Department: ${val.department || 'N/A'}`,
+            details: changes.length > 0 ? changes.join('; ') : `Ledger State Updated`,
+            changedFields: changedFields,
             previousStatus: val.previousStatus,
             newStatus: val.status,
             field: val.updatedField,
-            newValue: val.newValue
+            newValue: val.newValue,
+            fullValue: val
           };
 
           if (val.status === 'CONDEMNATION_REQUESTED' || val.status === 'Condemned') {
@@ -212,16 +252,14 @@ async function getAssetHistory(req, res, next) {
           }
 
           // Detect department transfer from history
-          if (val.department && idx > 0) {
-            try {
-              const prevVal = JSON.parse(historyRes.history[idx - 1].value);
-              if (prevVal.department && prevVal.department !== val.department) {
-                eventData.event = 'Transfer';
-                eventData.type = 'transfer';
-                eventData.action = 'transfer';
-                eventData.details = `Transferred from ${prevVal.department} to ${val.department}`;
-              }
-            } catch (e) {}
+          if (val.department && idx > 0 && prevVal) {
+            if (prevVal.department && prevVal.department !== val.department) {
+              eventData.event = 'Transfer';
+              eventData.type = 'transfer';
+              eventData.action = 'transfer';
+              eventData.details = `Transferred from ${prevVal.department} to ${val.department}`;
+              eventData.changedFields = `Department: ${prevVal.department} → ${val.department}`;
+            }
           }
 
           timeline.push(eventData);
