@@ -4,9 +4,7 @@ const {
   rejectCondemnationOnFabric,
   readAssetFromFabric,
   getAllCondemnationRecordsFromFabric,
-  getAllAssetsFromFabric
-} = require("../services/fabricService");
-const {
+  getAllAssetsFromFabric,
   getAllEquipmentCondemnationsFromFabric,
   getAllConsumableCondemnationsFromFabric
 } = require("../services/fabricService");

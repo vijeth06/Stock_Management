@@ -168,11 +168,7 @@ async function getDashboard(req, res, next) {
     let bills = billsRes.bills || [];
     let maintenances = mntRes.records || [];
     let condemnations = condRes.records || [];
-    let consumables = [];
-    try {
-      const consumableResult = await getAllConsumablesFromFabric();
-      consumables = consumableResult.success ? (consumableResult.consumables || []) : [];
-    } catch (e) { consumables = []; }
+    let consumables = consumablesRes.success ? (consumablesRes.consumables || []) : [];
     let verifications = verificationsRes.records || [];
 
     const reqUser = req.user;
@@ -678,7 +674,6 @@ module.exports = {
   getReports,
   getReport,
   getDashboard,
-  exportReport,
   getAnnualSummary,
   getFinancialReport,
   getDepartmentValuation,

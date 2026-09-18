@@ -57,8 +57,11 @@ app.get("/users/me", authenticate, (req, res) => {
   res.json({ ok: true, data: { id: req.user.sub, name: req.user.name, email: req.user.email, role: req.user.role, department: req.user.department } });
 });
 
-app.get(["/api/reports/:reportId/export", "/reports/:reportId/export"], authenticate, authorize(["Administrator", "AuditOfficer"]), async (req, res) => {
+app.get(["/api/reports/:reportId/export", "/reports/:reportId/export"], authenticate, authorize(["Administrator", "AuditOfficer", "DepartmentUser"]), async (req, res, next) => {
   const reportId = req.params.reportId;
+  if (reportId === "export") {
+    return next();
+  }
   try {
     if (reportId === "financial") {
       const { generateFinancialReportPdf, generateFinancialReportExcel } = require("../backend/services/reportExportService");

@@ -75,13 +75,16 @@ function clearLoading() {
 
 function showResult(data, defaultSuccessMessage) {
   if (!data) return;
+  if (output) {
+    output.textContent = JSON.stringify(data, null, 2);
+  }
   if (data.ok === false) {
-    showToast(data.error || 'Operation failed', 'error');
-  } else {
-    const msg = data.message || defaultSuccessMessage;
-    if (msg) {
-      showToast(msg, 'success');
+    const errorMsg = data.error || 'Operation failed';
+    if (!errorMsg.includes('403')) {
+      showToast(errorMsg, 'error');
     }
+  } else if (defaultSuccessMessage) {
+    showToast(defaultSuccessMessage, 'success');
   }
 }
 
@@ -103,13 +106,53 @@ function showDataModal(title, content, options = {}) {
     modal.className = 'modal-backdrop';
     modal.innerHTML = '<div class="modal-card"><div class="modal-header"><h3 id="dataModalTitle"></h3><button type="button" class="modal-close" data-modal-close>&times;</button></div><div class="modal-body" id="dataModalBody"></div></div>';
     document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.classList.add('hidden');
+      }
+    });
   }
   document.getElementById('dataModalTitle').textContent = title;
   document.getElementById('dataModalBody').innerHTML = content;
-  if (options.size === 'md') {
-    modal.querySelector('.modal-card').classList.add('modal-md');
-  }
+  let modalMd = modal.querySelector('.modal-card');
+  if (modalMd) modalMd.classList.toggle('modal-md', options.size === 'md');
   openModal('dataModal');
+}
+
+async function requestJson(url, options = {}) {
+  try {
+    const headers = { ...(options.headers || {}) };
+    if (authToken && !headers.Authorization) {
+      headers.Authorization = `Bearer ${authToken}`;
+    }
+
+    const response = await fetch(url, { ...options, headers });
+    
+    if (!response.ok) {
+      let errorData = { ok: false, error: `Request failed (${response.status})` };
+      try {
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          errorData = await response.json();
+        } else {
+          errorData.error = await response.text();
+        }
+      } catch (e) {
+        errorData.error = errorData.error || 'Request failed';
+      }
+      return errorData;
+    }
+    
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      return await response.json();
+    } else {
+      const text = await response.text();
+      try { return JSON.parse(text); } catch { return { ok: true, data: text }; }
+    }
+  } catch (error) {
+    return { ok: false, error: error.message || 'Network error — gateway connection failed' };
+  }
 }
 
 document.addEventListener('click', (e) => {
@@ -162,54 +205,6 @@ function navigateTo(page) {
   else if (page === 'users') {
     loadDepartmentsForSelect();
     loadUsers();
-  }
- }
-
-function showResult(data) {
-  clearLoading();
-  const outputText = JSON.stringify(data, null, 2);
-  if (output) output.textContent = outputText;
-  if (data.ok === false) {
-    const errorMsg = data.error || 'Operation failed';
-    if (!errorMsg.includes('403')) {
-      showToast(errorMsg, 'error');
-    }
-  }
-}
-
-async function requestJson(url, options = {}) {
-  try {
-    const headers = { ...(options.headers || {}) };
-    if (authToken && !headers.Authorization) {
-      headers.Authorization = `Bearer ${authToken}`;
-    }
-
-    const response = await fetch(url, { ...options, headers });
-    
-    if (!response.ok) {
-      let errorData = { ok: false, error: `Request failed (${response.status})` };
-      try {
-        const contentType = response.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-          errorData = await response.json();
-        } else {
-          errorData.error = await response.text();
-        }
-      } catch (e) {
-        errorData.error = errorData.error || 'Request failed';
-      }
-      return errorData;
-    }
-    
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      return await response.json();
-    } else {
-      const text = await response.text();
-      try { return JSON.parse(text); } catch { return { ok: true, data: text }; }
-    }
-  } catch (error) {
-    return { ok: false, error: error.message || 'Network error — gateway connection failed' };
   }
 }
 
@@ -594,14 +589,23 @@ async function loadAssets() {
     });
   }
 
-  // Apply default filter (ALL)
-  currentAssetFilter = 'ALL';
-  const activeTab = tabsContainer?.querySelector('.tab-btn.active');
-  if (activeTab) {
-    applyAssetFilter(assets, activeTab.getAttribute('data-dept'));
-  } else {
-    renderAssetList(assets, 'ALL');
-  }
+    // Apply default filter
+    currentAssetFilter = 'ALL';
+    const activeTab = tabsContainer?.querySelector('.tab-btn.active');
+    if (activeTab) {
+      const filterDept = activeTab.getAttribute('data-dept');
+      if (isDeptUser && filterDept === 'ALL' && currentUser.department) {
+        applyAssetFilter(assets, currentUser.department.toUpperCase());
+      } else {
+        applyAssetFilter(assets, filterDept);
+      }
+    } else {
+      if (isDeptUser && currentUser.department) {
+        renderAssetList(assets, currentUser.department.toUpperCase());
+      } else {
+        renderAssetList(assets, 'ALL');
+      }
+    }
 }
 
 function renderAssetList(assets, filterDept) {
@@ -1082,22 +1086,14 @@ function renderTransfers(transfers) {
     if (status === 'Pending') statusClass = 'warn';
     if (status === 'Rejected') statusClass = 'error';
 
-    let actionButtons = '';
-    if (isPending) {
-      const canApprove = (currentUser?.role === 'DepartmentUser' && String(t.toDepartment || '').toUpperCase() === String(currentUser?.department || '').toUpperCase())
-        || ['Administrator', 'AuditOfficer'].includes(currentUser?.role);
-      const canReject = (currentUser?.role === 'DepartmentUser' && 
-        (String(t.toDepartment || '') === String(currentUser?.department || '') || String(t.fromDepartment || '') === String(currentUser?.department || '')))
-        || ['Administrator', 'AuditOfficer'].includes(currentUser?.role);
-      
-      if (canApprove || canReject) {
-        actionButtons = `
+     let actionButtons = '';
+    if (isPending && ['Administrator', 'AuditOfficer'].includes(currentUser?.role)) {
+      actionButtons = `
           <div style="margin-left:8px; display:flex; gap:4px;" id="transfer-actions-${escapeHtml(t.transferId)}">
-            ${canApprove ? `<button type="button" class="btn btn-sm btn-primary" style="padding:2px 8px; font-size:11px;" onclick="approveTransfer('${escapeHtml(t.transferId)}')">Approve</button>` : ''}
-            ${canReject ? `<button type="button" class="btn btn-sm btn-secondary" style="padding:2px 8px; font-size:11px; color:var(--red-600);" onclick="rejectTransfer('${escapeHtml(t.transferId)}')">Reject</button>` : ''}
+            <button type="button" class="btn btn-sm btn-primary" style="padding:2px 8px; font-size:11px;" onclick="approveTransfer('${escapeHtml(t.transferId)}')">Approve</button>
+            <button type="button" class="btn btn-sm btn-secondary" style="padding:2px 8px; font-size:11px; color:var(--red-600);" onclick="rejectTransfer('${escapeHtml(t.transferId)}')">Reject</button>
           </div>
         `;
-      }
     }
 
     return `
@@ -1131,6 +1127,10 @@ async function approveTransfer(transferId) {
   if (res.ok) {
     showToast('Transfer approved successfully', 'success');
     loadTransfers();
+    const pageEl = document.getElementById('page-dashboard');
+    if (pageEl && pageEl.classList.contains('active')) {
+      loadDashboard();
+    }
   }
 }
 
@@ -1141,6 +1141,10 @@ async function rejectTransfer(transferId) {
   if (res.ok) {
     showToast('Transfer rejected', 'success');
     loadTransfers();
+    const pageEl = document.getElementById('page-dashboard');
+    if (pageEl && pageEl.classList.contains('active')) {
+      loadDashboard();
+    }
   }
 }
 
@@ -2651,8 +2655,10 @@ function filterValuationTable() {
   });
 }
 
-function exportValuationExcel() {
-  const res = requestJson('/api/reports/department-valuation').then(r => {
+async function exportValuationExcel() {
+  setLoading('Exporting valuation to CSV...');
+  try {
+    const r = await requestJson('/api/reports/department-valuation');
     if (r.ok && r.data) {
       const csv = [['Department', 'Manager', 'Total Assets', 'Purchase Value', 'Net Book Value', 'Active', 'Maintenance', 'Condemned', 'Disposed']];
       Object.entries(r.data).forEach(([key, d]) => {
@@ -2670,9 +2676,13 @@ function exportValuationExcel() {
       URL.revokeObjectURL(url);
       showToast('Valuation exported to CSV', 'success');
     } else {
-       showToast('Failed to export valuation', 'error');
-     }
-   });
+      showToast(r.error || 'Failed to export valuation', 'error');
+    }
+  } catch (err) {
+    showToast(`Export error: ${err.message}`, 'error');
+  } finally {
+    clearLoading();
+  }
 }
 
 document.getElementById('exportValuationPdfBtn')?.addEventListener('click', () => {
@@ -2813,6 +2823,13 @@ async function loadDepartmentsForSelect() {
     const res = await requestJson('/api/departments');
     if (res.ok && Array.isArray(res.data)) {
       window.appDepartments = res.data;
+      const deptSelect = document.getElementById('departmentFilterSelect');
+      if (deptSelect) {
+        const activeDepts = res.data.filter(d => d.isActive !== false);
+        deptSelect.innerHTML = '<option value="ALL">All Departments</option>' + activeDepts.map(d =>
+          `<option value="${escapeHtml(d.code)}">${escapeHtml(d.code)} - ${escapeHtml(d.name)}</option>`
+        ).join('');
+      }
     }
   } catch (e) {
     console.warn('Failed to load departments for select:', e.message);
