@@ -840,31 +840,12 @@ class AssetManagementContract extends Contract {
 
         const res_items = await getAllResults(iterator);
         for (const res of res_items) {
-            if (res.value.toString().length > 0) {
+            if (res.value && res.value.toString().length > 0) {
                 try {
                     const cons = JSON.parse(res.value.toString());
                     if (cons.consumableId) consumables.push(cons);
                 } catch (e) {}
             }
-        }
-
-        // Also check direct keys
-        const allIterator = await ctx.stub.getStateByRange('', '');
-        const allItems = await getAllResults(allIterator);
-        for (const item of allItems) {
-            if (item.key.startsWith('USER_') || item.key.startsWith('DEPT_') ||
-                item.key.startsWith('BILL_') || item.key.startsWith('MNT_') ||
-                item.key.startsWith('COND_') || item.key.startsWith('EQV_') ||
-                item.key.startsWith('EQC_') || item.key.startsWith('CNV_') ||
-                item.key.startsWith('CNC_') || item.key.startsWith('CONS_')) {
-                if (item.key.startsWith('CONS_')) continue;
-            }
-            try {
-                const obj = JSON.parse(item.value.toString());
-                if (obj.consumableId && !consumables.find(c => c.consumableId === obj.consumableId)) {
-                    consumables.push(obj);
-                }
-            } catch (e) {}
         }
 
         return JSON.stringify(consumables);
@@ -1126,7 +1107,7 @@ class AssetManagementContract extends Contract {
         for (const res of items) {
             if (res.value && res.value.toString()) {
                 const key = res.key;
-                if (key.startsWith('TRF-')) {
+                if (key.startsWith('TRF_')) {
                     try {
                         const transfer = JSON.parse(res.value.toString('utf8'));
                         transfers.push({
@@ -1368,15 +1349,7 @@ class AssetManagementContract extends Contract {
 
         // History-based events (from ledger history - transfers, status changes)
         const historyIterator = await ctx.stub.getHistoryForKey(assetId);
-        const historyItems = [];
-        let res = await historyIterator.next();
-        while (!res.done) {
-            if (res.value && res.value.value.toString()) {
-                historyItems.push(res.value);
-            }
-            res = await historyIterator.next();
-        }
-        await historyIterator.close();
+        const historyItems = await getAllResults(historyIterator);
 
         let lastDept = null;
         let lastStatus = null;
@@ -1542,7 +1515,7 @@ class AssetManagementContract extends Contract {
                 }
 
                 const fromDept = asset.department;
-                const transferId = `TRF-${Date.now()}-${results.length}`;
+                const transferId = `TRF_${Date.now()}_${results.length}`;
                 const now = new Date().toISOString();
 
                 const transferRequest = {
@@ -1655,16 +1628,16 @@ class AssetManagementContract extends Contract {
 
         const iterator = await ctx.stub.getHistoryForKey(assetId);
         const allEvents = [];
+        const items = await getAllResults(iterator);
 
-        let res = await iterator.next();
-        while (!res.done) {
-            if (res.value && res.value.value.toString()) {
+        for (const item of items) {
+            if (!item || !item.value || !item.value.toString()) continue;
                 let ts;
-                if (res.value.timestamp && typeof res.value.timestamp.toISOString === 'function') {
-                    ts = res.value.timestamp.toISOString();
+                if (item.timestamp && typeof item.timestamp.toISOString === 'function') {
+                    ts = item.timestamp.toISOString();
                 } else {
                     try {
-                        const val = JSON.parse(res.value.value.toString());
+                        const val = JSON.parse(item.value.toString());
                         ts = val.updatedAt || val.createdAt || new Date().toISOString();
                     } catch (e) {
                         ts = new Date().toISOString();
@@ -1674,29 +1647,26 @@ class AssetManagementContract extends Contract {
                 let parsedValue = null;
                 let eventName = 'UPDATE';
                 try {
-                    parsedValue = JSON.parse(res.value.value.toString());
+                    parsedValue = JSON.parse(item.value.toString());
                 } catch (e) {
-                    parsedValue = res.value.value.toString();
+                    parsedValue = item.value.toString();
                 }
 
-                if (res.value.isDelete) {
+                if (item.isDelete) {
                     eventName = 'DELETE';
                 } else {
                     eventName = allEvents.length === 0 ? 'CREATE' : 'UPDATE';
                 }
 
                 allEvents.push({
-                    eventId: res.value.txId || `event-${allEvents.length}`,
+                    eventId: item.txId || `event-${allEvents.length}`,
                     eventType: eventName,
                     timestamp: ts,
-                    txId: res.value.txId,
-                    isDelete: res.value.isDelete,
+                    txId: item.txId,
+                    isDelete: item.isDelete,
                     value: parsedValue
                 });
-            }
-            res = await iterator.next();
         }
-        await iterator.close();
 
         return JSON.stringify({
             assetId,

@@ -14,6 +14,11 @@ const DEMO_ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@kongu.edu";
 const DEMO_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Admin@123";
 const DEMO_ADMIN_NAME = process.env.ADMIN_NAME || "Demo Administrator";
 
+if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'change-me-in-development')) {
+  console.error('FATAL: JWT_SECRET must be set in production. Server should not start with default secret.');
+  process.exit(1);
+}
+
 const ROLE_HIERARCHY = {
   Administrator: ["Administrator"],
   DepartmentUser: ["DepartmentUser"],

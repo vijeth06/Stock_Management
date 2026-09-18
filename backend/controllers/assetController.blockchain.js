@@ -186,7 +186,7 @@ async function getAssetHistory(req, res, next) {
         try {
           const val = JSON.parse(item.value);
           let dateStr = item.timestamp;
-          if (typeof dateStr !== 'string' || dateStr === '[object Object]') {
+          if (!dateStr || typeof dateStr !== 'string' || dateStr === '[object Object]') {
             dateStr = val.updatedAt || val.createdAt || new Date().toISOString();
           }
           
@@ -370,12 +370,9 @@ async function approveTransfer(req, res, next) {
     const userDept = getUserDepartment(req);
     const toDept = String(transfer.toDepartment || '').toUpperCase();
 
-    // Admin/AuditOfficer can approve any transfer
-    // DepartmentUser can approve transfers to their own department
+    // Admin/AuditOfficer only - DepartmentUser role is restricted at route level
     if (userDept && reqUser?.role === "DepartmentUser") {
-      if (toDept !== userDept) {
-        return res.status(403).json({ ok: false, error: 'Only admin, audit officer, or the destination department can approve this transfer' });
-      }
+      return res.status(403).json({ ok: false, error: 'Only admin or audit officer can approve transfers' });
     }
 
     const approvedBy = req.user?.email || req.user?.sub || 'Admin';
@@ -403,15 +400,10 @@ async function rejectTransfer(req, res, next) {
 
     const reqUser = req.user;
     const userDept = getUserDepartment(req);
-    const fromDept = String(transfer.fromDepartment || '').toUpperCase();
-    const toDept = String(transfer.toDepartment || '').toUpperCase();
 
-    // Admin/AuditOfficer can reject any transfer
-    // DepartmentUser can reject transfers from their department (source) or to their department (destination)
+    // Admin/AuditOfficer only - DepartmentUser role is restricted at route level
     if (userDept && reqUser?.role === "DepartmentUser") {
-      if (toDept !== userDept && fromDept !== userDept) {
-        return res.status(403).json({ ok: false, error: 'Only admin, audit officer, or the source/destination department can reject this transfer' });
-      }
+      return res.status(403).json({ ok: false, error: 'Only admin or audit officer can reject transfers' });
     }
 
     const rejectedBy = req.user?.email || req.user?.sub || 'Admin';
@@ -481,9 +473,8 @@ async function getTransfers(req, res, next) {
     const transfersRes = await getAllTransfersFromFabric();
     if (transfersRes.success) {
         let transfers = transfersRes.transfers || [];
-        const reqUser = req.user;
-        if (reqUser && reqUser.role === "DepartmentUser" && reqUser.department) {
-            const userDept = String(reqUser.department).toUpperCase();
+        if (req.user && req.user.role === "DepartmentUser" && req.user.department) {
+            const userDept = String(req.user.department).toUpperCase();
             transfers = transfers.filter(t => {
                 const fromDept = String(t.fromDepartment || '').toUpperCase();
                 const toDept = String(t.toDepartment || '').toUpperCase();
@@ -492,7 +483,7 @@ async function getTransfers(req, res, next) {
         }
         return res.json({ ok: true, data: transfers });
     }
-    return res.json({ ok: true, data: [] });
+    return res.status(500).json({ ok: false, error: transfersRes.error || 'Failed to retrieve transfers from ledger' });
    } catch (err) {
       next(err);
    }

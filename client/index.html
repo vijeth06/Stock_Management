@@ -806,15 +806,8 @@
                 <span class="tab-icon">🏢</span> Department Users
               </button>
               <div id="deptUserControls" style="display:none; align-items:center; gap:8px; margin-left:auto;">
-                <select onchange="setDepartmentFilter(this.value)" class="form-select" style="max-width:200px;">
+                <select onchange="setDepartmentFilter(this.value)" class="form-select" style="max-width:200px;" id="departmentFilterSelect">
                   <option value="ALL">All Departments</option>
-                  <option value="CSE">CSE</option>
-                  <option value="ECE">ECE</option>
-                  <option value="IT">IT</option>
-                  <option value="ME">ME</option>
-                  <option value="CE">CE</option>
-                  <option value="CHE">CHE</option>
-                  <option value="LIB">LIB</option>
                 </select>
                 <span class="muted" id="currentDeptFilter">All Departments</span>
               </div>
@@ -977,14 +970,8 @@
         </div>
         <div class="form-field">
           <label>Academic Department</label>
-          <select name="department" required>
-            <option value="CSE">Computer Science & Engg (CSE)</option>
-            <option value="ECE">Electronics & Comm. (ECE)</option>
-            <option value="ME">Mechanical Engg & Workshop (ME)</option>
-            <option value="CE">Civil & Structural Engg (CE)</option>
-            <option value="CHE">Chemistry & Chemical Labs (CHE)</option>
-            <option value="LIB">Central University Library (LIB)</option>
-            <option value="ADM">Academic Admin & Exams (ADM)</option>
+          <select name="department" id="assetDepartment" required>
+            <option value="">Loading departments...</option>
           </select>
         </div>
         <div class="form-field">
